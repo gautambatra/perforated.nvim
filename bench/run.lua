@@ -186,6 +186,68 @@ do
   c.stop()
 end
 
+-- 6. Client view: rendering 5000 rows (50 CLs × 100 files) and the first paint of :P4.
+do
+  local c = H.child()
+  local ms = c.lua([[
+    local tree = require('perforated.ui.tree').new(vim.api.nvim_get_current_buf())
+    vim.bo.buftype = 'nofile'
+    require('perforated.hl').setup()
+    local roots = {}
+    for cl = 1, 50 do
+      local files = {}
+      for f = 1, 100 do
+        files[f] = { id = ('f:%d:%d'):format(cl, f), kind = 'opened_file', item = {}, text = {
+          { 'edit      ', 'PerforatedAction' }, { ('src/module%d/file%d.cpp'):format(cl, f), 'PerforatedPath' },
+          { '  #3/#4', 'PerforatedRev' }, { '  stale', 'PerforatedStale' } } }
+      end
+      roots[cl] = { id = 'cl:' .. cl, kind = 'change', item = {}, children = files,
+        text = { { 'CL ' .. cl, 'PerforatedChangelist' }, { '  some description', 'PerforatedPath' } } }
+    end
+    tree:set(roots) -- warm-up
+    local samples = {}
+    for _ = 1, 9 do
+      local t0 = vim.uv.hrtime()
+      tree:set(roots)
+      samples[#samples + 1] = vim.uv.hrtime() - t0
+    end
+    table.sort(samples)
+    return samples[1] / 1e6
+  ]])
+  record('client view: render 5000 rows', ms, 'ms', 15)
+  c.stop()
+
+  local root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  H.write(root .. '/a.c', 'x')
+  local c2 = H.child({
+    fake = {
+      rules = {
+        {
+          match = '^info',
+          records = { { clientName = 'ws1', clientRoot = root, userName = 'alice' } },
+        },
+        { match = '^set', stdout = 'P4CLIENT=ws1\n' },
+        { match = '.', sleep = 0.3, records = {} },
+      },
+    },
+    env = { P4CONFIG = '.p4config' },
+    config = { p4 = H.fake_p4, poll = { interval = 0 }, startup_check = false },
+  })
+  c2.cmd('edit ' .. root .. '/a.c')
+  H.wait(c2, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
+  local paint = c2.lua([[
+    require('perforated.views.client') -- module load isn't part of the paint budget
+    require('perforated.ui.tree'); require('perforated.ui.keys'); require('perforated.ui.footer')
+    local ws = require('perforated').workspace()
+    local t0 = vim.uv.hrtime()
+    require('perforated.views.client').open(ws)
+    return (vim.uv.hrtime() - t0) / 1e6
+  ]])
+  record('client view: first paint (skeleton)', paint, 'ms', 16)
+  c2.stop()
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))

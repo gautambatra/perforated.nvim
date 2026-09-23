@@ -301,6 +301,46 @@ M.commands = {
     end,
   },
 
+  pick = {
+    scope = 'workspace',
+    desc = 'Picker: :P4 pick {pending|opened|submitted|users}',
+    complete = function()
+      return { 'pending', 'opened', 'submitted', 'users' }
+    end,
+    run = function(ws, _, args)
+      local sources = require('perforated.picker.sources')
+      local fn = sources[args[1] or 'pending']
+      if not fn then
+        return notify('unknown source: ' .. tostring(args[1]), vim.log.levels.WARN)
+      end
+      fn(ws)
+    end,
+  },
+
+  changes = {
+    scope = 'connection',
+    desc = 'Submitted changelists: :P4 changes [-u user] [-m N] [path] (default: this client)',
+    run = function(ws, _, args)
+      local opts, i = {}, 1
+      while i <= #args do
+        if args[i] == '-u' then
+          opts.user = args[i + 1]
+          i = i + 1
+        elseif args[i] == '-m' then
+          opts.max = tonumber(args[i + 1])
+          i = i + 1
+        else
+          opts.path = args[i]
+        end
+        i = i + 1
+      end
+      if ws.mode == 'connection' and not opts.path then
+        opts.path = '//...'
+      end
+      require('perforated.views.changes').open(ws, opts)
+    end,
+  },
+
   notifications = {
     scope = 'none',
     desc = 'Show recent notifications (stale files, …)',

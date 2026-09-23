@@ -53,6 +53,70 @@ Configuration can also be set as `vim.g.perforated = { … }` before the plugin 
 
 ## Features
 
+### ✅ Client view (`:P4`)
+
+A p4v-style overview of your workspace in a tab (`:P4 view float` or `:P4 view split` for
+other layouts):
+
+```
+Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
+ Pending  (3)
+    default  (2)
+      edit        src/lexer.cpp  #3/#3
+      edit        src/parser.cpp  #4/#5  ↓ stale
+    CL 123470  Fix crash in parser  (1)  S 1
+      edit        src/parse.cpp  #8/#8
+     S Shelved (1)
+    CL 123488  WIP refactor  (0)
+ Needs attention  (1)
+ Recent submitted  (20)
+ Workspace reconcile  (not scanned)
+ d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  <Space> actions  ? help
+```
+
+- **Sections:** pending changelists with their files and shelved files, files needing attention
+  (stale or unresolved), your recent submits, and workspace reconcile. Reconcile is expensive on
+  large workspaces, so it only scans when you expand it (`l`), and `x` cancels a running scan.
+- **Always fresh:** the view re-queries every time it opens or refreshes, drawing a skeleton
+  instantly while the data loads. It also updates after check-outs and reverts made anywhere
+  in Neovim.
+- **Keys:**
+  - Vim-style keys, plus P4V's shortcuts (`<C-d>` diff, `<C-r>` revert, `<C-n>` new CL,
+    `<C-w>` close, `<C-1>`/`<C-2>` jump to a section, `<C-S-c>` copy the depot path).
+  - `<Space>` or right-click opens a menu of what you can do with the line under the cursor.
+  - `?` lists every key, and a footer always shows the keys that apply to the current line.
+  - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
+  - `m` marks files for multi-file actions (revert, move, …) and `u` clears the marks.
+  - `A` toggles between this client and **all your clients**.
+  - `Q`/`gQ` send the line, the marked lines or a whole changelist to quickfix / the location list.
+
+### ✅ Changelists
+
+- **`c` / `:P4 change new`: create a changelist.** A small editor opens for the description;
+  `:w` or `<C-s>` saves and `q` cancels. Check-out's "new changelist" uses the same editor.
+- **`C` / `:P4 change [N]`: edit a description.** This works on pending *and* submitted
+  changelists; for submitted ones it uses `p4 change -u`, which Perforce allows for your own
+  changelists. Only the Description field is changed, so the file list can't be edited by
+  accident. `gS` or `:P4 change! N` opens the full spec instead. Admins can set
+  `change.allow_force = true` to retry with `-f`, with a confirmation. The default changelist
+  has no description, so move its files to a numbered changelist instead.
+- **`M`: move files between changelists.** Pick an existing changelist or create a new one.
+- **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
+  diff on the right; moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
+  window. It works for pending changelists, shelves and submitted changelists. Each file loads
+  when you select it, and the next one is fetched ahead of time. `:P4 diff -a` opens the same
+  view for every opened file.
+- **`:P4 changes [-u user] [-m N] [path]`: submitted changelists,** newest first. Scoped to
+  your client view unless you pass a path; `-u` shows another user's work. Pages load as you
+  reach the end (or with `gn`), so no query is unbounded.
+
+### ✅ Pickers
+
+Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
+use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**,
+detected in that order, falling back to `vim.ui.select`. Set `picker = 'telescope'` (etc.) to
+choose one explicitly.
+
 ### ✅ Workspace detection
 
 - Opening a file looks for your `P4CONFIG` file in that file's directory and its parents. The
@@ -238,7 +302,6 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 
 | Milestone | Features |
 |---|---|
-| M2 | **Client view** (a p4v-like tab: pending CLs with files and shelves, unresolved/stale, recent submits, reconcile) with P4V-compatible shortcuts and an action menu; changelist operations (new CL, move files between CLs, edit descriptions of pending and submitted CLs); picker adapters (telescope, fzf-lua, snacks, mini.pick, `vim.ui.select`); submitted CLs of any user |
 | M3 | `:P4 describe` (CL lookup with lazily expanded diffs), file history, annotate (scroll-bound split, age-coloured, walk back), current-line blame, Swarm links |
 | M4 | Shelve / unshelve (file and CL), resolve (auto-merge, then your `$P4MERGE`), submit, sync, delete, move/rename, integrate (cherry-pick a CL) |
 | M5 | Time-lapse view (step through revisions instantly) |
@@ -254,11 +317,14 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 
 | Command | Description |
 |---|---|
-| `:P4` | Workspace info (the client view replaces this in M2) |
+| `:P4` / `:P4 view [tab\|float\|split]` | Client view |
+| `:P4 change[!] [N\|new]` | Edit a changelist description (`!`: full spec); `new` creates one |
+| `:P4 changes [-u user] [-m N] [path]` | Submitted changelists (paged) |
+| `:P4 pick {pending\|opened\|submitted\|users}` | Pick with your fuzzy finder |
 | `:P4 edit [-c CL] [file…]` | Open for edit (sticky CL, else default) |
 | `:P4 add [-c CL] [file…]` | Open for add |
 | `:P4 revert[!] [-a] [file…]` | Revert; `!` skips confirmation, `-a` = only unchanged files |
-| `:P4 diff[!] [rev]` | Side-by-side diff (`#rev`, `#head`, `@CL`, `@=CL`, `prev`); `!` = `$P4DIFF` |
+| `:P4 diff[!] [rev]` | Side-by-side diff (`#rev`, `#head`, `@CL`, `@=CL`, `prev`); `!` = `$P4DIFF`; `-a` = all opened files in a diff tab |
 | `:P4 opened` | Opened files → quickfix |
 | `:P4 status` | Stale / unresolved opened files → quickfix |
 | `:P4 hunks [%]` | Hunks → quickfix (`%`: this file → location list) |
@@ -271,6 +337,17 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 | `:P4 refresh[!]` | Refresh cached state (`!` also forgets workspace detection) |
 
 ## Keymaps
+
+In plugin views (client view, `:P4 changes`), keys are buffer-local, `?` lists them all, and
+any action's keys can be changed or removed:
+
+```lua
+keys = {
+  p4v = true,         -- P4V shortcuts (<C-d>, <C-r>, …) alongside the vim-style keys
+  diff = { 'dd' },    -- per action id (shown in `?` help)
+  revert = false,     -- remove an action's keys
+}
+```
 
 Nothing is mapped globally by default. Every action is available as a `<Plug>` mapping:
 
@@ -326,7 +403,11 @@ These are the defaults for everything that has an effect today:
     tool = 'builtin', -- 'external' = always use $P4DIFF
     external_terminal = 'auto', -- true: terminal tab; false: detached GUI; auto: guess from tool name
   },
-  change = { template = nil }, -- string or function(ws) pre-filling new CL descriptions
+  change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
+  picker = 'auto', -- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'
+  client_view = { kind = 'tab', submitted_limit = 20 }, -- kind: 'tab' | 'float' | 'split'
+  changes = { page_size = 50 }, -- :P4 changes page size
+  keys = { p4v = true }, -- plus per-action overrides (see Keymaps)
   keymaps = false, -- 'default' = <leader>p preset in Perforce buffers
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
   qf = { open = true }, -- open the quickfix window when a list has results
@@ -347,8 +428,8 @@ These are the defaults for everything that has an effect today:
 }
 ```
 
-Some keys are reserved for upcoming features and have no effect yet: `client_view`, `history`,
-`changes`, `merge`, `picker`, `keys`, `blame_line`, `swarm`. `:checkhealth perforated`
+Some keys are reserved for upcoming features and have no effect yet: `history`, `merge`,
+`blame_line`, `swarm`. `:checkhealth perforated`
 reports unknown keys, which catches typos.
 
 Highlight groups (`PerforatedAdd`, `PerforatedChange`, `PerforatedDelete`, `PerforatedStale`,
@@ -365,7 +446,9 @@ Budgets are enforced by `make bench` in CI:
 | Opening a workspace file (synchronous part) | < 0.3 ms | ~0.015 ms |
 | Sign refresh, 10k-line file (UI time, debounced) | ≤ 5 ms | ~2–3 ms |
 | Lua memory for an active workspace | ≤ 250 KB | ~200 KB |
-| Lua memory per attached buffer | ≤ 2 KB | ~1.6 KB |
+| Lua memory per attached buffer | ≤ 2 KB | ~1.8 KB |
+| Client view: render 5000 rows | ≤ 15 ms | ~10 ms |
+| Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
 
 The timing figures are the best of several runs, which filters out noise from other processes.
 

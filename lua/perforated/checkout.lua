@@ -245,7 +245,7 @@ end
 -- Changelist choice (shared by the edit and add prompts)
 -- ---------------------------------------------------------------------------------------------
 
---- Pick a pending changelist, or create a new one (vim.ui.select; picker adapters in M2).
+--- Pick a pending changelist, or create a new one (any installed picker).
 ---@param ws perforated.Workspace
 ---@param cb fun(cl: string?, desc: string?)
 function M.pick_change(ws, cb)
@@ -257,9 +257,10 @@ function M.pick_change(ws, cb)
     local items = { { change = 'default', desc = '' } }
     vim.list_extend(items, changes)
     items[#items + 1] = { change = 'new', desc = '' }
-    vim.ui.select(items, {
-      prompt = 'Changelist',
-      format_item = function(c)
+    require('perforated.picker').pick({
+      title = 'Changelist',
+      items = items,
+      format = function(c)
         if c.change == 'default' then
           return 'default'
         elseif c.change == 'new' then
@@ -267,15 +268,23 @@ function M.pick_change(ws, cb)
         end
         return ('%-8s %s'):format(c.change, vim.trim((c.desc or ''):match('[^\n]*') or ''))
       end,
-    }, function(choice)
-      if not choice then
-        return cb(nil)
-      end
-      if choice.change == 'new' then
-        return M.new_change(ws, cb)
-      end
-      cb(choice.change, choice.desc)
-    end)
+      preview = function(c)
+        if c.change == 'default' or c.change == 'new' then
+          return {}
+        end
+        return vim.split(c.desc or '', '\n', { plain = true })
+      end,
+      on_choice = function(chosen)
+        local choice = chosen and chosen[1]
+        if not choice then
+          return cb(nil)
+        end
+        if choice.change == 'new' then
+          return M.new_change(ws, cb)
+        end
+        cb(choice.change, choice.desc)
+      end,
+    })
   end)
 end
 

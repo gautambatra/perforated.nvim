@@ -6,12 +6,35 @@
 ---     on_open = fun(node) (lazy expansion, e.g. workspace reconcile) }
 ---
 --- Fold state is tree state (not Vim folds) and survives refreshes by node id; the cursor stays
---- on the same node across re-renders. Rendering is one `nvim_buf_set_lines` plus one extmark
---- pass, so thousands of rows render in a few ms.
+--- on the same node across re-renders. Rendering is a single `nvim_buf_set_lines`; highlights
+--- are applied by a decoration provider for the rows actually on screen (ephemeral extmarks),
+--- so the cost doesn't grow with the number of rows.
 
 local M = {}
 
 local ns = vim.api.nvim_create_namespace('perforated.tree')
+
+local trees = {} ---@type table<integer, perforated.Tree>  buf → tree (for the provider)
+
+vim.api.nvim_set_decoration_provider(ns, {
+  on_win = function(_, _, buf)
+    return trees[buf] ~= nil
+  end,
+  on_line = function(_, _, buf, row)
+    local t = trees[buf]
+    local hls = t and t.row_hls[row]
+    if hls then
+      -- flat: { start, end, group, start, end, group, … }
+      for i = 1, #hls, 3 do
+        vim.api.nvim_buf_set_extmark(buf, ns, row, hls[i], {
+          end_col = hls[i + 1],
+          hl_group = hls[i + 2],
+          ephemeral = true,
+        })
+      end
+    end
+  end,
+})
 
 ---@class perforated.TreeNode
 ---@field id string
@@ -37,10 +60,19 @@ Tree.__index = Tree
 ---@param buf integer
 ---@return perforated.Tree
 function M.new(buf)
-  return setmetatable(
-    { buf = buf, roots = {}, rows = {}, folds = {}, by_id = {}, marks = {} },
+  local t = setmetatable(
+    { buf = buf, roots = {}, rows = {}, folds = {}, by_id = {}, marks = {}, row_hls = {} },
     Tree
   )
+  trees[buf] = t
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer = buf,
+    once = true,
+    callback = function()
+      trees[buf] = nil
+    end,
+  })
+  return t
 end
 
 ---@param node perforated.TreeNode
@@ -82,30 +114,48 @@ function Tree:render()
   end
 
   local g = glyphs()
-  local lines, hls, rows, by_id, row_by_id = {}, {}, {}, {}, {}
+  -- Only a handful of distinct prefixes exist (depth × fold state × mark): build each once.
+  local prefixes = {}
+  local function prefix_for(depth, state, marked)
+    local k = depth * 8 + state * 2 + (marked and 1 or 0)
+    local p = prefixes[k]
+    if not p then
+      local glyph = state == 0 and g.leaf or (state == 1 and g.open or g.closed)
+      p = ('  '):rep(depth) .. glyph .. (marked and g.mark or '')
+      prefixes[k] = p
+    end
+    return p
+  end
+  local lines, row_hls, rows, by_id, row_by_id = {}, {}, {}, {}, {}
+  local parts = {} -- scratch, reused for every row
   local function walk(nodes, depth, parent)
     for _, node in ipairs(nodes) do
       node.depth, node.parent = depth, parent
       by_id[node.id] = node
       local has_children = node.children ~= nil
       local open = has_children and self:is_open(node)
-      local prefix = ('  '):rep(depth)
-        .. (has_children and (open and g.open or g.closed) or g.leaf)
-        .. (self.marks[node.id] and g.mark or '')
-      local parts, col = { prefix }, #prefix
-      local row = #lines
-      if self.marks[node.id] then
-        hls[#hls + 1] = { row, #prefix - #g.mark, #prefix, 'PerforatedMark' }
+      local marked = self.marks[node.id]
+      local prefix = prefix_for(depth, has_children and (open and 1 or 2) or 0, marked)
+      local np, col = 1, #prefix
+      parts[1] = prefix
+      local hls, nh = {}, 0
+      if marked then
+        hls[1], hls[2], hls[3] = #prefix - #g.mark, #prefix, 'PerforatedMark'
+        nh = 3
       end
       for _, chunk in ipairs(node.text) do
         local t = chunk[1] or ''
-        parts[#parts + 1] = t
-        if chunk[2] and #t > 0 then
-          hls[#hls + 1] = { row, col, col + #t, chunk[2] }
+        np = np + 1
+        parts[np] = t
+        local len = #t
+        if chunk[2] and len > 0 then
+          hls[nh + 1], hls[nh + 2], hls[nh + 3] = col, col + len, chunk[2]
+          nh = nh + 3
         end
-        col = col + #t
+        col = col + len
       end
-      lines[#lines + 1] = table.concat(parts)
+      row_hls[#lines] = hls -- 0-based row of the line about to be added
+      lines[#lines + 1] = table.concat(parts, '', 1, np)
       rows[#lines] = node
       row_by_id[node.id] = #lines
       if open then
@@ -118,15 +168,11 @@ function Tree:render()
     lines = { '' }
   end
 
-  self.rows, self.by_id, self.row_by_id = rows, by_id, row_by_id
+  self.rows, self.by_id, self.row_by_id, self.row_hls = rows, by_id, row_by_id, row_hls
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].modified = false
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  for _, h in ipairs(hls) do
-    pcall(vim.api.nvim_buf_set_extmark, buf, ns, h[1], h[2], { end_col = h[3], hl_group = h[4] })
-  end
 
   for win, k in pairs(keep) do
     if vim.api.nvim_win_is_valid(win) then

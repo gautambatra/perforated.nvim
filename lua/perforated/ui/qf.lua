@@ -167,6 +167,45 @@ on_qf_buf = function(buf)
     vim.keymap.set('n', lhs, fn, { buffer = buf, nowait = true, desc = desc })
   end
   map('gr', refresh_current, 'perforated: refresh list')
+  local function entry_ws()
+    local it = entry_under_cursor()
+    if not it or it.valid ~= 1 or it.bufnr == 0 then
+      return nil
+    end
+    local path = vim.api.nvim_buf_get_name(it.bufnr)
+    if path:match('^perforated://') then
+      return nil
+    end
+    local wsmod = require('perforated.core.workspace')
+    local ws = wsmod.for_buf(it.bufnr)
+      or require('perforated.core.activation').for_dir(vim.fs.dirname(path))
+    return ws, path, it
+  end
+  map('x', function()
+    local ws, path = entry_ws()
+    if not ws then
+      return vim.notify('[perforated] no workspace file under cursor')
+    end
+    if
+      vim.fn.confirm(('Revert %s?'):format(vim.fn.fnamemodify(path, ':~:.')), '&Revert\n&Cancel', 2)
+      == 1
+    then
+      require('perforated.checkout').revert(ws, { path }, false, refresh_current)
+    end
+  end, 'perforated: revert entry')
+  map('M', function()
+    local ws, path = entry_ws()
+    if not ws then
+      return vim.notify('[perforated] no workspace file under cursor')
+    end
+    require('perforated.checkout').pick_change(ws, function(cl)
+      if cl then
+        require('perforated.p4').reopen(ws, { path }, cl, function()
+          refresh_current()
+        end)
+      end
+    end)
+  end, 'perforated: move entry to changelist')
   map('d', function()
     local it = entry_under_cursor()
     if it and it.valid == 1 and it.bufnr > 0 then

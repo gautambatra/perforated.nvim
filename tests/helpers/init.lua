@@ -114,7 +114,9 @@ function H.child(opts)
   for k, v in pairs(saved) do
     vim.env[k] = v
   end
-  local config = opts.config or { p4 = H.fake_p4 }
+  -- vim.ui.select backend by default: tests stub it (mini.pick is on the test rtp).
+  local config =
+    vim.tbl_deep_extend('force', { picker = 'select' }, opts.config or { p4 = H.fake_p4 })
   child.lua('vim.g.perforated = ...', { config })
   return child
 end

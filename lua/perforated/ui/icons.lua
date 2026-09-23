@@ -71,14 +71,46 @@ local function detect()
   return provider
 end
 
---- 'nerd' or 'ascii' (auto = nerd when an icon provider is installed).
+local style_cache ---@type 'nerd'|'ascii'|nil
+
+--- Is an icon plugin installed? Checked by looking for its files on the runtime path, without
+--- loading it (loading mini.icons/devicons costs several ms; the provider loads when the first
+--- file icon is actually drawn).
+local function provider_installed()
+  local want = require('perforated.config').get().icons.provider
+  if want == false then
+    return false
+  end
+  if package.loaded['mini.icons'] or package.loaded['nvim-web-devicons'] then
+    return true
+  end
+  local files = {}
+  if want == 'auto' or want == 'mini' then
+    files[#files + 1] = 'lua/mini/icons.lua'
+  end
+  if want == 'auto' or want == 'devicons' then
+    files[#files + 1] = 'lua/nvim-web-devicons.lua'
+    files[#files + 1] = 'lua/nvim-web-devicons/init.lua'
+  end
+  for _, f in ipairs(files) do
+    if #vim.api.nvim_get_runtime_file(f, false) > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+--- 'nerd' or 'ascii' (auto = nerd when an icon plugin is installed).
 ---@return 'nerd'|'ascii'
 function M.style()
   local s = require('perforated.config').get().icons.style
   if s == 'nerd' or s == 'ascii' then
     return s
   end
-  return detect() and 'nerd' or 'ascii'
+  if not style_cache then
+    style_cache = provider_installed() and 'nerd' or 'ascii'
+  end
+  return style_cache
 end
 
 --- Status glyph by name (user overrides via config.icons.glyphs).
@@ -134,7 +166,7 @@ function M.action(action)
 end
 
 function M._reset()
-  provider, cache = nil, {}
+  provider, cache, style_cache = nil, {}, nil
 end
 
 return M

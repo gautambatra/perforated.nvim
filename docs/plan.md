@@ -362,6 +362,19 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
 
 ### M2 — Client view, CLs, pickers · ~3 weeks
 
+> **Status (2026-09-23): done.** 113 tests pass; the new M2 benchmarks are within budget (5000-row render ~10 ms best-of-9, first paint ~4 ms).
+> Implementation notes:
+> - Highlights come from a decoration provider for visible rows only; before that, a 5000-row render took 55 ms.
+> - The footer is a float anchored to the window, because per-window statuslines are hidden with `laststatus=3`.
+> - `filetype` is set after the first paint.
+> - Icon plugins are detected via runtime files, without loading them.
+> - Keys shared between actions (e.g. `x`) dispatch by the kind of the node under the cursor.
+>
+> Deferred:
+> - P4V `<C-g>` lookup and `<C-t>` history: M3, together with describe and history.
+> - `<C-f>` filter: use `/`.
+> - `gw` workspace switcher: `:P4` opens the view for the current buffer's workspace.
+
 **Scope**
 1. **ui/tree, ui/float (action menu), ui/footer, ui/keys registry** (§3.8–3.9), and `?` help generated from the registry.
 2. **Client view** (`:P4`, opens in a new tab; also available as a float or split):
