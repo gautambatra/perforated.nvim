@@ -184,6 +184,14 @@ function M.open(buf, rev, opts)
   end
 
   local tab = vim.api.nvim_get_current_tabpage()
+  -- Payload of the User PerforatedDiffOpen / PerforatedDiffClose events.
+  local data = {
+    tab = tab,
+    wins = { left = left, right = right },
+    bufs = { left = lbuf, right = buf },
+    spec = spec or nil, -- depot revision on the left (nil: file opened for add)
+    path = st.path,
+  }
   local function close_tab()
     if vim.api.nvim_tabpage_is_valid(tab) and #vim.api.nvim_list_tabpages() > 1 then
       local nr = vim.api.nvim_tabpage_get_number(tab)
@@ -191,26 +199,34 @@ function M.open(buf, rev, opts)
     end
   end
   vim.keymap.set('n', 'q', close_tab, { buffer = lbuf, nowait = true, desc = 'Close diff tab' })
-  -- Closing either side closes the whole diff tab (and turns diff mode off on the file).
+  -- Closing either side (or the tab) closes the whole diff: diff mode is turned off on the
+  -- user's file and PerforatedDiffClose fires exactly once.
   local aug = vim.api.nvim_create_augroup('perforated.diff.' .. tab, { clear = true })
+  local closed = false
   vim.api.nvim_create_autocmd('WinClosed', {
     group = aug,
     pattern = { tostring(left), tostring(right) },
     callback = function()
       vim.schedule(function()
+        if closed then
+          return
+        end
+        closed = true
+        pcall(vim.api.nvim_del_augroup_by_id, aug)
         for _, w in ipairs({ left, right }) do
           if vim.api.nvim_win_is_valid(w) then
-            vim.api.nvim_win_call(w, function()
+            pcall(vim.api.nvim_win_call, w, function()
               vim.cmd('diffoff')
             end)
           end
         end
         close_tab()
-        pcall(vim.api.nvim_del_augroup_by_id, aug)
+        require('perforated.core.events').emit('DiffClose', data)
       end)
     end,
   })
   vim.api.nvim_set_current_win(right)
+  require('perforated.core.events').emit('DiffOpen', data)
 end
 
 return M
