@@ -165,7 +165,7 @@ T['m3']['describe Q: files to quickfix (workspace paths when mapped)'] = functio
   child.type_keys('Q')
   wait([[#vim.fn.getqflist() == 2]])
   local names = child.lua_get(
-    [[vim.tbl_map(function(e) return vim.fn.bufname(e.bufnr) end, vim.fn.getqflist())]]
+    [[vim.tbl_map(function(e) return vim.api.nvim_buf_get_name(e.bufnr) end, vim.fn.getqflist())]]
   )
   table.sort(names)
   H.eq(names, { root .. '/a.txt', root .. '/b.txt' })

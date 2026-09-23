@@ -105,7 +105,8 @@ function M.unified(a, b)
   local ta = #a > 0 and (table.concat(a, '\n') .. '\n') or ''
   local tb = #b > 0 and (table.concat(b, '\n') .. '\n') or ''
   local algorithm = require('perforated.config').get().signs.algorithm
-  local out = vim.text.diff(ta, tb, { ctxlen = 3, algorithm = algorithm }) --[[@as string]]
+  local difffn = (vim.text and vim.text.diff) or vim.diff -- vim.diff is deprecated in 0.12+
+  local out = difffn(ta, tb, { ctxlen = 3, algorithm = algorithm }) --[[@as string]]
   local lines = vim.split(out or '', '\n', { plain = true })
   if lines[#lines] == '' then
     lines[#lines] = nil
