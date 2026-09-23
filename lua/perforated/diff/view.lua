@@ -147,26 +147,40 @@ function M.open(buf, rev, opts)
     return M.external(st.ws, st.path, spec)
   end
 
-  vim.cmd('tab split')
-  local right = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(right, buf)
-  vim.cmd('leftabove vnew')
-  local left = vim.api.nvim_get_current_win()
-  local lbuf
-  if spec then
-    lbuf = require('perforated.uri').buffer(st.ws, spec)
-    vim.api.nvim_win_set_buf(left, lbuf)
-  else
-    lbuf = vim.api.nvim_get_current_buf()
-    vim.bo[lbuf].buftype = 'nofile'
-    vim.bo[lbuf].bufhidden = 'wipe'
-    vim.api.nvim_buf_set_name(lbuf, 'perforated://null (opened for add)')
-    vim.bo[lbuf].modifiable = false
+  M.pair(st.ws, spec and { spec = spec } or { empty = 'opened for add' }, { buf = buf }, {
+    spec = spec or nil,
+    path = st.path,
+  })
+end
+
+---@class perforated.DiffSide
+---@field buf integer?     an existing buffer (e.g. the user's file)
+---@field spec string?     a depot revision (perforated:// buffer, loaded asynchronously)
+---@field empty string?    an empty placeholder (label shown in the buffer name)
+
+---@param ws perforated.Workspace
+---@param side perforated.DiffSide
+---@return integer buf
+local function side_buf(ws, side)
+  if side.buf then
+    return side.buf
   end
-  -- `diffthis` fires OptionSet (pattern 'diff'): an error in a user autocmd there must not
-  -- leave a half-built diff tab behind.
+  if side.spec then
+    return require('perforated.uri').buffer(ws, side.spec)
+  end
+  local b = vim.api.nvim_create_buf(false, true)
+  vim.bo[b].bufhidden = 'wipe'
+  pcall(vim.api.nvim_buf_set_name, b, ('perforated://null (%s)'):format(side.empty or 'empty'))
+  vim.bo[b].modifiable = false
+  return b
+end
+M.side_buf = side_buf
+
+--- Turn diff mode on in windows, tolerating user OptionSet autocmds that throw.
+---@param wins integer[]
+function M.diffthis(wins)
   local errs = {}
-  for _, w in ipairs({ left, right }) do
+  for _, w in ipairs(wins) do
     local ok, err = pcall(vim.api.nvim_win_call, w, function()
       vim.cmd('diffthis')
     end)
@@ -182,30 +196,62 @@ function M.open(buf, rev, opts)
       vim.log.levels.WARN
     )
   end
+end
+
+--- Side-by-side diff of any two sides in a new tab (left: old, right: new). `q` in a
+--- perforated buffer (or closing either window / the tab) closes it. Fires
+--- `User PerforatedDiffOpen` / `User PerforatedDiffClose` with the tab, windows and buffers.
+---@param ws perforated.Workspace
+---@param left perforated.DiffSide
+---@param right perforated.DiffSide
+---@param info { spec: string?, path: string? }?
+---@return table data  event payload
+function M.pair(ws, left, right, info)
+  local rbuf = side_buf(ws, right)
+  vim.cmd('tabnew')
+  local scratch = vim.api.nvim_get_current_buf()
+  local rwin = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(rwin, rbuf)
+  if vim.api.nvim_buf_is_valid(scratch) and scratch ~= rbuf then
+    pcall(vim.api.nvim_buf_delete, scratch, { force = true })
+  end
+  vim.cmd('leftabove vnew')
+  local lwin = vim.api.nvim_get_current_win()
+  local placeholder = vim.api.nvim_get_current_buf()
+  local lbuf = side_buf(ws, left)
+  vim.api.nvim_win_set_buf(lwin, lbuf)
+  if placeholder ~= lbuf and vim.api.nvim_buf_is_valid(placeholder) then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+  M.diffthis({ lwin, rwin })
 
   local tab = vim.api.nvim_get_current_tabpage()
-  -- Payload of the User PerforatedDiffOpen / PerforatedDiffClose events.
   local data = {
     tab = tab,
-    wins = { left = left, right = right },
-    bufs = { left = lbuf, right = buf },
-    spec = spec or nil, -- depot revision on the left (nil: file opened for add)
-    path = st.path,
+    wins = { left = lwin, right = rwin },
+    bufs = { left = lbuf, right = rbuf },
+    spec = info and info.spec,
+    path = info and info.path,
   }
   local function close_tab()
     if vim.api.nvim_tabpage_is_valid(tab) and #vim.api.nvim_list_tabpages() > 1 then
-      local nr = vim.api.nvim_tabpage_get_number(tab)
-      pcall(vim.cmd, 'tabclose ' .. nr)
+      pcall(vim.cmd, 'tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
     end
   end
-  vim.keymap.set('n', 'q', close_tab, { buffer = lbuf, nowait = true, desc = 'Close diff tab' })
+  -- `q` only in plugin-owned buffers: never map keys in the user's own file.
+  local user_bufs = { [left.buf or -1] = true, [right.buf or -1] = true }
+  for _, b in ipairs({ lbuf, rbuf }) do
+    if not user_bufs[b] then
+      vim.keymap.set('n', 'q', close_tab, { buffer = b, nowait = true, desc = 'Close diff tab' })
+    end
+  end
   -- Closing either side (or the tab) closes the whole diff: diff mode is turned off on the
   -- user's file and PerforatedDiffClose fires exactly once.
   local aug = vim.api.nvim_create_augroup('perforated.diff.' .. tab, { clear = true })
   local closed = false
   vim.api.nvim_create_autocmd('WinClosed', {
     group = aug,
-    pattern = { tostring(left), tostring(right) },
+    pattern = { tostring(lwin), tostring(rwin) },
     callback = function()
       vim.schedule(function()
         if closed then
@@ -213,7 +259,7 @@ function M.open(buf, rev, opts)
         end
         closed = true
         pcall(vim.api.nvim_del_augroup_by_id, aug)
-        for _, w in ipairs({ left, right }) do
+        for _, w in ipairs({ lwin, rwin }) do
           if vim.api.nvim_win_is_valid(w) then
             pcall(vim.api.nvim_win_call, w, function()
               vim.cmd('diffoff')
@@ -225,8 +271,9 @@ function M.open(buf, rev, opts)
       end)
     end,
   })
-  vim.api.nvim_set_current_win(right)
+  vim.api.nvim_set_current_win(rwin)
   require('perforated.core.events').emit('DiffOpen', data)
+  return data
 end
 
 return M

@@ -18,6 +18,16 @@ local LINKS = {
   PerforatedToast = 'NormalFloat',
   PerforatedToastBorder = 'DiagnosticWarn',
   PerforatedPreviewAdd = 'DiffAdd',
+  PerforatedSection = 'Title',
+  PerforatedHeader = 'Comment',
+  PerforatedPath = 'Normal',
+  PerforatedAction = 'Statement',
+  PerforatedRev = 'Comment',
+  PerforatedBadge = 'WarningMsg',
+  PerforatedShelved = 'Constant',
+  PerforatedMark = 'Todo',
+  PerforatedFooter = 'StatusLineNC',
+  PerforatedLoading = 'Comment',
   PerforatedPreviewDelete = 'DiffDelete',
 }
 

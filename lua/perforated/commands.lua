@@ -173,11 +173,14 @@ M.commands = {
 
   diff = {
     scope = 'workspace',
-    desc = 'Diff the current file: :P4 diff[!] [#rev|@CL|@=shelf|prev] (! = $P4DIFF tool)',
+    desc = 'Diff the current file: :P4 diff[!] [#rev|@CL|@=shelf|prev] (! = $P4DIFF); -a = all opened',
     complete = function()
-      return { '#have', '#head', 'prev' }
+      return { '#have', '#head', 'prev', '-a' }
     end,
-    run = function(_, o, args)
+    run = function(ws, o, args)
+      if args[1] == '-a' then
+        return require('perforated.diff.tab').open_opened(ws)
+      end
       require('perforated.diff.view').open(
         vim.api.nvim_get_current_buf(),
         args[1],
@@ -251,6 +254,49 @@ M.commands = {
             lists.all_hunk_items(ws, cb)
           end,
         })
+      end)
+    end,
+  },
+
+  view = {
+    scope = 'workspace',
+    desc = 'Client view: :P4 view [tab|float|split] (also plain :P4)',
+    complete = function()
+      return { 'tab', 'float', 'split' }
+    end,
+    run = function(ws, _, args)
+      require('perforated.views.client').open(ws, { kind = args[1] })
+    end,
+  },
+
+  change = {
+    scope = 'workspace',
+    desc = "Edit a changelist description: :P4 change[!] [N|new]  (! = full spec; no N = current file's CL)",
+    complete = function()
+      return { 'new' }
+    end,
+    run = function(ws, o, args)
+      local editor = require('perforated.views.change_editor')
+      local cl = args[1]
+      if cl == 'new' then
+        return editor.new(ws)
+      end
+      if not cl then
+        local st = require('perforated.buffer').get(0)
+        cl = st and st.rec and st.rec.change
+        if not cl then
+          return notify('current file is not opened; pass a changelist number', vim.log.levels.WARN)
+        end
+      end
+      if cl == 'default' then
+        return editor.edit(ws, cl) -- explains why the default CL has no description
+      end
+      if o.bang then
+        return editor.full(ws, cl)
+      end
+      -- Pending or submitted is decided by the server.
+      require('perforated.p4').change_status(ws, cl, function(status)
+        editor.edit(ws, cl, { submitted = status == 'submitted' })
       end)
     end,
   },
@@ -419,8 +465,7 @@ function M.run(o)
   local fargs = vim.deepcopy(o.fargs or {})
   local name = table.remove(fargs, 1)
   if not name then
-    -- The client view arrives in M2; until then `:P4` shows info.
-    name = 'info'
+    name = 'view' -- plain :P4 opens the client view
   end
   local bang = o.bang
   if name:sub(-1) == '!' then -- `:P4 revert!` reads naturally; `:P4! revert` works too

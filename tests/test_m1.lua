@@ -109,7 +109,8 @@ T['checkout']['n creates a changelist which becomes sticky for the next file'] =
   child.type_keys('x')
   wait_prompt()
   child.type_keys('n')
-  child.type_keys('Fix the parser', '<CR>')
+  H.eq(H.wait(child, [[vim.bo.filetype == 'perforated-description']]), true)
+  child.type_keys('Fix the parser', '<C-s>')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
   local cl = opened()['//depot/a.txt']
   H.neq(cl, 'default')
@@ -144,11 +145,12 @@ T['checkout']['c offers "+ new changelist…" at the end of the list'] = functio
       _G.labels = vim.tbl_map(opts.format_item, items)
       cb(items[#items])
     end
-    vim.ui.input = function(_, cb) cb('Created from the picker') end
   ]])
   child.type_keys('x')
   wait_prompt()
   child.type_keys('c')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  child.type_keys('Created from the picker', '<C-s>')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
   local labels = child.lua_get('_G.labels')
   H.eq(labels[1], 'default')

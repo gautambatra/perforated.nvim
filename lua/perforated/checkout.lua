@@ -94,6 +94,11 @@ end
 ---@param verb string
 ---@param res perforated.RunResult
 ---@param count integer
+local function changed(ws)
+  require('perforated.core.events').emit('Changed', { ws = ws.key })
+end
+M.changed = changed
+
 local function report(verb, res, count)
   dbg.log(
     (#res.errors > 0 or not res.ok) and 'warn' or 'info',
@@ -172,6 +177,7 @@ function M.edit(ws, paths, cl, cb)
       restore()
     end
     report('edit', res, #res.records)
+    changed(ws)
     for _, b in ipairs(bufs) do
       if ok and vim.api.nvim_buf_is_valid(b) then
         vim.bo[b].readonly = false
@@ -193,6 +199,7 @@ function M.add(ws, paths, cl, cb)
   p4.add(ws, paths, cl, function(res)
     local ok = #res.records > 0 and #res.errors == 0
     report('add', res, #res.records)
+    changed(ws)
     for _, b in ipairs(bufs) do
       require('perforated.buffer').refresh(b)
     end
@@ -211,6 +218,7 @@ function M.revert(ws, paths, unchanged, cb)
   local bufs = bufs_for(ws, paths)
   p4.revert(ws, paths, { unchanged = unchanged }, function(res)
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
+    changed(ws)
     local reverted = {}
     for _, rec in ipairs(res.records) do
       if rec.clientFile then
@@ -271,26 +279,12 @@ function M.pick_change(ws, cb)
   end)
 end
 
---- Create a new changelist from a one-line description (multi-line editor arrives in M2).
+--- Create a new changelist from a description entered in the editor float.
 ---@param ws perforated.Workspace
 ---@param cb fun(cl: string?, desc: string?)
 function M.new_change(ws, cb)
-  local template = config.get().change.template
-  if type(template) == 'function' then
-    template = template(ws)
-  end
-  vim.ui.input({ prompt = 'New changelist description: ', default = template or '' }, function(desc)
-    if not desc or vim.trim(desc) == '' then
-      return cb(nil)
-    end
-    p4.new_change(ws, desc, function(cl, err)
-      if not cl then
-        notify('could not create changelist: ' .. tostring(err), vim.log.levels.ERROR)
-        return cb(nil)
-      end
-      cb(cl, desc)
-    end)
-  end)
+  -- Multi-line description editor (float); cancelling calls cb(nil).
+  require('perforated.views.change_editor').new(ws, { on_done = cb })
 end
 
 --- Show the check-out/add menu for a buffer and act on the choice.

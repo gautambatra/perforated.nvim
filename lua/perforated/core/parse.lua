@@ -13,7 +13,11 @@ M.severity = { EMPTY = 0, INFO = 1, WARN = 2, FAILED = 3, FATAL = 4 }
 ---@param rec table
 ---@return boolean
 function M.is_message(rec)
-  return rec.severity ~= nil and rec.generic ~= nil
+  if rec.severity ~= nil and rec.generic ~= nil then
+    return true
+  end
+  -- Some commands (e.g. `status`) emit info messages as { data, level } only.
+  return rec.level ~= nil and rec.data ~= nil and rec.depotFile == nil and rec.clientFile == nil
 end
 
 ---@param rec table message record
@@ -78,7 +82,7 @@ function M.classify(recs, bad)
   local out = { records = {}, warnings = {}, errors = {}, bad = bad or 0 }
   for _, rec in ipairs(recs) do
     if M.is_message(rec) then
-      local sev = tonumber(rec.severity) or 0
+      local sev = tonumber(rec.severity) or tonumber(rec.level) or 0
       if sev >= M.severity.FAILED then
         out.errors[#out.errors + 1] = M.message_text(rec)
       else
