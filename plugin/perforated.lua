@@ -172,7 +172,21 @@ end
 -- lua/perforated/commands.lua (a test enforces it).
 -- ---------------------------------------------------------------------------------------------
 
-local subs = { 'info', 'log', 'login', 'refresh' }
+local subs = {
+  'add',
+  'diff',
+  'dismiss',
+  'edit',
+  'hunks',
+  'info',
+  'log',
+  'login',
+  'notifications',
+  'opened',
+  'refresh',
+  'revert',
+  'status',
+}
 
 vim.api.nvim_create_user_command('P4', function(o)
   require('perforated.commands').run(o)
@@ -200,4 +214,41 @@ if vim.tbl_get(vim.g, 'perforated', 'commands', 'aliases') ~= false then
       end,
     })
   end
+end
+
+-- Depot revisions as buffers: `:e perforated:////depot/path/file.c#3`.
+vim.api.nvim_create_autocmd('BufReadCmd', {
+  group = vim.api.nvim_create_augroup('perforated.uri', { clear = true }),
+  pattern = 'perforated:////*',
+  callback = function(ev)
+    require('perforated.uri').read(ev.buf)
+  end,
+})
+
+-- <Plug>(perforated-…) mappings; nothing is loaded until one is used.
+for _, name in ipairs({
+  'next-hunk',
+  'prev-hunk',
+  'preview-hunk',
+  'reset-hunk',
+  'edit',
+  'edit-prompt',
+  'add',
+  'revert',
+  'diff',
+  'diff-external',
+  'hunks',
+  'hunks-file',
+  'opened',
+  'status',
+  'info',
+  'log',
+  'notifications',
+}) do
+  vim.api.nvim_set_keymap(
+    'n',
+    '<Plug>(perforated-' .. name .. ')',
+    "<Cmd>lua require('perforated.keymaps').run('" .. name .. "')<CR>",
+    { noremap = true, desc = 'perforated: ' .. name }
+  )
 end

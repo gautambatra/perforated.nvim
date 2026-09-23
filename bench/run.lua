@@ -62,14 +62,16 @@ do
 end
 child.stop()
 
--- 3. Lua memory attributable to the plugin: an active workspace with 50 buffers, minus the
---    same session with the plugin dormant (opening buffers loads Neovim's own filetype Lua).
+-- 3. Lua memory attributable to the plugin: (active − dormant) for the first workspace file
+--    (code + workspace state) and per additional attached buffer. Opening files also loads
+--    Neovim's own filetype Lua, which the dormant run cancels out.
 do
   local root = H.tmp()
   H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
-  for i = 1, 50 do
+  for i = 1, 51 do
     H.write(('%s/src/f%d.c'):format(root, i), 'x')
   end
+  local gc = 'collectgarbage(); collectgarbage(); return collectgarbage("count")'
   local function measure(active)
     local c = H.child({
       fake = {
@@ -90,21 +92,95 @@ do
       },
       env = { P4CONFIG = active and '.p4config' or '.p4config-none' },
     })
-    local before = c.lua('collectgarbage(); collectgarbage(); return collectgarbage("count")')
-    for i = 1, 50 do
-      c.cmd(('edit %s/src/f%d.c'):format(root, i))
-    end
+    local before = c.lua(gc)
+    c.cmd(('edit %s/src/f1.c'):format(root))
     if active then
       H.wait(c, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
-    else
-      H.wait(c, 'false', 300)
     end
-    local after = c.lua('collectgarbage(); collectgarbage(); return collectgarbage("count")')
+    H.wait(c, 'false', 300)
+    local one = c.lua(gc)
+    for i = 2, 51 do
+      c.cmd(('edit %s/src/f%d.c'):format(root, i))
+    end
+    H.wait(c, 'false', 500)
+    local many = c.lua(gc)
     c.stop()
-    return after - before
+    return one - before, (many - one) / 50
   end
-  local dormant, active = measure(false), measure(true)
-  record('Lua memory: workspace + 50 buffers', active - dormant, 'KB', 200)
+  local d_one, d_per = measure(false)
+  local a_one, a_per = measure(true)
+  record('Lua memory: active workspace (code+state)', a_one - d_one, 'KB', 250)
+  record('Lua memory: per attached buffer', math.max(a_per - d_per, 0), 'KB', 2)
+end
+
+-- 4. Sign refresh for a 10k-line file with ~100 hunks: main-thread cost only (read lines,
+--    queue the worker-thread diff, render the result).
+do
+  local c = H.child()
+  local ms = c.lua([[
+    local engine = require('perforated.diff.engine')
+    local signs = require('perforated.signs')
+    require('perforated.hl').setup()
+    local base, cur = {}, {}
+    for i = 1, 10000 do
+      base[i] = ('local x%d = compute(%d) -- some typical source line'):format(i, i)
+      cur[i] = (i % 100 == 0) and ('changed ' .. i) or base[i]
+    end
+    local base_text = engine.join(base)
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, cur)
+    local runs, samples = 21, {}
+    for _ = 1, runs do
+      local t0 = vim.uv.hrtime()
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local done
+      engine.hunks_async(base_text, lines, function(h) done = h end)
+      local t1 = vim.uv.hrtime()
+      vim.wait(5000, function() return done ~= nil end, 1)
+      local t2 = vim.uv.hrtime()
+      signs.render(buf, done)
+      samples[#samples + 1] = (t1 - t0) + (vim.uv.hrtime() - t2)
+    end
+    table.sort(samples)
+    return samples[math.ceil(runs / 2)] / 1e6 -- median
+  ]])
+  record('sign refresh: 10k lines, 100 hunks (UI)', ms, 'ms', 5)
+  c.stop()
+end
+
+-- 5. Synchronous cost of opening a workspace file: the gate lookup plus activation/attach
+--    (p4 itself is async). Filetype detection etc. are Neovim's cost, not ours.
+do
+  local root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  for i = 1, 60 do
+    H.write(('%s/d%d/f%d.c'):format(root, i % 6, i), 'x')
+  end
+  local c = H.child({
+    fake = { rules = { { match = '.', sleep = 0.2, records = {} } } },
+    env = { P4CONFIG = '.p4config' },
+  })
+  c.cmd(('edit %s/d1/f1.c'):format(root)) -- warm-up: loads modules once
+  local ms = c.lua(
+    [[
+    local root = ...
+    local gate = package.loaded['perforated.gate']
+    local act = require('perforated.core.activation')
+    local total = 0
+    for i = 2, 60 do
+      local name = ('%s/d%d/f%d.c'):format(root, i % 6, i)
+      local buf = vim.fn.bufadd(name)
+      vim.fn.bufload(buf)
+      local t0 = vim.uv.hrtime()
+      act.attach(buf, name, gate.lookup(name:match('^(.*)/')))
+      total = total + (vim.uv.hrtime() - t0)
+    end
+    return total / 59 / 1e6
+  ]],
+    { root }
+  )
+  record('attach: gate + activation (sync part)', ms, 'ms', 0.3)
+  c.stop()
 end
 
 -- Report.

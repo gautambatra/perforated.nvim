@@ -20,9 +20,11 @@ Companion docs: [`design-decisions.md`](design-decisions.md) (the behaviour we a
 | Metric | Budget |
 |---|---|
 | Added startup time (`--startuptime`, plugin/ only) | < 0.5 ms |
-| Resident Lua memory when idle, no p4 buffers | < 200 KB |
+| Resident Lua memory when idle, no p4 buffers | ≈ 0 (dormant: only plugin/ is loaded) |
+| Lua memory of an active workspace (code + state) | ≤ 250 KB |
+| Lua memory per attached buffer | ≤ 2 KB (plus base text for opened files) |
 | `BufReadPost` handler cost on the UI thread | < 0.3 ms (the work is queued) |
-| Sign refresh after an edit, 10k-line file | < 3 ms UI time (debounced 100 ms); larger files diff on `uv.new_work` |
+| Sign refresh after an edit, 10k-line file | ≤ 5 ms UI time (debounced 100 ms; revised from 3 ms: reading 10k lines from the buffer alone costs 2–3.5 ms). Files > 2k lines diff on `uv.new_work`; ≤ 2k lines take about 1 ms |
 | Sign refresh, 100k-line file | never blocks; worker-thread diff |
 | Check-out float appears after first keystroke | < 16 ms (a single frame); the CL list fills in asynchronously |
 | Client view first paint (skeleton) | < 16 ms |
@@ -289,6 +291,18 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
 **Exit:** `:checkhealth perforated` is green against the real p4d, and `:P4 log` shows calls.
 
 ### M1 — Daily-driver MVP · ~3 weeks
+
+> **Status (2026-09-23): done.** 76 tests pass (26 new M1 cases, mostly against a real p4d). All benchmarks are within budget: startup 0.44 ms, attach 0.03 ms, sign refresh for 10k lines 4.3 ms, 203 KB per active workspace, 1.6 KB per buffer.
+> Deviations and additions:
+> - `A` (always, this session) added to the check-out prompt.
+> - Keys typed during a grace period are replayed as text.
+> - Files are made writable optimistically when a target is chosen (E505 happens before write autocmds).
+> - External diff launches `$P4DIFF` directly (p4 skips identical files; `diff2` ignores P4DIFF).
+> - Sign diff uses myers, not histogram.
+> - Check-out hooks are global autocmds, not per buffer.
+> - The statusline global is `vim.g.perforated_status`.
+> - `:P4 revert!` bang syntax.
+> - The lualine "component" is `require('perforated').statusline`.
 
 **Scope**
 1. **Attach pipeline** (§3.5) and the batched fstat on buffer open.

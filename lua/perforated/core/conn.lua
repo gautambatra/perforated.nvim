@@ -85,6 +85,10 @@ function Conn:_set(state, err)
   self.state = state
   self.last_error = err
   events.emit('Status', { ws = self.ws.key, conn = state })
+  local status = package.loaded['perforated.status']
+  if status then
+    status.update_ws(self.ws)
+  end
 end
 
 --- Should a (non-probe) call be refused immediately?

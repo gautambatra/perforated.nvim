@@ -17,7 +17,9 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 
 ## Check-out / add
 - Trigger: **first modification** of an unopened depot file (keystroke not blocked).
-- Prompt: **small floating menu** near cursor: `<CR>` default/sticky CL, `c` existing CL (picker), `n` new CL (inline description), `s` skip for buffer, `S` never this session.
+- Prompt: **small floating menu** near cursor: `<CR>` default/sticky CL, `c` existing CL (picker), `n` new CL (inline description), `A` always use this target for the rest of the session without asking (added in M1 for `:bufdo`/macro edits across many files), `s` skip for buffer, `S` never this session.
+- **Keys typed right after the prompt appears are treated as text.** For `checkout.prompt_grace` (default 300 ms) keys aren't menu choices; they're replayed into the buffer afterwards, so typing `cat` can't select `n` by accident.
+- **No waiting on `:w`.** Choosing a target makes the file writable immediately (what `p4 edit` does anyway) and restores it if the edit fails. Neovim's read-only check (E505) runs before any write autocmd, so the write can't wait for the server.
 - **Sticky CL per session**: last chosen CL becomes the `<CR>` default; resets on submit/delete of that CL.
 - Option: auto-checkout on write (uses sticky CL).
 - New files inside client root: **prompt to `p4 add`** on write (same float).
@@ -34,9 +36,10 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 ## Diffs & gutter
 - Gutter base: **#have** (stale shown via separate indicator).
 - `:P4 diff` default: **side-by-side in a new tab**, native `:diffthis`, `q` closes.
-- Option to open diffs in the user's external tool from **$P4DIFF**.
+- Option to open diffs in the user's external tool from **$P4DIFF** (`:P4 diff!` or `diff.tool = 'external'`). The plugin launches it itself as `$P4DIFF <depot copy> <workspace file>`, with the user's environment, because `p4 diff` skips identical files and `p4 diff2` ignores P4DIFF.
 - Shelved file default diff: **shelved vs its base rev**; menu offers vs workspace / vs head.
 - Hunk ops: preview hunk (float), reset hunk to #have, current-line blame virtual text. Hunk navigation `]h`/`[h`.
+- Sign diffs use `myers` + indent heuristic (configurable via `signs.algorithm`). Histogram is about 5x slower on large files, and linematch doubles the cost for no benefit in the gutter.
 
 ## History / annotate / time-lapse
 - Filelog `<CR>` opens an **action menu**: diff vs previous rev, diff vs workspace file, view submitted CL, open revision read-only. Presentation configurable (float / picker / quickfix).
@@ -87,8 +90,8 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
   - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 notifications` replays recent toasts, and submit always re-checks and warns.
   - **No OS or desktop notifications.**
 - **Statusline markers** stay until you sync or resolve, with configurable glyphs:
-  - **Per file:** `↓#8→#9` (`vim.b.perforated_status`, `status_dict.stale`).
-  - **Per workspace:** `↓2` (stale opened files) and `!1` (unresolved) in `vim.g.perforated`, shown on every buffer of that workspace.
+  - **Per file:** `↓#8→#9` (`vim.b.perforated_status`, `vim.b.perforated_status_dict.stale`).
+  - **Per workspace:** `↓2` (stale opened files) and `!1` (unresolved) in `vim.g.perforated_status` (not `vim.g.perforated`, which holds the config), shown on every buffer of that workspace.
   - Both are available through the lualine component and `require('perforated').statusline()`.
 
 ## Icons
@@ -100,7 +103,8 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - Server unreachable → **offline mode** (cached signs keep working, clear errors, retry with backoff, statusline indicator).
 
 ## Commands & keymaps
-- `:P4 <sub>` with completion **plus** flat aliases (`:P4edit`, `:P4diff`, …) generated from the same table.
+- `:P4 <sub>` with completion **plus** flat aliases (`:P4edit`, `:P4diff`, …) generated from the same table. A bang goes on the subcommand: `:P4 revert!`, `:P4 diff!` (`:P4! revert` also works).
+- Depot revisions open as `perforated:////depot/path#rev` buffers. In `:edit`, `#` must be escaped (`\#`) because Vim expands it to the alternate file.
 - No global keymaps by default; `<Plug>` mappings + **opt-in preset** (`keymaps = 'default'`). Buffer-local maps in plugin buffers always on.
 
 ### Plugin-buffer keys (client view, describe, history, annotate, time-lapse)

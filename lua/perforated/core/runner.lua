@@ -32,6 +32,7 @@ local M = {}
 ---@field ms number
 ---@field timed_out boolean
 ---@field argv string[]
+---@field all table[]?          tagged: every record incl. messages, in output order
 
 M.TIMEOUT_CODE = 124 -- vim.system's exit code on timeout
 M.KILL_GRACE = 2000 -- ms between SIGTERM (timeout) and SIGKILL
@@ -94,6 +95,7 @@ function M.run(spec, cb)
     if tagged then
       local p = parse.classify(recs, bad)
       res.records, res.warnings, res.errors = p.records, p.warnings, p.errors
+      res.all = recs -- records and messages in output order
     else
       res.records, res.warnings, res.errors = {}, {}, {}
       res.stdout = table.concat(out_chunks)

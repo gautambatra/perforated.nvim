@@ -65,3 +65,18 @@ Collected 2026-09-23. Two surveys: (A) existing Perforce integrations + p4 CLI t
 - **Emacs diff-hl**: reference revision switch; skip when modified-tick unchanged. **vc-dir**: marks `m/u/M`, `v` next logical action. **vc-annotate**: age colours, `a` annotate-before-this-line's-change. **git-timemachine**: `p/n/g/t/w/b/q` in-place revision stepping.
 - **Neovim APIs**: `vim.system`, `vim.uv` (new_work, timers), `vim.text.diff` (renamed from `vim.diff` in 0.12 — support both), extmark signs with priority, `virt_lines`, floats with title/footer, 0.12 `nvim_echo` progress messages, `vim.ui.select/input`, `:h lua-plugin` (tiny plugin/, no required setup(), `<Plug>` maps, health.lua, late FileType for plugin buffers). Idea: in-process LSP exposing actions as code actions (like `vim.pack`).
 - **Testing**: fake `p4` on PATH replaying fixtures; real p4d via `P4PORT="rsh:p4d -r $TMP -L log -i"` (no daemon); isolate `P4CONFIG/P4ENVIRO/P4TICKETS`; race + debounce + screenshot tests.
+
+## C. Findings while building M0/M1 (verified against p4/p4d 2025.2)
+
+- **`-Mj` breaks spec input.** `p4 -Mj change -i` fails with "Missing required field 'Change'", so specs must be sent untagged. Tagged `change -o` output is fine for reading.
+- **A spec without `Files:`** (`Change: new` + `Description:`) creates an empty changelist, so a new CL doesn't pull in the default CL's files.
+- **`changes -m1 f1 f2 …` returns one record per file argument** (not one overall), so take the max.
+- **Untagged `print -q` of a missing revision** writes the error to stderr with exit 0. Check stderr as well as the exit code.
+- **`fstat` of a move/add file** reports `movedFile`/`movedRev`, which gives the diff base.
+- **`p4 diff` only launches P4DIFF when the files differ**, even with `-f`. **`p4 diff2` ignores P4DIFF.**
+- **Concurrent rsh `p4d` processes on a fresh root race** during initialisation ("Database is at old upgrade level"). Only a test-setup concern.
+- **Neovim `vim.system` timeouts only send SIGTERM.** A process that ignores it is never reaped, so the runner escalates to SIGKILL.
+- **Neovim's E505 read-only check runs before `BufWritePre`/`BufWriteCmd`**, so waiting in those autocmds can't rescue a write to a read-only file.
+- **`getcharstr()` called from a scheduled callback** reports `nvim_get_mode().blocking == false`, and RPC keeps being served meanwhile.
+- **`vim.diff` on 10k lines:** myers about 4 ms, histogram about 20 ms, and linematch roughly doubles either. `nvim_buf_get_lines` of 10k lines (~500 KB) takes 2–3.5 ms and dominates what the main thread spends on a refresh.
+- **Sign extmarks with `end_row`** show the sign on every line of the range, so one extmark per hunk is enough.
