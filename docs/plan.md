@@ -228,7 +228,7 @@ Perforce can't push notifications to clients, so we poll, cheaply.
 - Declarative nodes `{id, kind, text_chunks, children, folded, item}`. Rendering produces the lines, highlight ranges and a `row → node` map.
 - **Bulk update:** one `nvim_buf_set_lines` call plus extmarks in a single namespace. On refresh, diff the new line array against the old one with `vim.text.diff` and patch only the changed ranges. This keeps the cursor and scroll position stable and is cheap.
 - Folds are tree state, not Vim folds, so `h`/`l` and `<Tab>` re-render the subtree only.
-- Actions resolve `node.item` → `keys.registry` → the valid actions for that item kind. The same registry drives the `<Space>` menu, the `?` help and the footer, so these three can never drift apart.
+- Actions resolve `node.item` → `keys.registry` → the valid actions for that item kind. The same registry drives the `.` menu, the `?` help and the footer, so these three can never drift apart.
 
 ### 3.9 Action registry (ui/keys.lua)
 
@@ -392,7 +392,7 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
      - **Submitted (mine)**
      - **Workspace reconcile**: lazy. It runs `p4 status -m` over the client (with `--parallel` when supported) only when expanded, reports progress, and can be cancelled.
    - `A` toggles pending scope to all my clients (`-u me`, grouped by client; other clients are read-only).
-   - Keys as in the design doc: vim-style keys plus the p4v layer, `h`/`l` folding, `<Space>` menu, footer, marks.
+   - Keys as in the design doc: vim-style keys plus the p4v layer, `h`/`l` folding, `.` menu, footer, marks.
    - The view re-queries on open and after every action it triggers ("always fresh"), with a coalesced refresh (one in flight plus one queued).
 3. **Diff tab** (`difftab.lua`): a file panel (list or tree) plus a native diff pair, with `<Tab>`/`<S-Tab>` to cycle files. Used by `D` on a CL, `:P4 diff -a` (all opened files, with an optional selection picker) and shelf diffs. Content is fetched per file only when that file is focused, and prefetches the next one.
 4. **CL operations:**
@@ -408,7 +408,7 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
    - `M` reopen marked files into a picked or new CL
    - `x`/`X` revert
    - `e`/`a` edit/add
-5. **Send-to-quickfix action** (`Q` → qf, `gQ` → loclist) in the registry, for the item under the cursor, the marked items or the whole list. It works from the client view and the diff-tab file panel. Qf-window buffer-local action keys (`d`, `x`, `M`, `D`, `<Space>`) are active for perforated lists. Workspace reconcile results stream into qf.
+5. **Send-to-quickfix action** (`Q` → qf, `gQ` → loclist) in the registry, for the item under the cursor, the marked items or the whole list. It works from the client view and the diff-tab file panel. Qf-window buffer-local action keys (`d`, `x`, `M`, `D`, `.`) are active for perforated lists. Workspace reconcile results stream into qf.
 6. **Picker adapter** (`picker/*`): each adapter maps its native send-to-qf onto our entry format so `user_data` survives. telescope first (the author's primary), then fzf-lua, snacks, mini.pick and the `vim.ui.select` fallback. Auto-detected, or set via `picker = 'telescope'`. Sources: pending CLs, opened files, submitted CLs (streaming, paginated) and users.
 7. **Submitted views:** `:P4 changes [-u user] [path]` shows the last 50, scoped to the client view by default. Scrolling past the end (or pressing `gn`) loads the next 50 using `@<oldest`. Available in the client view section, a picker or a standalone buffer.
 

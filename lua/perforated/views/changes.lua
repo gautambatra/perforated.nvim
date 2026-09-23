@@ -2,7 +2,7 @@
 ---
 --- Scoped to the client view by default (`path` overrides). `gn` / reaching the end loads the
 --- next page (`path@<oldest-1>`), so no query is unbounded. Actions: D diff all files, C edit
---- description (own CLs), y copy, Q quickfix of the CL's files is left to the diff tab.
+--- description (own CLs), K view changelist, y copy CL number, Q quickfix of the CL's files is left to the diff tab.
 
 local cls = require('perforated.changelists')
 local keys = require('perforated.ui.keys')
@@ -128,6 +128,16 @@ function M.open(ws, opts)
       end,
     },
     {
+      id = 'view_change',
+      desc = 'View changelist',
+      keys = { 'K' },
+      kinds = { submitted = true },
+      footer = 12,
+      run = function(items)
+        require('perforated.views.change_info').open(ws, items[1])
+      end,
+    },
+    {
       id = 'yank',
       desc = 'Copy CL number',
       keys = { 'y' },
@@ -179,7 +189,7 @@ function M.open(ws, opts)
     {
       id = 'menu',
       desc = 'Action menu',
-      keys = { '<Space>' },
+      keys = { '.', '<RightMouse>' },
       nomenu = true,
       run = function()
         keys.menu(view.actions, view)

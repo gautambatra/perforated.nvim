@@ -60,7 +60,7 @@ One action, **`C` "edit description"**, available anywhere a CL appears:
 - history, annotate and time-lapse entries (the CL of that revision)
 - picker results
 - the quickfix window
-- `<Space>` menus
+- `.` menus
 - normal buffers via `<leader>pC` (the CL the current file is opened in; with no CL, the sticky CL)
 
 It is also available as the command `:P4 change [N]` (no N means the current file's CL).
@@ -109,7 +109,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 
 ### Plugin-buffer keys (client view, describe, history, annotate, time-lapse)
 - Folding: `l` / `<Tab>` / `<CR>` expand, `h` collapse (on a child: jump to parent + collapse). `<CR>` on a leaf → action menu.
-- **Context action menu** everywhere: `<Space>` / `<RightMouse>` → float listing only actions valid for the item under cursor, each with its hotkey. Normal code buffers: `<leader>p<Space>`.
+- **Context action menu** everywhere: `.` / `<RightMouse>` (not `<Space>`: commonly the leader key) → float listing only actions valid for the item under cursor, each with its hotkey. Normal code buffers: `<leader>p<Space>`.
 - Navigation: `]]`/`[[` sections, `gr` refresh, `q` close, `?` help, `m`/`u` mark/unmark, `/` filter.
 - Vim-style actions: `d` diff, `D` diff all in CL, `e` edit, `a` add, `x` revert, `X` revert unchanged, `M` move to CL, `R` resolve, `s` shelve, `S` unshelve, `z` delete shelved, `c` new CL, `C` edit CL description (quick float; `gS` full spec), `P` submit, `y` yank, `L` history, `b` annotate, `o` open, `t` time-lapse, `A` toggle pending scope, `gy` sync, `gR` revision graph (p4vc), `g/` go-to/lookup, `g1/g2/g0/g9` jump sections.
 - **P4V layer, on by default** (`keys.p4v = false` disables): `C-d` diff, `C-e` edit, `C-r` revert, `C-s` submit, `C-g` go-to/lookup, `C-t` history, `C-S-t` time-lapse*, `C-S-g` sync*, `C-S-c` copy depot path*, `C-S-r` revision graph*, `C-n` new CL, `C-f` filter, `C-1/2/0/9` section jumps*, `C-w` close. (*needs CSI-u terminal; vim-style fallback always exists.) **No lock/unlock.**
@@ -126,7 +126,7 @@ Mechanics (one shared `ui/qf.lua`):
 - **Build with a single `setqflist` call.** Each list gets a `title` (e.g. `P4 opened · client gautam_ws`) and a `context` (`{perforated=true, kind, args}`), so `gr` inside the qf window re-runs the query and replaces the list in place, and `:colder`/`:cnewer` history stays usable.
 - **Streaming or slow sources** (sync, reconcile) create an empty list, then fill it with `setqflist({}, 'a', {id=…, items=…})` as results arrive. Focus is never taken unless the user opens it.
 - **Depot-only entries** (not in the workspace) use `perforated://` URIs as `filename`, so `:cnext` opens the revision read-only through `BufReadCmd`.
-- **Every entry carries `user_data`** `{depotFile, rev, change, action, kind}`. The qf window then gets buffer-local keys from the same action registry: `d` diff, `x` revert, `M` move, `D` describe, `<Space>` menu. These are active only for perforated lists, detected via `context`.
+- **Every entry carries `user_data`** `{depotFile, rev, change, action, kind}`. The qf window then gets buffer-local keys from the same action registry: `d` diff, `x` revert, `M` move, `D` describe, `.` menu. These are active only for perforated lists, detected via `context`.
 - A **`quickfixtextfunc`** aligns columns (`action  #have/#head  CL  path  desc`) without making the stored entries bigger.
 - `valid=0` entries serve as group headers, e.g. one per CL.
 - A **generic "send to quickfix" action** in the registry: `Q` sends the item under the cursor, the marked items, or the whole list to quickfix; `gQ` sends to the location list. It works in the client view, describe, history, annotate, the diff tab file panel, and picker results. Every picker adapter maps its native send-to-qf key to our entry format, so `user_data` survives.

@@ -71,7 +71,7 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
  Needs attention  (1)
  Recent submitted  (20)
  Workspace reconcile  (not scanned)
- d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  <Space> actions  ? help
+ d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  . actions  ? help
 ```
 
 - **Sections:** pending changelists with their files and shelved files, files needing attention
@@ -82,8 +82,15 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   in Neovim.
 - **Keys:**
   - Vim-style keys, plus P4V's shortcuts (`<C-d>` diff, `<C-r>` revert, `<C-n>` new CL,
-    `<C-w>` close, `<C-1>`/`<C-2>` jump to a section, `<C-S-c>` copy the depot path).
-  - `<Space>` or right-click opens a menu of what you can do with the line under the cursor.
+    `<C-w>` close, `<C-1>`/`<C-2>` jump to a section).
+  - `.` or right-click opens a menu of what you can do with the line under the cursor
+    (`<Space>` is left alone because many people use it as their leader key; remap with
+    `keys = { menu = { '<your key>' } }`).
+  - `K` on a changelist opens **View changelist**: a scrollable popup with the full
+    description, its files and its shelved files (`D` there opens the diff tab). It works in
+    `:P4 changes` too, so you can read other people's submitted changelists.
+  - `d` is *Diff against have revision* on opened files and *Diff shelved vs base revision* on
+    shelved files. `y` copies the changelist number.
   - `?` lists every key, and a footer always shows the keys that apply to the current line.
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
   - `m` marks files for multi-file actions (revert, move, …) and `u` clears the marks.

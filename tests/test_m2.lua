@@ -249,6 +249,90 @@ T['client view']['d on a shelved file diffs base vs shelf'] = function()
   H.eq(names, { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt@=2' })
 end
 
+local FLOAT_LINES = [[(function()
+  local w = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_config(w).relative == '' then return nil end
+  return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)
+end)()]]
+
+T['client view']['K shows the full description, opened and shelved files'] = function()
+  open_view()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('K')
+  wait(FLOAT_LINES .. ' ~= nil')
+  local text = table.concat(child.lua_get(FLOAT_LINES), '\n')
+  H.expect.no_equality(text:find('second line', 1, true), nil) -- full description
+  H.expect.no_equality(text:find('Files (1)', 1, true), nil)
+  H.expect.no_equality(text:find('Shelved (1)', 1, true), nil)
+  H.expect.no_equality(text:find('//depot/a.txt', 1, true), nil)
+  child.type_keys('q')
+  H.eq(child.lua_get(FLOAT_LINES), vim.NIL)
+end
+
+T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = function()
+  open_view()
+  H.eq(has_line('▾ '), true)
+  H.eq(has_line('▸ '), true) -- the collapsed shelf
+  local ids = function()
+    return child.lua_get(
+      [[vim.tbl_map(function(a) return a.desc end,
+      require('perforated.ui.keys').valid(]]
+        .. view_expr(root)
+        .. [[.actions, ]]
+        .. view_expr(root)
+        .. [[.tree:node_at()))]]
+    )
+  end
+  goto_line('b.txt')
+  H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), true)
+  H.eq(vim.tbl_contains(ids(), 'Copy CL number'), false)
+  goto_line('Shelved (1)')
+  child.type_keys('l')
+  goto_line('//depot/a.txt')
+  H.eq(vim.tbl_contains(ids(), 'Diff shelved vs base revision'), true)
+  H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), false)
+  goto_line('CL 2  Fix parser')
+  child.type_keys('y')
+  H.eq(child.fn.getreg('"'), '2')
+  H.eq(child.fn.maparg('.', 'n') ~= '', true)
+  H.eq(child.fn.maparg('<Space>', 'n'), '')
+end
+
+T['client view']['depot revisions load even when opened from inside an autocmd'] = function()
+  child.lua(([[
+    vim.api.nvim_create_autocmd('User', { pattern = 'NestTest', callback = function()
+      _G.nested_buf = require('perforated.uri').buffer(require('perforated').workspace(vim.fn.bufnr(%q)), '//depot/b.txt#1')
+    end })
+    vim.api.nvim_exec_autocmds('User', { pattern = 'NestTest' })
+  ]]):format(root .. '/d.txt'))
+  wait([[vim.b[_G.nested_buf].perforated_loaded == true]])
+  H.eq(child.lua_get([[vim.api.nvim_buf_get_lines(_G.nested_buf, 0, -1, false)]]), { 'b1' })
+end
+
+T['client view']['diff tab: moving the cursor in the panel loads each file (both sides)'] = function()
+  open_view()
+  goto_line('initial import')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_tabpage_list_wins(0) == 3]])
+  -- Move through the panel the way a user does (CursorMoved inside the panel).
+  local seen = {}
+  for row = 3, 6 do
+    child.lua(([[
+      vim.api.nvim_win_set_cursor(0, { %d, 0 })
+      vim.api.nvim_exec_autocmds('CursorMoved', { buffer = 0 })
+    ]]):format(row))
+    local right = child.lua_get([[vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[3])]])
+    wait(('vim.b[%d].perforated_loaded == true'):format(right))
+    seen[#seen + 1] = child.api.nvim_buf_get_lines(right, 0, -1, false)[1]
+  end
+  table.sort(seen)
+  H.eq(seen, { 'a1', 'b1', 'c1', 'd1' })
+  -- The two diff windows share the width equally.
+  local w =
+    child.lua_get([[vim.tbl_map(vim.api.nvim_win_get_width, vim.api.nvim_tabpage_list_wins(0))]])
+  H.eq(math.abs(w[2] - w[3]) <= 1, true)
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   goto_line('default')
@@ -284,7 +368,7 @@ T['client view']['reconcile scans on expand; a opens found files'] = function()
   H.eq(opened()['//depot/new.txt'], 'default')
 end
 
-T['client view']['Q sends a CL to quickfix; <Space> menu lists only valid actions'] = function()
+T['client view']['Q sends a CL to quickfix; action menu lists only valid actions'] = function()
   open_view()
   goto_line('default')
   child.type_keys('Q')

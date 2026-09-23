@@ -209,6 +209,28 @@ T['changes'][':P4 changes -u bob shows only bob; D opens the CL diff'] = functio
   H.eq(vim.tbl_contains(names, 'perforated:////depot/b.txt#2'), true)
 end
 
+T['changes']["K on another user's submitted CL shows its description and files"] = function()
+  child.cmd('P4 changes -u bob')
+  H.eq(
+    H.wait(
+      child,
+      [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('bob work', 1, true) ~= nil]]
+    ),
+    true
+  )
+  for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+    if l:find('bob work', 1, true) then
+      child.api.nvim_win_set_cursor(0, { i, 0 })
+    end
+  end
+  child.type_keys('K')
+  H.eq(H.wait(child, [[vim.api.nvim_win_get_config(0).relative ~= '']]), true)
+  local text = buf_text()
+  H.expect.no_equality(text:find('submitted', 1, true), nil)
+  H.expect.no_equality(text:find('bob@bob_ws', 1, true), nil)
+  H.expect.no_equality(text:find('//depot/b.txt#2', 1, true), nil)
+end
+
 T['changes'][':P4 pick pending opens the chosen CL in the diff tab'] = function()
   server:p4({ 'edit', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
   child.lua([[vim.ui.select = function(items, opts, cb)
