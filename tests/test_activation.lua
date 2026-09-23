@@ -236,7 +236,7 @@ end
 
 T['commands']['completion'] = function()
   child = H.child()
-  H.eq(child.fn.getcompletion('P4 lo', 'cmdline'), { 'log', 'login' })
+  H.eq(child.fn.getcompletion('P4 lo', 'cmdline'), { 'log', 'login', 'lookup' })
 end
 
 return T

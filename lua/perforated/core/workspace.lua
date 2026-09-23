@@ -374,7 +374,12 @@ end
 ---@param buf integer?
 ---@return perforated.Workspace?
 function M.for_buf(buf)
-  local key = buf_ws[buf or vim.api.nvim_get_current_buf()]
+  buf = buf or vim.api.nvim_get_current_buf()
+  local key = buf_ws[buf]
+  if not key and vim.api.nvim_buf_is_valid(buf) then
+    -- Plugin buffers (views, perforated:// revisions) remember the workspace they belong to.
+    key = vim.b[buf].perforated_ws
+  end
   return key and registry[key] or nil
 end
 

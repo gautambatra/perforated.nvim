@@ -34,6 +34,12 @@ local defaults = {
     submitted_limit = 20,
   },
   history = { presenter = 'float', limit = 100 },
+  annotate = {
+    width = 36,
+    integrations = false, -- -I: follow integrations to the change that really wrote the line
+    history_max = 1000, -- filelog depth used for the changelist metadata
+    gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
+  },
   changes = { page_size = 50, scope = 'client' },
   change = { template = nil, allow_force = false },
   merge = { tool = nil },

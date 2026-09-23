@@ -327,6 +327,9 @@ function M.attach(ws, buf)
   if config.get().keymaps == 'default' then
     require('perforated.keymaps').attach(buf)
   end
+  if config.get().blame_line.enabled then
+    require('perforated.blame').setup()
+  end
   M.refresh(buf)
 end
 

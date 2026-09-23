@@ -40,6 +40,11 @@ M.actions = {
   info = cmd('info'),
   log = cmd('log'),
   notifications = cmd('notifications'),
+  history = cmd('filelog'),
+  annotate = cmd('annotate'),
+  ['blame-line'] = cmd('blame'),
+  describe = cmd('describe'),
+  lookup = cmd('lookup'),
 }
 
 --- Preset: lhs → action name.
@@ -60,6 +65,11 @@ M.PRESET = {
   ['<leader>pi'] = 'info',
   ['<leader>pl'] = 'log',
   ['<leader>pn'] = 'notifications',
+  ['<leader>pL'] = 'history',
+  ['<leader>pb'] = 'annotate',
+  ['<leader>pB'] = 'blame-line',
+  ['<leader>pc'] = 'describe',
+  ['<leader>pg'] = 'lookup',
 }
 
 ---@param name string

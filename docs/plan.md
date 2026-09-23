@@ -430,6 +430,19 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
 
 ### M3 — History, annotate, describe, blame line · ~2.5 weeks
 
+> **Status (2026-09-23): done.** New modules: `history.lua` (filelog/annotate/Swarm queries,
+> an 8-entry annotate cache for numbered revisions), `revs.lua`, `blame.lua`, `lookup.lua`,
+> `views/{base,describe,history,annotate}.lua`. Benchmarks: annotate parse ~10 ms and render
+> ~16 ms for 20k lines.
+> Implementation notes:
+> - Annotate highlights come from a decoration provider (visible rows only). Setting 20k
+>   extmarks made a render take ~100 ms.
+> - Annotate and blame map buffer lines to base lines through the buffer's hunks, so local
+>   edits show "Not submitted" without another diff.
+> - Plugin buffers carry `b:perforated_ws`, so commands run from a view use its workspace.
+> - Shelved diffs vs workspace / head are `gw` / `gh`. `dw`/`dh` would make `d` wait for
+>   `timeoutlen`: `nowait` does not cover a longer mapping in the same buffer.
+
 **Scope**
 1. **`:P4 describe N`** (and `C-g`/`g/` lookup by CL number, path or user): a Magit-style buffer with a header (user, client, date, status, description) and files. `<Tab>` expands an inline unified diff, which is generated lazily in-process from two `print` calls and rendered with the `diff` highlight groups. `D` opens the diff tab. It handles pending, shelved (`-S`) and submitted CLs. Shelved files default to shelved vs base (`@=CL` vs `#base`); the menu adds vs workspace and vs head.
 2. **History (`:P4 filelog`, `L`, `C-t`):** one `filelog -l -i -m 100` call, paginated. Presentation is configurable (float by default, picker or quickfix). `<CR>` opens an action menu: diff vs previous rev, diff vs workspace, view the submitted CL, open the revision read-only. Directory history uses `changes path/...`.
