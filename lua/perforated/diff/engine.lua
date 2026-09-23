@@ -64,7 +64,8 @@ end
 function M.hunks_async(base, cur, cb)
   local ok = pcall(function()
     local work = vim.uv.new_work(function(a, b, algorithm)
-      local r = vim.diff(a, b, {
+      local difffn = (vim.text and vim.text.diff) or vim.diff -- vim.diff is deprecated in 0.12+
+      local r = difffn(a, b, {
         result_type = 'indices',
         algorithm = algorithm,
         indent_heuristic = true,

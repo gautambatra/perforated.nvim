@@ -1,7 +1,7 @@
 --- Check-out on first modification, add on write, and the edit/add/revert operations.
 ---
 --- Flow for an unopened depot file (read-only on disk with `noallwrite`):
----   first change → FileChangedRO (or BufModifiedSet for allwrite) → clear 'readonly' so Vim
+---   first change → FileChangedRO (or the 'modified' flag for allwrite) → clear 'readonly' so Vim
 ---   doesn't warn → the change goes through → menu: <CR> sticky/default CL · c pick · n new ·
 ---   A always (session) · s skip (buffer) · S never (session) → async `p4 edit` → refresh.
 ---   BufWritePre waits (bounded) for an in-flight edit so the write never races it.
@@ -17,7 +17,7 @@ local M = {}
 ---@field wanted boolean?    modified before fstat answered; prompt once status is known
 ---@field pending boolean?   p4 edit/add in flight
 ---@field prompting boolean?
----@field scheduled boolean? a prompt is queued (FileChangedRO and BufModifiedSet both fire)
+---@field scheduled boolean? a prompt is queued (FileChangedRO and the 'modified' hook both fire)
 ---@field restore fun()?     undo an optimistic chmod (on_write mode) if the edit fails
 
 local cs = {} ---@type table<integer, perforated.CheckoutState>
@@ -556,15 +556,31 @@ function M.attach(_)
     })
   end
   on('FileChangedRO', on_first_change)
-  on('BufModifiedSet', function(buf)
-    -- allwrite workspaces: files aren't read-only, so FileChangedRO never fires.
+  -- allwrite workspaces: files aren't read-only, so FileChangedRO never fires; watch the
+  -- 'modified' flag instead.
+  local function modified(buf)
     if vim.bo[buf].modified and not vim.bo[buf].readonly then
       local st = tracked(buf)
       if st.status == 'clean' or st.status == 'pending' then
         on_first_change(buf)
       end
     end
-  end)
+  end
+  if vim.fn.exists('##BufModifiedSet') == 1 then
+    on('BufModifiedSet', modified)
+  else
+    -- Neovim 0.13+ removed BufModifiedSet: OptionSet fires for 'modified' instead.
+    vim.api.nvim_create_autocmd('OptionSet', {
+      group = group,
+      pattern = 'modified',
+      callback = function()
+        local buf = vim.api.nvim_get_current_buf()
+        if tracked(buf) then
+          modified(buf)
+        end
+      end,
+    })
+  end
   on('FileChangedShell', function()
     -- `p4 edit` flips the file's mode bit: never bother the user about that.
     vim.v.fcs_choice = vim.v.fcs_reason == 'mode' and '' or 'ask'
