@@ -136,6 +136,57 @@ T['checkout']['s skips: buffer stays modified, read-only, not opened'] = functio
   H.eq(opened()['//depot/a.txt'], nil)
 end
 
+T['checkout']['c offers "+ new changelist…" at the end of the list'] = function()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua([[
+    vim.ui.select = function(items, opts, cb)
+      _G.labels = vim.tbl_map(opts.format_item, items)
+      cb(items[#items])
+    end
+    vim.ui.input = function(_, cb) cb('Created from the picker') end
+  ]])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('c')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  local labels = child.lua_get('_G.labels')
+  H.eq(labels[1], 'default')
+  H.eq(labels[#labels], '+ new changelist…')
+  local cl = opened()['//depot/a.txt']
+  H.neq(cl, 'default')
+  H.eq(child.lua_get([[require('perforated').workspace().sticky_cl]]), cl)
+end
+
+T['checkout']['cancelling the picker is "not now": :e! and a new edit prompt again'] = function()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua([[vim.ui.select = function(_, _, cb) cb(nil) end]])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('c')
+  -- The picker opens after an async `p4 changes`; wait for the cancellation to land.
+  wait([[vim.bo.readonly == true]])
+  H.eq(opened()['//depot/a.txt'], nil)
+  child.cmd('edit!')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('<CR>')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(opened()['//depot/a.txt'], 'default')
+end
+
+T['checkout']['<Esc> dismisses without skipping the buffer'] = function()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('<Esc>')
+  H.eq(child.bo.readonly, true)
+  H.eq(child.lua_get([[require('perforated.checkout')._state(0).skip]]), vim.NIL)
+end
+
 T['checkout']['keys typed during the grace period are replayed as text'] = function()
   child.stop()
   setup({ checkout = { prompt_grace = 400 } })
@@ -242,6 +293,40 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   child.type_keys('q')
   H.eq(#child.api.nvim_list_tabpages(), 1)
   H.eq(child.wo.diff, false)
+end
+
+T['ops'][':P4 diff survives a user OptionSet autocmd that throws'] = function()
+  child.lua([[
+    vim.api.nvim_create_autocmd('OptionSet', {
+      pattern = 'diff',
+      callback = function() vim.cmd('synthax off') end,
+    })
+  ]])
+  child.cmd('P4 diff')
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+  local wins = child.api.nvim_tabpage_list_wins(0)
+  H.eq(child.api.nvim_get_option_value('diff', { win = wins[1] }), true)
+  H.eq(child.api.nvim_get_option_value('diff', { win = wins[2] }), true)
+  H.expect.no_equality(child.cmd_capture('messages'):find('E492', 1, true), nil)
+end
+
+T['ops']['lualine component renders the statusline'] = function()
+  child.lua([[
+    -- Minimal stand-in for lualine's component base class.
+    package.preload['lualine.component'] = function()
+      local C = {}
+      C.__index = C
+      function C:extend()
+        local cls = setmetatable({}, { __index = self })
+        cls.__index = cls
+        return cls
+      end
+      return C
+    end
+  ]])
+  local text = child.lua_get([[require('lualine.components.perforated'):update_status()]])
+  H.eq(text, child.lua_get([[require('perforated').statusline()]]))
+  H.expect.no_equality(text:find('edit@default', 1, true), nil)
 end
 
 T['ops'][':P4 revert! restores depot content and state'] = function()

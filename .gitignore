@@ -2,3 +2,4 @@
 /tests/.tmp/
 *.log
 /.dev/
+/temp/

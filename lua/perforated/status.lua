@@ -21,6 +21,11 @@ local function notify_changed()
     pending = false
     require('perforated.core.events').emit('Status')
     pcall(vim.cmd.redrawstatus)
+    -- lualine caches its render between refresh ticks (up to 1 s): nudge it when loaded.
+    local lualine = package.loaded['lualine']
+    if lualine and lualine.refresh then
+      pcall(lualine.refresh, { place = { 'statusline' } })
+    end
   end)
 end
 

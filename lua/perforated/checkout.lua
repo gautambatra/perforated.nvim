@@ -237,7 +237,7 @@ end
 -- Changelist choice (shared by the edit and add prompts)
 -- ---------------------------------------------------------------------------------------------
 
---- Pick an existing pending changelist (vim.ui.select; picker adapters arrive in M2).
+--- Pick a pending changelist, or create a new one (vim.ui.select; picker adapters in M2).
 ---@param ws perforated.Workspace
 ---@param cb fun(cl: string?, desc: string?)
 function M.pick_change(ws, cb)
@@ -248,17 +248,23 @@ function M.pick_change(ws, cb)
     end
     local items = { { change = 'default', desc = '' } }
     vim.list_extend(items, changes)
+    items[#items + 1] = { change = 'new', desc = '' }
     vim.ui.select(items, {
       prompt = 'Changelist',
       format_item = function(c)
         if c.change == 'default' then
           return 'default'
+        elseif c.change == 'new' then
+          return '+ new changelist…'
         end
         return ('%-8s %s'):format(c.change, vim.trim((c.desc or ''):match('[^\n]*') or ''))
       end,
     }, function(choice)
       if not choice then
         return cb(nil)
+      end
+      if choice.change == 'new' then
+        return M.new_change(ws, cb)
       end
       cb(choice.change, choice.desc)
     end)
@@ -346,6 +352,19 @@ function M.prompt(buf, verb)
     header[1] = name .. '  (not in depot)'
   end
   local action = verb == 'edit' and 'Check out' or 'Add'
+  local function not_now()
+    if verb == 'edit' and vim.api.nvim_buf_is_valid(buf) then
+      vim.bo[buf].readonly = true -- honest: the file is still not checked out
+    end
+    notify(
+      ('%s cancelled: %s is not %s'):format(
+        verb == 'edit' and 'check-out' or 'add',
+        vim.fn.fnamemodify(st.path, ':t'),
+        verb == 'edit' and 'checked out' or 'added'
+      ),
+      vim.log.levels.WARN
+    )
+  end
   c.prompting = true
   local choice, replay = require('perforated.ui.float').menu({
     title = verb == 'edit' and 'Perforce: check out?' or 'Perforce: add?',
@@ -361,7 +380,7 @@ function M.prompt(buf, verb)
     },
   })
   c.prompting = false
-  local v = choice and choice.value or 'skip'
+  local v = choice and choice.value or 'dismiss' -- <Esc>/q: not now (only `s` skips the buffer)
   dbg.info(
     'checkout',
     'buf %d %s prompt: choice=%s replayed=%d key(s) sticky=%s',
@@ -373,25 +392,28 @@ function M.prompt(buf, verb)
   )
   if v == 'sticky' then
     run(nil)
-  elseif v == 'pick' then
-    M.pick_change(ws, function(cl, desc)
+  elseif v == 'pick' or v == 'new' then
+    -- Cancelling the picker / description input is "not now", not "skip this buffer": the
+    -- file stays unopened and read-only, and the prompt comes back (after :e!, or via
+    -- <leader>pe / :P4 edit).
+    local function done(cl, desc)
       if cl then
         run(cl, desc)
       else
-        c.skip = true
+        dbg.info('checkout', 'buf %d %s: target selection cancelled', buf, verb)
+        not_now()
       end
-    end)
-  elseif v == 'new' then
-    M.new_change(ws, function(cl, desc)
-      if cl then
-        run(cl, desc)
-      else
-        c.skip = true
-      end
-    end)
+    end
+    if v == 'pick' then
+      M.pick_change(ws, done)
+    else
+      M.new_change(ws, done)
+    end
   elseif v == 'auto' then
     session.auto = true
     run(nil)
+  elseif v == 'dismiss' then
+    not_now()
   else
     c.skip = true
     if v == 'never' then
@@ -587,12 +609,24 @@ function M.attach(_)
   end)
   on('BufWritePre', before_write)
   on('BufWritePost', after_write)
+  -- Re-reading the file (:e!) starts over: a skipped/cancelled buffer prompts again.
+  on('BufReadPost', function(buf)
+    local c = cs[buf]
+    if c and not c.pending then
+      cs[buf] = nil
+    end
+  end)
   vim.api.nvim_create_autocmd('BufWipeout', {
     group = group,
     callback = function(ev)
       cs[ev.buf] = nil
     end,
   })
+end
+
+--- Test helper: a buffer's check-out state.
+function M._state(buf)
+  return state(buf == 0 and vim.api.nvim_get_current_buf() or buf)
 end
 
 --- Test helper.
