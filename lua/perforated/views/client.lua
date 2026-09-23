@@ -1097,8 +1097,15 @@ function M.open(ws, opts)
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,
   })
-  vim.bo[buf].filetype = 'perforated'
   M.refresh(view)
+  -- FileType last and after the first paint: user/plugin FileType handlers and the runtime
+  -- search for ftplugin/syntax files can take several ms (`:h lua-plugin`: "as late as
+  -- possible").
+  vim.schedule(function()
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.bo[buf].filetype = 'perforated'
+    end
+  end)
   return view
 end
 

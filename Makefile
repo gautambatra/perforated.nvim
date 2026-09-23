@@ -13,10 +13,17 @@ P4_URL := https://cdist2.perforce.com/perforce/$(P4_REL)/$(P4_PLAT)
 
 .PHONY: test bench deps lint fmt clean dev-workspace
 
-deps: $(DEPS)/mini.nvim $(DEPS)/p4bin/p4 $(DEPS)/p4bin/p4d
+deps: $(DEPS)/mini.nvim $(DEPS)/telescope.nvim $(DEPS)/plenary.nvim $(DEPS)/p4bin/p4 $(DEPS)/p4bin/p4d
 
 $(DEPS)/mini.nvim:
 	git clone --depth 1 https://github.com/nvim-mini/mini.nvim $@
+
+# Picker integration tests (optional plugins)
+$(DEPS)/telescope.nvim:
+	git clone --depth 1 https://github.com/nvim-telescope/telescope.nvim $@
+
+$(DEPS)/plenary.nvim:
+	git clone --depth 1 https://github.com/nvim-lua/plenary.nvim $@
 
 $(DEPS)/p4bin/%:
 	mkdir -p $(DEPS)/p4bin
@@ -28,7 +35,7 @@ test: deps
 	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "lua require('tests.run')('$(FILE)')"
 
 bench: deps
-	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "luafile bench/run.lua"
+	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "lua local ok, err = pcall(dofile, 'bench/run.lua'); if not ok then io.stderr:write(tostring(err) .. '\\n'); vim.cmd('cquit 2') end"
 
 STYLUA ?= $(shell command -v stylua || echo $(DEPS)/stylua)
 SELENE ?= $(shell command -v selene || echo $(DEPS)/selene)

@@ -114,15 +114,21 @@ function M.attach(buf, actions, view)
   end
   for _, lhs in ipairs(order) do
     local list = by_key[lhs]
-    vim.keymap.set('n', lhs, function()
-      local node = view.tree:node_at()
-      for _, a in ipairs(list) do
-        if M.applies(a, node) or (a.multi and #view.tree:marked() > 0) then
-          return M.dispatch(a, view)
+    -- Raw API: vim.keymap.set's argument processing costs ~50µs per map on first paint.
+    vim.api.nvim_buf_set_keymap(buf, 'n', lhs, '', {
+      noremap = true,
+      nowait = true,
+      desc = 'perforated: ' .. list[1].desc,
+      callback = function()
+        local node = view.tree:node_at()
+        for _, a in ipairs(list) do
+          if M.applies(a, node) or (a.multi and #view.tree:marked() > 0) then
+            return M.dispatch(a, view)
+          end
         end
-      end
-      M.dispatch(list[1], view) -- reports "does not apply here"
-    end, { buffer = buf, nowait = true, desc = 'perforated: ' .. list[1].desc })
+        M.dispatch(list[1], view) -- reports "does not apply here"
+      end,
+    })
   end
 end
 

@@ -43,6 +43,7 @@ end
 local subs = {
   'add',
   'change',
+  'changes',
   'debug',
   'diff',
   'dismiss',
@@ -53,6 +54,7 @@ local subs = {
   'login',
   'notifications',
   'opened',
+  'pick',
   'refresh',
   'revert',
   'status',
