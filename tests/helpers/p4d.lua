@@ -20,7 +20,10 @@ function P.new()
   local dir = H.tmp()
   local s = setmetatable({ dir = dir, root = dir .. '/p4root' }, Server)
   vim.fn.mkdir(s.root, 'p')
-  s.port = ('rsh:%s -r %s -L log -i -J off'):format(P.p4d, s.root)
+  -- PERFORATED_P4D_CASE=insensitive runs p4d with -C1 (the macOS default) to exercise
+  -- case-insensitive servers on Linux.
+  local case = vim.env.PERFORATED_P4D_CASE == 'insensitive' and ' -C1' or ''
+  s.port = ('rsh:%s -r %s -L log -i -J off%s'):format(P.p4d, s.root, case)
   return s
 end
 

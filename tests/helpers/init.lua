@@ -15,8 +15,9 @@ local counter = 0
 ---@return string
 function H.tmp()
   counter = counter + 1
-  local dir = ('%s/tests/.tmp/%d-%d-%d'):format(
-    H.root,
+  -- PERFORATED_TEST_TMP overrides the base (e.g. a mixed-case path, like macOS /Users/...).
+  local dir = ('%s/%d-%d-%d'):format(
+    vim.env.PERFORATED_TEST_TMP or (H.root .. '/tests/.tmp'),
     vim.uv.os_getpid(),
     counter,
     vim.uv.hrtime() % 1e6

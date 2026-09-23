@@ -26,7 +26,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         nvim: [v0.11.4, v0.12.5, nightly]
+        case: [default]
+        include:
+          # macOS-like server on Linux: case-insensitive p4d + mixed-case paths.
+          - os: ubuntu-latest
+            nvim: v0.12.5
+            case: insensitive
+    name: test (${{ matrix.os }}, ${{ matrix.nvim }}${{ matrix.case == 'insensitive' && ', case-insensitive' || '' }})
     runs-on: ${{ matrix.os }}
+    env:
+      PERFORATED_P4D_CASE: ${{ matrix.case }}
     steps:
       - uses: actions/checkout@v4
       - uses: rhysd/action-setup-vim@v1
@@ -39,6 +48,9 @@ jobs:
           path: .deps
           key: deps-${{ runner.os }}-r25.2-${{ hashFiles('Makefile') }}
       - run: make deps
+      - name: Mixed-case temp dir (case-insensitive leg)
+        if: matrix.case == 'insensitive'
+        run: mkdir -p "$RUNNER_TEMP/MixedCase/Tmp" && echo "PERFORATED_TEST_TMP=$RUNNER_TEMP/MixedCase/Tmp" >> "$GITHUB_ENV"
       - run: make test
       - name: Performance budgets
         run: make bench
