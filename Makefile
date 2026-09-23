@@ -11,7 +11,7 @@ else
 endif
 P4_URL := https://cdist2.perforce.com/perforce/$(P4_REL)/$(P4_PLAT)
 
-.PHONY: test bench deps lint fmt clean
+.PHONY: test bench deps lint fmt clean dev-workspace
 
 deps: $(DEPS)/mini.nvim $(DEPS)/p4bin/p4 $(DEPS)/p4bin/p4d
 
@@ -39,6 +39,10 @@ lint:
 
 fmt:
 	$(STYLUA) lua plugin tests bench
+
+# Persistent local Perforce sandbox in .dev/ (gitignored) for trying the plugin by hand.
+dev-workspace: deps
+	scripts/dev-workspace.sh
 
 clean:
 	rm -rf $(DEPS)
