@@ -6,6 +6,7 @@
 local parse = require('perforated.core.parse')
 local env = require('perforated.core.env')
 local log = require('perforated.core.log')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -110,6 +111,29 @@ function M.run(spec, cb)
         err = 'exit ' .. res.code
       end
     end
+    if dbg.enabled then
+      dbg.log(
+        err and 'warn' or 'debug',
+        'runner',
+        'done %s code=%s %.0fms records=%d warnings=%d errors=%d%s%s%s',
+        table.concat(argv, ' ', 2),
+        tostring(res.code),
+        res.ms,
+        #res.records,
+        #res.warnings,
+        #res.errors,
+        res.timed_out and ' TIMED-OUT' or '',
+        err and (' err=' .. err) or '',
+        (vim.trim(res.stderr) ~= '' and #res.errors == 0)
+            and (' stderr=' .. vim.trim(res.stderr):gsub('\n', ' | '))
+          or ''
+      )
+      if dbg.on('trace') then
+        for _, w in ipairs(res.warnings) do
+          dbg.log('trace', 'runner', '  warning: %s', w)
+        end
+      end
+    end
     log.add({
       time = started,
       ms = res.ms,
@@ -123,6 +147,18 @@ function M.run(spec, cb)
     cb(res)
   end
 
+  if dbg.enabled then
+    dbg.log(
+      'debug',
+      'runner',
+      'start %s cwd=%s env=%s timeout=%s%s',
+      table.concat(argv, ' ', 2),
+      spec.cwd,
+      spec.env_mode or 'internal',
+      tostring(spec.timeout),
+      dbg.stdin_summary(argv, spec.stdin)
+    )
+  end
   local ok, obj = pcall(vim.system, argv, {
     cwd = spec.cwd,
     env = env.child_env(spec.cwd, spec.env_mode or 'internal'),

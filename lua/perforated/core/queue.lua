@@ -93,11 +93,19 @@ end
 
 ---@param group string
 function Queue:pause(group)
+  local dbg = package.loaded['perforated.core.debug']
+  if dbg then
+    dbg.log('debug', 'queue', 'pause %s (pending %d)', group, self:pending_count(group))
+  end
   self.paused[group] = true
 end
 
 ---@param group string
 function Queue:resume(group)
+  local dbg = package.loaded['perforated.core.debug']
+  if dbg then
+    dbg.log('debug', 'queue', 'resume %s (pending %d)', group, self:pending_count(group))
+  end
   self.paused[group] = nil
   self:_pump()
 end

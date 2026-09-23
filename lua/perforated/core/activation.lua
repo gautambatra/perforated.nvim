@@ -1,12 +1,13 @@
 --- Activation: turns a buffer/directory into a Workspace, or leaves it dormant.
 ---
---- The cheap part (per-directory P4CONFIG lookup, no processes) lives in plugin/perforated.lua
---- as `package.loaded['perforated.gate']`, so nothing is loaded outside Perforce workspaces.
+--- The cheap part (per-directory P4CONFIG lookup, no processes) lives in perforated.gate, so
+--- nothing else is loaded outside Perforce workspaces.
 --- This module is only required once the gate found a P4CONFIG anchor, or when an
 --- environment-only setup (P4CLIENT/P4PORT set, no P4CONFIG file) needs one `p4 info` to
 --- learn the client root.
 
 local workspace = require('perforated.core.workspace')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -14,11 +15,7 @@ local M = {}
 
 ---@return table gate
 local function gate()
-  if not package.loaded['perforated.gate'] then
-    -- plugin/ not sourced (e.g. --noplugin): it defines the gate.
-    vim.cmd.runtime('plugin/perforated.lua')
-  end
-  return package.loaded['perforated.gate']
+  return require('perforated.gate')
 end
 
 -- Environment-only state (one `p4 info` per session).
@@ -97,6 +94,14 @@ local function start_env_probe(dir)
     cwd = dir,
   }, function(res)
     local rec = res.ok and res.records[1]
+    dbg.info(
+      'activation',
+      'env-only probe: ok=%s client=%s root=%s err=%s',
+      tostring(res.ok),
+      tostring(rec and rec.clientName),
+      tostring(rec and rec.clientRoot),
+      tostring(res.errors[1] or (res.stderr ~= '' and vim.trim(res.stderr)) or nil)
+    )
     if rec and rec.clientName and rec.clientName ~= '*unknown*' and rec.clientRoot then
       env.state = 'ready'
       env.root = workspace.normalize(rec.clientRoot)
@@ -119,6 +124,13 @@ end
 ---@param path string absolute file path
 ---@param found perforated.GateHit|false
 function M.attach(buf, path, found)
+  dbg.debug(
+    'activation',
+    'buf %d %s: %s',
+    buf,
+    path,
+    found and ('P4CONFIG anchor ' .. found.anchor) or ('no P4CONFIG; env-only state=' .. env.state)
+  )
   if found then
     return bind(config_ws(found), buf)
   end

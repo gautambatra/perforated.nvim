@@ -9,6 +9,7 @@
 local p4 = require('perforated.p4')
 local engine = require('perforated.diff.engine')
 local config = require('perforated.config')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -56,6 +57,7 @@ local function flush(ws)
   end
   local paths = vim.tbl_keys(b.paths)
   table.sort(paths)
+  dbg.debug('buffer', 'fstat batch of %d path(s) for %s', #paths, ws.key)
   p4.fstat(ws, paths, { priority = 2 }, function(r)
     if not r.res.ok and next(r.files) == nil and next(r.missing) == nil then
       return -- connection trouble; conn state/statusline already reflect it
@@ -126,6 +128,22 @@ function M.apply(buf, rec, missing)
     st.status = 'unmanaged' -- not in the client view (or unknown): stay out of the way
   end
 
+  if dbg.enabled then
+    dbg.debug(
+      'buffer',
+      'buf %d %s: %s -> %s (action=%s change=%s have=%s head=%s type=%s missing=%s)',
+      buf,
+      st.path,
+      prev,
+      st.status,
+      tostring(rec and rec.action),
+      tostring(rec and rec.change),
+      tostring(rec and rec.haveRev),
+      tostring(rec and rec.headRev),
+      tostring(rec and (rec.type or rec.headType)),
+      tostring(missing)
+    )
+  end
   if st.status == 'opened' then
     M.load_base(buf)
   else
@@ -161,8 +179,10 @@ function M.load_base(buf)
     end
     if not lines then
       cur.base = nil
+      dbg.error('buffer', 'buf %d: base %s failed: %s', buf, spec, tostring(err))
       return vim.notify_once('[perforated] could not load base for diff: ' .. tostring(err))
     end
+    dbg.debug('buffer', 'buf %d: base %s loaded (%d lines)', buf, spec, #lines)
     cur.base = lines
     cur.base_text = engine.join(lines)
     M.update(buf)
@@ -193,10 +213,22 @@ function M.update(buf)
   st.gen = st.gen + 1
   local gen = st.gen
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local t0 = dbg.enabled and vim.uv.hrtime()
   local function done(hunks)
     local cur = states[buf]
     if not cur or cur.gen ~= gen then
       return
+    end
+    if t0 and dbg.on('trace') then
+      dbg.trace(
+        'buffer',
+        'buf %d: diff %d lines -> %d hunks in %.2fms%s',
+        buf,
+        n,
+        #hunks,
+        (vim.uv.hrtime() - t0) / 1e6,
+        n > cfg.max_lines and ' (worker)' or ''
+      )
     end
     cur.hunks = hunks
     require('perforated.signs').render(buf, hunks)
@@ -228,6 +260,19 @@ local function schedule_update(buf)
 end
 
 M.DEBOUNCE_MS = 100
+
+-- Shared by every attached buffer (callbacks receive the buffer number): no closures per buffer.
+local ATTACH_CALLBACKS = {
+  on_lines = function(_, buf)
+    if not states[buf] then
+      return true -- detach
+    end
+    schedule_update(buf)
+  end,
+  on_reload = function(_, buf)
+    schedule_update(buf)
+  end,
+}
 
 -- ---------------------------------------------------------------------------------------------
 -- Attach / detach
@@ -273,17 +318,7 @@ function M.attach(ws, buf)
     gen = 0,
     lines_attached = false,
   }
-  vim.api.nvim_buf_attach(buf, false, {
-    on_lines = function()
-      if not states[buf] then
-        return true -- detach
-      end
-      schedule_update(buf)
-    end,
-    on_reload = function()
-      schedule_update(buf)
-    end,
-  })
+  vim.api.nvim_buf_attach(buf, false, ATTACH_CALLBACKS)
   states[buf].lines_attached = true
   require('perforated.checkout').attach(buf)
   if config.get().keymaps == 'default' then

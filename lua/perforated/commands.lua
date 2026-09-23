@@ -16,6 +16,10 @@ local M = {}
 ---@field complete (fun(arglead: string, args: string[]): string[])?
 
 local function notify(msg, level)
+  local dbg = package.loaded['perforated.core.debug']
+  if dbg and (level or 0) >= vim.log.levels.WARN then
+    dbg.log(level >= vim.log.levels.ERROR and 'error' or 'warn', 'commands', '%s', msg)
+  end
   vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
@@ -264,6 +268,40 @@ M.commands = {
     desc = 'Dismiss visible notifications',
     run = function()
       require('perforated.ui.toast').dismiss()
+    end,
+  },
+
+  debug = {
+    scope = 'none',
+    desc = 'Debug log: :P4 debug [on [level]|off|open|clear|snapshot]  (no args: status)',
+    complete = function()
+      return { 'on', 'off', 'open', 'clear', 'snapshot', 'trace', 'debug', 'info' }
+    end,
+    run = function(_, _, args)
+      local dbg = require('perforated.core.debug')
+      local sub = args[1]
+      if sub == 'on' then
+        dbg.enable({ level = args[2] }, 'enabled by :P4 debug on')
+        notify('debug log on → ' .. dbg.file())
+      elseif sub == 'off' then
+        dbg.disable()
+        notify('debug log off')
+      elseif sub == 'open' then
+        dbg.open()
+      elseif sub == 'clear' then
+        dbg.clear()
+        notify('debug log cleared')
+      elseif sub == 'snapshot' then
+        dbg.snapshot()
+        notify('snapshot written to ' .. dbg.file())
+      elseif sub == nil then
+        notify(
+          dbg.enabled and ('debug log on → ' .. dbg.file())
+            or ('debug log off (would write to ' .. (dbg.file() or dbg.default_file()) .. ')')
+        )
+      else
+        notify('usage: :P4 debug [on [level]|off|open|clear|snapshot]', vim.log.levels.WARN)
+      end
     end,
   },
 

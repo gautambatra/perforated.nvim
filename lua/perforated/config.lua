@@ -50,6 +50,8 @@ local defaults = {
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 },
   cache = { content_mb = 32 },
   log = { size = 500 },
+  --- Debug log file (also: env PERFORATED_DEBUG=1|trace, or :P4 debug on).
+  debug = { enabled = false, level = 'debug', file = nil, max_kb = 5120 },
   swarm = { url = nil },
   notify = 'minimal',
 }
@@ -123,6 +125,7 @@ M._nil_ok = {
   ['change.template'] = true,
   ['merge.tool'] = true,
   ['swarm.url'] = true,
+  ['debug.file'] = true,
 }
 
 M.defaults = defaults

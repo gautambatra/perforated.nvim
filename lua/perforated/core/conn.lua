@@ -82,6 +82,15 @@ function Conn:_set(state, err)
   if self.state == state and self.last_error == err then
     return
   end
+  require('perforated.core.debug').log(
+    state == 'online' and 'info' or 'warn',
+    'conn',
+    '%s: %s -> %s%s',
+    self.ws.key,
+    self.state,
+    state,
+    err and (' (' .. err .. ')') or ''
+  )
   self.state = state
   self.last_error = err
   events.emit('Status', { ws = self.ws.key, conn = state })
@@ -136,6 +145,13 @@ function Conn:_schedule_probe()
   self:_stop_timer()
   local delay = self.backoff
   self.backoff = math.min(self.backoff * 2, BACKOFF_MAX)
+  require('perforated.core.debug').log(
+    'debug',
+    'conn',
+    '%s: next probe in %dms',
+    self.ws.key,
+    delay
+  )
   self.timer = vim.uv.new_timer()
   self.timer:start(delay, 0, function()
     vim.schedule(function()
