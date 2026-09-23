@@ -10,6 +10,7 @@
 --- default changelist has no description (callers don't offer editing it).
 
 local p4 = require('perforated.p4')
+local cls = require('perforated.changelists')
 local config = require('perforated.config')
 
 local M = {}
@@ -145,7 +146,7 @@ end
 ---@param opts { submitted: boolean?, on_done: fun(ok: boolean)? }?
 function M.full(ws, change, opts)
   opts = opts or {}
-  p4.change_spec(ws, change, { submitted = opts.submitted }, function(spec, err)
+  cls.change_spec(ws, change, { submitted = opts.submitted }, function(spec, err)
     if not spec then
       return notify('could not load CL ' .. change .. ': ' .. tostring(err), vim.log.levels.ERROR)
     end
@@ -162,11 +163,11 @@ function M.full(ws, change, opts)
       buffer = buf,
       callback = function()
         local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
-        p4.save_spec(ws, text, { submitted = opts.submitted }, function(ok, msg)
+        cls.save_spec(ws, text, { submitted = opts.submitted }, function(ok, msg)
           if ok then
             vim.bo[buf].modified = false
             notify(msg)
-            remember(ws, change, p4.spec_get_description(text))
+            remember(ws, change, cls.spec_get_description(text))
             if opts.on_done then
               opts.on_done(true)
             end
@@ -192,13 +193,13 @@ function M.edit(ws, change, opts)
       vim.log.levels.WARN
     )
   end
-  p4.change_spec(ws, change, { submitted = opts.submitted }, function(spec, err)
+  cls.change_spec(ws, change, { submitted = opts.submitted }, function(spec, err)
     if not spec then
       return notify('could not load CL ' .. change .. ': ' .. tostring(err), vim.log.levels.ERROR)
     end
     local status = spec:match('\nStatus:%s*(%S+)') or (opts.submitted and 'submitted' or 'pending')
     local user = spec:match('\nUser:%s*(%S+)') or '?'
-    local desc = p4.spec_get_description(spec)
+    local desc = cls.spec_get_description(spec)
     open_float({
       title = ('CL %s · %s · %s'):format(change, status, user),
       lines = vim.split(desc, '\n', { plain = true }),
@@ -206,9 +207,9 @@ function M.edit(ws, change, opts)
         M.full(ws, change, opts)
       end,
       on_save = function(new_desc, close)
-        local text = p4.spec_set_description(spec, new_desc)
+        local text = cls.spec_set_description(spec, new_desc)
         local submitted = status == 'submitted'
-        p4.save_spec(ws, text, { submitted = submitted }, function(ok, msg)
+        cls.save_spec(ws, text, { submitted = submitted }, function(ok, msg)
           if ok then
             close()
             notify(('CL %s description saved'):format(change))
@@ -225,7 +226,7 @@ function M.edit(ws, change, opts)
               2
             )
             if c == 1 then
-              return p4.save_spec(ws, text, { force = true }, function(ok2, msg2)
+              return cls.save_spec(ws, text, { force = true }, function(ok2, msg2)
                 if ok2 then
                   close()
                   notify(('CL %s description saved (forced)'):format(change))

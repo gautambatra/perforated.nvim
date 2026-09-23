@@ -295,7 +295,7 @@ M.commands = {
         return editor.full(ws, cl)
       end
       -- Pending or submitted is decided by the server.
-      require('perforated.p4').change_status(ws, cl, function(status)
+      require('perforated.changelists').change_status(ws, cl, function(status)
         editor.edit(ws, cl, { submitted = status == 'submitted' })
       end)
     end,

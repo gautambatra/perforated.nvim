@@ -1,6 +1,7 @@
 --- Picker sources: `:P4 pick {pending|opened|submitted|users}`.
 
 local p4 = require('perforated.p4')
+local cls = require('perforated.changelists')
 local picker = require('perforated.picker')
 
 local M = {}
@@ -103,24 +104,33 @@ end
 ---@param opts { user: string?, path: string? }?
 function M.submitted(ws, opts)
   opts = opts or {}
-  p4.submitted_changes(ws, { user = opts.user, path = opts.path, max = 200 }, function(changes, err)
-    if not changes then
-      return vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
+  cls.submitted_changes(
+    ws,
+    { user = opts.user, path = opts.path, max = 200 },
+    function(changes, err)
+      if not changes then
+        return vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
+      end
+      picker.pick({
+        title = 'Submitted changelists' .. (opts.user and (' · ' .. opts.user) or ''),
+        items = changes,
+        format = function(c)
+          return ('%-8s %s %-12s %s'):format(
+            c.change,
+            date(c.time),
+            c.user or '',
+            first_line(c.desc)
+          )
+        end,
+        preview = desc_lines,
+        on_choice = function(chosen)
+          if chosen then
+            require('perforated.diff.tab').open_change(ws, chosen[1])
+          end
+        end,
+      })
     end
-    picker.pick({
-      title = 'Submitted changelists' .. (opts.user and (' · ' .. opts.user) or ''),
-      items = changes,
-      format = function(c)
-        return ('%-8s %s %-12s %s'):format(c.change, date(c.time), c.user or '', first_line(c.desc))
-      end,
-      preview = desc_lines,
-      on_choice = function(chosen)
-        if chosen then
-          require('perforated.diff.tab').open_change(ws, chosen[1])
-        end
-      end,
-    })
-  end)
+  )
 end
 
 --- Users → their submitted changelists.

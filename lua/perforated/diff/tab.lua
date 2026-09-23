@@ -6,6 +6,7 @@
 --- panel selects; `q` closes the tab; `<Tab>`/`<S-Tab>` step through files from any window.
 
 local p4 = require('perforated.p4')
+local cls = require('perforated.changelists')
 local dv = require('perforated.diff.view')
 
 local M = {}
@@ -249,7 +250,7 @@ end
 function M.open_change(ws, item)
   if item.status == 'submitted' or (item.rec == nil and item.files == nil and item.desc) then
     -- Submitted CL: #rev-1 ↔ #rev for every file.
-    return p4.describe(ws, { item.change }, {}, function(by)
+    return cls.describe(ws, { item.change }, {}, function(by)
       local d = by[item.change]
       if not d then
         return notify('could not describe CL ' .. item.change, vim.log.levels.ERROR)
@@ -282,7 +283,7 @@ function M.open_change(ws, item)
   local shelved = item.shelved
   if not shelved then
     -- A shelf node: fetch its files.
-    return p4.shelved_files(ws, { item.change }, function(by)
+    return cls.shelved_files(ws, { item.change }, function(by)
       M.open_change(ws, { change = item.change, shelved = by[item.change] or {}, files = {} })
     end)
   end

@@ -4,7 +4,7 @@
 --- next page (`path@<oldest-1>`), so no query is unbounded. Actions: D diff all files, C edit
 --- description (own CLs), y copy, Q quickfix of the CL's files is left to the diff tab.
 
-local p4 = require('perforated.p4')
+local cls = require('perforated.changelists')
 local keys = require('perforated.ui.keys')
 
 local M = {}
@@ -58,7 +58,7 @@ local function load_page(view)
   end
   local oldest = view.changes[#view.changes]
   local page = view.opts.max or require('perforated.config').get().changes.page_size
-  p4.submitted_changes(view.ws, {
+  cls.submitted_changes(view.ws, {
     user = view.opts.user,
     path = view.opts.path,
     max = page,
