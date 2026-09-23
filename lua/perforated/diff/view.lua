@@ -163,10 +163,25 @@ function M.open(buf, rev, opts)
     vim.api.nvim_buf_set_name(lbuf, 'perforated://null (opened for add)')
     vim.bo[lbuf].modifiable = false
   end
-  vim.cmd('diffthis')
-  vim.api.nvim_win_call(right, function()
-    vim.cmd('diffthis')
-  end)
+  -- `diffthis` fires OptionSet (pattern 'diff'): an error in a user autocmd there must not
+  -- leave a half-built diff tab behind.
+  local errs = {}
+  for _, w in ipairs({ left, right }) do
+    local ok, err = pcall(vim.api.nvim_win_call, w, function()
+      vim.cmd('diffthis')
+    end)
+    if not ok then
+      errs[#errs + 1] = tostring(err)
+    end
+  end
+  if #errs > 0 then
+    local first = errs[1]:match('(E%d+:[^\n]*)') or errs[1]:match('[^\n]*')
+    require('perforated.core.debug').warn('diff', 'autocmd error during diffthis: %s', errs[1])
+    notify(
+      'an OptionSet autocmd in your config failed during :diffthis: ' .. first,
+      vim.log.levels.WARN
+    )
+  end
 
   local tab = vim.api.nvim_get_current_tabpage()
   local function close_tab()

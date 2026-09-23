@@ -84,6 +84,10 @@ The first change to an unopened (read-only) depot file opens a small menu next t
 
 - **Sticky changelist.** The last CL you chose becomes the `<CR>` default for this session. It's
   dropped automatically once that CL is submitted or deleted.
+- **Choosing a changelist.** `c` lists the default CL, your pending CLs and `+ new changelist…`.
+- **Cancelling isn't skipping.** `<Esc>`, or backing out of the CL picker or the description
+  prompt, leaves the file unopened and read-only. Only `s` skips the buffer, and `:e!` resets
+  that too. To check out later, reload with `:e!` and edit, or use `<leader>pe` / `:P4 edit`.
 - **Typing through the menu is safe.** Keys typed in the first 300 ms after the menu appears
   count as text and are replayed into the buffer (`checkout.prompt_grace`).
 - **Writes never wait on the server.** Choosing a target makes the file writable right away;
@@ -149,15 +153,22 @@ Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cur
 ### ✅ Statusline
 
 ```lua
--- lualine
-sections = { lualine_c = { require('perforated').statusline } }
+-- lualine: a built-in component
+sections = { lualine_c = { 'filename', 'perforated' } }
 -- or a plain statusline
 vim.o.statusline = '%f %= %{v:lua.require("perforated").statusline()} '
 ```
 
-Example: `edit@123 +3 ~1 ↓#4→#5  ↓2 !1`. That reads: opened for edit in CL 123, three lines
-added, one changed, the file is stale (#4 vs #5), and in this workspace two opened files are
-stale and one is unresolved.
+For a function-style component, pass the function itself: `require('perforated').statusline`,
+without `()`. Calling it in your config evaluates it once at startup and shows an empty string.
+
+What it shows:
+- **Opened files:** the action and CL plus line counts, e.g. `edit@123 +3 ~1 ↓#4→#5  ↓2 !1`.
+  That reads: opened for edit in CL 123, three lines added, one changed, the file is stale (#4
+  vs #5), and in this workspace two opened files are stale and one is unresolved.
+- **Files not opened:** the have revision, e.g. `#3`, or `#3 ↓#3→#4` when stale.
+- **New files:** `not in depot`.
+- **Outside Perforce:** nothing.
 
 The raw data is also available as variables:
 - `vim.b.perforated_status_dict` (per buffer)
