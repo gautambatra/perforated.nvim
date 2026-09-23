@@ -23,6 +23,45 @@ local function echo_lines(chunks_list)
   vim.api.nvim_echo(chunks_list, true, {})
 end
 
+--- Split `-c CL` and file arguments; files default to the current buffer's file.
+---@param args string[]
+---@return string? cl, string[] files, table flags
+local function parse_file_args(args)
+  local cl, files, flags = nil, {}, {}
+  local i = 1
+  while i <= #args do
+    local a = args[i]
+    if a == '-c' then
+      cl = args[i + 1]
+      i = i + 1
+    elseif a:match('^%-%a$') then
+      flags[a] = true
+    else
+      files[#files + 1] = vim.fn.fnamemodify(vim.fn.expand(a), ':p')
+    end
+    i = i + 1
+  end
+  if #files == 0 then
+    local name = vim.api.nvim_buf_get_name(0)
+    if name ~= '' and vim.bo.buftype == '' then
+      files[1] = name
+    end
+  end
+  return cl, files, flags
+end
+
+local function need_files(files)
+  if #files == 0 then
+    notify('no file (open a file or pass paths)', vim.log.levels.WARN)
+    return false
+  end
+  return true
+end
+
+local function complete_files(arglead)
+  return vim.fn.getcompletion(arglead, 'file')
+end
+
 ---@type table<string, perforated.Command>
 M.commands = {
   info = {
@@ -76,6 +115,155 @@ M.commands = {
         lines[#lines][1] = lines[#lines][1]:gsub('\n$', '')
         echo_lines(lines)
       end)
+    end,
+  },
+
+  edit = {
+    scope = 'workspace',
+    desc = 'Open files for edit: :P4 edit [-c CL] [file…] (default: sticky CL or default)',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local cl, files = parse_file_args(args)
+      if need_files(files) then
+        require('perforated.checkout').edit(ws, files, cl or ws.sticky_cl)
+      end
+    end,
+  },
+
+  add = {
+    scope = 'workspace',
+    desc = 'Open files for add: :P4 add [-c CL] [file…]',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local cl, files = parse_file_args(args)
+      if need_files(files) then
+        require('perforated.checkout').add(ws, files, cl or ws.sticky_cl)
+      end
+    end,
+  },
+
+  revert = {
+    scope = 'workspace',
+    desc = 'Revert files: :P4 revert[!] [-a] [file…] (! = no confirmation, -a = only unchanged)',
+    complete = complete_files,
+    run = function(ws, o, args)
+      local _, files, flags = parse_file_args(args)
+      if not need_files(files) then
+        return
+      end
+      local unchanged = flags['-a']
+      if not unchanged and not o.bang then
+        local what = #files == 1 and vim.fn.fnamemodify(files[1], ':~:.') or (#files .. ' files')
+        local ok = vim.fn.confirm(
+          ('Revert %s? Local changes will be lost.'):format(what),
+          '&Revert\n&Cancel',
+          2
+        )
+        if ok ~= 1 then
+          return
+        end
+      end
+      require('perforated.checkout').revert(ws, files, unchanged)
+    end,
+  },
+
+  diff = {
+    scope = 'workspace',
+    desc = 'Diff the current file: :P4 diff[!] [#rev|@CL|@=shelf|prev] (! = $P4DIFF tool)',
+    complete = function()
+      return { '#have', '#head', 'prev' }
+    end,
+    run = function(_, o, args)
+      require('perforated.diff.view').open(
+        vim.api.nvim_get_current_buf(),
+        args[1],
+        { external = o.bang }
+      )
+    end,
+  },
+
+  opened = {
+    scope = 'workspace',
+    desc = 'Opened files, grouped by changelist, in the quickfix list',
+    run = function(ws, o)
+      local lists = require('perforated.lists')
+      lists.opened_items(ws, function(items)
+        require('perforated.ui.qf').set({
+          title = 'P4 opened · ' .. (ws:client() or ws.key),
+          kind = 'opened',
+          items = items,
+          open = not o.bang and nil or false,
+          producer = function(cb)
+            lists.opened_items(ws, cb)
+          end,
+        })
+      end)
+    end,
+  },
+
+  status = {
+    scope = 'workspace',
+    desc = 'Stale and unresolved opened files in the quickfix list',
+    run = function(ws, o)
+      local lists = require('perforated.lists')
+      require('perforated.poll').refresh(ws, { notify = false })
+      lists.status_items(ws, function(items)
+        require('perforated.ui.qf').set({
+          title = 'P4 status · ' .. (ws:client() or ws.key),
+          kind = 'status',
+          items = items,
+          open = not o.bang and nil or false,
+          producer = function(cb)
+            lists.status_items(ws, cb)
+          end,
+        })
+      end)
+    end,
+  },
+
+  hunks = {
+    scope = 'workspace',
+    desc = 'Hunks of all opened files (quickfix), or of this file: :P4 hunks %  (location list)',
+    run = function(ws, o, args)
+      local lists = require('perforated.lists')
+      if args[1] == '%' then
+        local buf = vim.api.nvim_get_current_buf()
+        require('perforated.ui.qf').set({
+          title = 'P4 hunks · ' .. vim.fn.expand('%:~:.'),
+          kind = 'hunks',
+          items = lists.buffer_hunk_items(buf),
+          loclist = true,
+          open = not o.bang and nil or false,
+        })
+        return
+      end
+      lists.all_hunk_items(ws, function(items)
+        require('perforated.ui.qf').set({
+          title = 'P4 hunks · ' .. (ws:client() or ws.key),
+          kind = 'hunks',
+          items = items,
+          open = not o.bang and nil or false,
+          producer = function(cb)
+            lists.all_hunk_items(ws, cb)
+          end,
+        })
+      end)
+    end,
+  },
+
+  notifications = {
+    scope = 'none',
+    desc = 'Show recent notifications (stale files, …)',
+    run = function()
+      require('perforated.ui.toast').open_history()
+    end,
+  },
+
+  dismiss = {
+    scope = 'none',
+    desc = 'Dismiss visible notifications',
+    run = function()
+      require('perforated.ui.toast').dismiss()
     end,
   },
 
@@ -196,7 +384,11 @@ function M.run(o)
     -- The client view arrives in M2; until then `:P4` shows info.
     name = 'info'
   end
-  M.dispatch(name, vim.tbl_extend('force', o, { fargs = fargs }))
+  local bang = o.bang
+  if name:sub(-1) == '!' then -- `:P4 revert!` reads naturally; `:P4! revert` works too
+    name, bang = name:sub(1, -2), true
+  end
+  M.dispatch(name, vim.tbl_extend('force', o, { fargs = fargs, bang = bang }))
 end
 
 --- Completion for `:P4 …`.
@@ -215,7 +407,9 @@ end
 function M.complete_args(name, arglead, _)
   local cmd = M.commands[name]
   if cmd and cmd.complete then
-    return cmd.complete(arglead, {})
+    return vim.tbl_filter(function(c)
+      return vim.startswith(c, arglead)
+    end, cmd.complete(arglead, {}))
   end
   return {}
 end

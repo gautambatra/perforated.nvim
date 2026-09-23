@@ -265,6 +265,14 @@ function Workspace:_set_info(rec)
   events.emit('Status', { ws = self.key })
 end
 
+--- Identity of the server, for caches shared across workspaces of one session.
+---@return string
+function Workspace:server_key()
+  return (self.settings and self.settings.P4PORT)
+    or (self.info and self.info.serverAddress)
+    or self.key
+end
+
 ---@return string?
 function Workspace:client()
   local info = self.info

@@ -9,13 +9,21 @@ local M = {}
 local defaults = {
   --- p4 executable (name on $PATH or absolute path)
   p4 = 'p4',
-  checkout = { prompt = true, on_write = false, sticky = true, dirs = nil, add_on_write = 'prompt' },
+  checkout = {
+    prompt = true,
+    on_write = false,
+    sticky = true,
+    dirs = nil,
+    add_on_write = 'prompt', -- 'prompt' | 'auto' | false
+    prompt_grace = 300, -- ms: keys typed right after the prompt appears are replayed as text
+  },
   signs = {
     enabled = true,
     base = 'have',
     priority = 6,
-    max_lines = 50000,
-    hard_max = 500000,
+    algorithm = 'myers', -- 'myers' | 'patience' | 'histogram' | 'minimal'
+    max_lines = 2000, -- above this, diff on a worker thread (main thread only reads the lines)
+    hard_max = 500000, -- above this, no signs
     text = { add = '▎', change = '▎', delete = '▁', stale = '↓' },
   },
   blame_line = { enabled = false, delay = 150, format = '{user} • {date} • {desc}' },
@@ -38,7 +46,7 @@ local defaults = {
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 },
   toast = { timeout = 8000, backend = 'float', history = 50 },
   statusline = { stale = '↓', unresolved = '!', offline = '⊘' },
-  icons = { provider = 'auto', style = 'auto' },
+  icons = { provider = 'auto', style = 'auto', glyphs = {} },
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 },
   cache = { content_mb = 32 },
   log = { size = 500 },
@@ -93,7 +101,12 @@ function M.unknown_keys()
         if not M._nil_ok[path] then
           out[#out + 1] = path
         end
-      elseif type(v) == 'table' and type(def[k]) == 'table' and not vim.islist(def[k]) then
+      elseif
+        type(v) == 'table'
+        and type(def[k]) == 'table'
+        and not vim.islist(def[k])
+        and next(def[k]) ~= nil -- empty-table defaults (icons.glyphs) accept any keys
+      then
         walk(v, def[k], path)
       end
     end

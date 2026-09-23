@@ -33,14 +33,17 @@ local env = {
 ---@param found perforated.GateHit
 ---@return perforated.Workspace
 local function config_ws(found)
+  local ws = workspace.get(found.anchor) -- fast path: anchors from the gate are normalised
+  if ws then
+    return ws
+  end
   local anchor = workspace.normalize(found.anchor)
-  local ws = workspace.get_or_create({
+  return workspace.get_or_create({
     key = anchor,
     anchor = anchor,
     config_file = found.file,
     mode = 'config',
   })
-  return ws
 end
 
 ---@return perforated.Workspace
@@ -66,6 +69,8 @@ local function bind(ws, buf)
   ws:attach(buf)
   -- Learn client/root/case in the background; the first buffer pays, the rest share it.
   ws:ensure_info(function() end, require('perforated.core.queue').PRIORITY.background)
+  require('perforated.buffer').attach(ws, buf)
+  require('perforated.poll').start(ws)
 end
 
 local function flush_env_pending()
