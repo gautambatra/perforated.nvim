@@ -341,6 +341,16 @@ function M.detach(buf)
   pcall(require('perforated.signs').render, buf, {})
 end
 
+--- Recompute cache keys after the workspace learned its case handling.
+---@param ws perforated.Workspace
+function M.rekey(ws)
+  for _, st in pairs(states) do
+    if st.ws == ws then
+      st.key = p4.key(ws, st.path)
+    end
+  end
+end
+
 --- All states (for workspace-wide operations such as polling).
 ---@return table<integer, perforated.BufState>
 function M.all()

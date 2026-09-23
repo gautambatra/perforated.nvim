@@ -278,7 +278,17 @@ function Workspace:_set_info(rec)
     tostring(rec.clientStream)
   )
   self.info = rec
-  self.icase = rec.caseHandling == 'insensitive'
+  local icase = rec.caseHandling == 'insensitive'
+  if icase ~= self.icase then
+    -- Keys are case-folded on case-insensitive servers (the macOS default). Buffers attached
+    -- before `p4 info` answered carry unfolded keys: recompute them.
+    self.icase = icase
+    self.fstat = {}
+    local buffer = package.loaded['perforated.buffer']
+    if buffer then
+      buffer.rekey(self)
+    end
+  end
   if rec.clientRoot and rec.clientName and rec.clientName ~= '*unknown*' then
     self.root = normalize(rec.clientRoot)
   end
