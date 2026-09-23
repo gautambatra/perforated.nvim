@@ -183,12 +183,14 @@ function Workspace:run(args, opts, cb)
     timeout = (opts.priority or 1) >= queue.PRIORITY.background and rcfg.background_timeout
       or rcfg.timeout
   end
+  local epoch -- login generation when the command started
   queue.global():push({
     group = self.key,
     priority = opts.priority,
     key = opts.key and (self.key .. '|' .. opts.key) or nil,
     force = opts.force,
     start = function(done)
+      epoch = self.conn.epoch
       runner.run({
         args = args,
         cwd = (self.mode == 'connection' and opts.cwd) or self:cwd(),
@@ -202,6 +204,12 @@ function Workspace:run(args, opts, cb)
     end,
     cb = function(res)
       local kind = self.conn:observe(res)
+      if kind == 'auth' and not opts.no_auth_retry and epoch ~= self.conn.epoch then
+        -- Started before a login that has since succeeded: the error is stale. Retry quietly
+        -- instead of prompting for a password a second time.
+        dbg.debug('workspace', '%s: stale auth error, retrying %s', self.key, args[1])
+        return self:run(args, vim.tbl_extend('force', opts, { no_auth_retry = true }), cb)
+      end
       if kind == 'auth' and not opts.no_auth_retry then
         self.conn:need_auth(function(ok)
           if ok then

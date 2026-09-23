@@ -101,6 +101,29 @@ T['auth']['expired ticket → one prompt → login via stdin → original call r
   H.eq(child.lua_get([[require('perforated.core.queue').global().paused[_G.ws.key] ]]), vim.NIL)
 end
 
+T['auth']['a call that started before the login succeeded is retried without a second prompt'] = function()
+  local marker = H.tmp() .. '/logged-in'
+  setup({
+    { match = '^login', touch = marker, records = { { User = 'alice' } } },
+    -- Slow call: starts before the login, fails with the (now stale) auth error after it.
+    { match = '^opened', unless = marker, sleep = 1.5, records = AUTH_ERR },
+    { match = '^opened', records = { { depotFile = '//depot/a.c' } } },
+    { match = '^fstat', unless = marker, records = AUTH_ERR },
+    { match = '^fstat', records = { { depotFile = '//depot/a.c' } } },
+  })
+  child.lua([[
+    _G.prompts = 0
+    vim.fn.inputsecret = function() _G.prompts = _G.prompts + 1; return 'pw' end
+    _G.r1, _G.r2 = nil, nil
+    _G.ws:run({ 'opened' }, {}, function(r) _G.r1 = r end)
+    _G.ws:run({ 'fstat', 'x' }, {}, function(r) _G.r2 = r end)
+  ]])
+  H.eq(H.wait(child, '_G.r1 ~= nil and _G.r2 ~= nil', 15000), true)
+  H.eq(child.lua_get('_G.prompts'), 1)
+  H.eq(child.lua_get('_G.r1.ok'), true)
+  H.eq(child.lua_get('_G.r2.ok'), true)
+end
+
 T['auth']['cancelled prompt → offline_auth, calls fail fast with a hint'] = function()
   setup({ { match = '^opened', records = AUTH_ERR } })
   child.lua([[vim.fn.inputsecret = function() return '' end]])
