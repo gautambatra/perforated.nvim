@@ -200,7 +200,7 @@ on_qf_buf = function(buf)
     end
     require('perforated.checkout').pick_change(ws, function(cl)
       if cl then
-        require('perforated.p4').reopen(ws, { path }, cl, function()
+        require('perforated.changelists').reopen(ws, { path }, cl, function()
           refresh_current()
         end)
       end

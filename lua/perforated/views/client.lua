@@ -11,6 +11,7 @@
 --- footer).
 
 local p4 = require('perforated.p4')
+local cls = require('perforated.changelists')
 local keys = require('perforated.ui.keys')
 local dbg = require('perforated.core.debug')
 
@@ -363,7 +364,7 @@ function M.refresh(view)
           with_shelves[#with_shelves + 1] = c.change
         end
       end
-      p4.shelved_files(ws, with_shelves, function(shelved)
+      cls.shelved_files(ws, with_shelves, function(shelved)
         data.shelved = shelved
         view.loading = false
         if vim.api.nvim_buf_is_valid(view.buf) then
@@ -411,7 +412,7 @@ function M.refresh(view)
         recs = r
         merged()
       end)
-      p4.opened_by_user(ws, function(r)
+      cls.opened_by_user(ws, function(r)
         others = r
         merged()
       end)
@@ -421,7 +422,7 @@ function M.refresh(view)
         done()
       end)
     end
-    p4.submitted_changes(ws, {
+    cls.submitted_changes(ws, {
       user = ws:user(),
       max = require('perforated.config').get().client_view.submitted_limit,
     }, function(changes)
@@ -440,7 +441,7 @@ function M.scan_reconcile(view)
   if view.data then
     view.tree:set(build(view, view.data))
   end
-  p4.status(view.ws, nil, function(recs, err)
+  cls.status(view.ws, nil, function(recs, err)
     if view.reconcile.token ~= token then
       return -- cancelled
     end
@@ -750,7 +751,7 @@ local function actions(view)
           if not cl then
             return
           end
-          p4.reopen(ws, paths_of(items), cl, function(res)
+          cls.reopen(ws, paths_of(items), cl, function(res)
             if #res.errors > 0 then
               notify('move failed: ' .. res.errors[1], vim.log.levels.ERROR)
             else
