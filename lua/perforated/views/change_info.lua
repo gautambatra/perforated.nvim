@@ -116,7 +116,7 @@ function M.show(ws, item, d, shelved)
     border = 'rounded',
     title = ' ' .. title .. ' ',
     title_pos = 'left',
-    footer = ' q close · D diff all files ',
+    footer = ' q close · <CR> describe · D diff all files ',
     footer_pos = 'right',
   })
   vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
@@ -128,6 +128,10 @@ function M.show(ws, item, d, shelved)
   for _, lhs in ipairs({ 'q', '<Esc>', 'K' }) do
     vim.keymap.set('n', lhs, close, { buffer = buf, nowait = true })
   end
+  vim.keymap.set('n', '<CR>', function()
+    close()
+    require('perforated.views.describe').open(ws, rec.change)
+  end, { buffer = buf, nowait = true })
   vim.keymap.set('n', 'D', function()
     close()
     require('perforated.diff.tab').open_change(ws, item)

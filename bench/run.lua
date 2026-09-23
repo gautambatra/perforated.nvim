@@ -248,6 +248,51 @@ do
   c2.stop()
 end
 
+-- 7. Annotate: parsing 20k `annotate -c` records and rendering the 20k-line column.
+do
+  local c = H.child()
+  local parse_ms, render_ms = unpack(c.lua([[
+    local n = 20000
+    local records = { { depotFile = '//depot/big.c', rev = '400', change = '9000' } }
+    for i = 1, n do
+      local cl = tostring(1000 + (i * 7919) % 400)
+      records[#records + 1] = { data = 'line ' .. i .. '\n', lower = cl, upper = cl }
+    end
+    local history = require('perforated.history')
+    local best_parse = math.huge
+    local cls
+    for _ = 1, 5 do
+      local t0 = vim.uv.hrtime()
+      local _, _, c2 = history._annotate_lines(records)
+      best_parse = math.min(best_parse, vim.uv.hrtime() - t0)
+      cls = c2
+    end
+    local meta = {}
+    for c = 1000, 1399 do
+      meta[c] = { change = c, user = 'user' .. c, time = tostring(1.7e9 + c * 1000), desc = 'd' }
+    end
+    local src = vim.api.nvim_get_current_buf()
+    local lines = {}
+    for i = 1, n do lines[i] = 'line ' .. i end
+    vim.api.nvim_buf_set_lines(src, 0, -1, false, lines)
+    vim.cmd('leftabove vnew')
+    local a = require('perforated.views.annotate')
+    a.define_age_groups()
+    local view = { buf = vim.api.nvim_get_current_buf(), win = vim.api.nvim_get_current_win(),
+      src_buf = src, local_file = false, ann = { cls = cls, meta = meta, depotFile = '//depot/big.c' } }
+    local best_render = math.huge
+    for _ = 1, 5 do
+      local t0 = vim.uv.hrtime()
+      a.render(view)
+      best_render = math.min(best_render, vim.uv.hrtime() - t0)
+    end
+    return { best_parse / 1e6, best_render / 1e6 }
+  ]]))
+  record('annotate: parse 20k lines', parse_ms, 'ms', 20)
+  record('annotate: render 20k lines', render_ms, 'ms', 25)
+  c.stop()
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))

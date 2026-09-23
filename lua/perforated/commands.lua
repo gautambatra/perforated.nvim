@@ -341,6 +341,87 @@ M.commands = {
     end,
   },
 
+  describe = {
+    scope = 'connection',
+    desc = "Describe a changelist: :P4 describe [N|default]  (no N = the current file's CL)",
+    run = function(ws, _, args)
+      local cl = args[1]
+      if not cl then
+        local st = require('perforated.buffer').get(0)
+        cl = st and st.rec and st.rec.change
+        if not cl then
+          return notify('current file is not opened; pass a changelist number', vim.log.levels.WARN)
+        end
+      end
+      if cl ~= 'default' and not cl:match('^%d+$') then
+        return notify('not a changelist number: ' .. cl, vim.log.levels.ERROR)
+      end
+      require('perforated.views.describe').open(ws, cl)
+    end,
+  },
+
+  filelog = {
+    scope = 'connection',
+    desc = 'File history: :P4 filelog [file|//depot/path|dir]  (default: current file; a directory lists its changelists)',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local h = require('perforated.views.history')
+      if not args[1] then
+        return h.open_buf(0)
+      end
+      local path = args[1]
+      if not path:match('^//') then
+        path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+      end
+      h.open(ws, path)
+    end,
+  },
+
+  history = {
+    scope = 'connection',
+    desc = 'Alias of :P4 filelog',
+    complete = complete_files,
+    run = function(ws, o, args)
+      M.commands.filelog.run(ws, o, args)
+    end,
+  },
+
+  annotate = {
+    scope = 'connection',
+    desc = 'Annotate the current file (or a depot revision): :P4 annotate [//depot/path#rev]',
+    run = function(ws, _, args)
+      local a = require('perforated.views.annotate')
+      if args[1] and args[1]:match('^//') then
+        local spec = args[1]
+        if not spec:match('[#@]') then
+          spec = spec .. '#head'
+        end
+        return a.open_spec(ws, spec)
+      end
+      a.open_buf(0)
+    end,
+  },
+
+  blame = {
+    scope = 'none',
+    desc = 'Current-line blame (virtual text): :P4 blame [on|off]  (no args: toggle)',
+    complete = function()
+      return { 'on', 'off' }
+    end,
+    run = function(_, _, args)
+      local on = require('perforated.blame').set(({ on = true, off = false })[args[1]])
+      notify('current-line blame ' .. (on and 'on' or 'off'))
+    end,
+  },
+
+  lookup = {
+    scope = 'connection',
+    desc = 'Go to a changelist (number), a file or directory history (path) or a user: :P4 lookup [what]',
+    run = function(ws, _, args)
+      require('perforated.lookup').run(ws, args[1])
+    end,
+  },
+
   notifications = {
     scope = 'none',
     desc = 'Show recent notifications (stale files, …)',

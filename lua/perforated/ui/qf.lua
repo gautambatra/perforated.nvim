@@ -58,6 +58,9 @@ function M.set(spec)
   if n == 0 then
     vim.notify(('[perforated] %s: nothing to show'):format(spec.title))
   elseif open then
+    if spec.loclist and spec.win and spec.win ~= 0 and vim.api.nvim_win_is_valid(spec.win) then
+      vim.api.nvim_set_current_win(spec.win) -- :lopen opens the current window's list
+    end
     vim.cmd(spec.loclist and 'lopen' or 'botright copen')
     -- FileType doesn't fire again when the window was already open: install keys directly.
     on_qf_buf(vim.api.nvim_get_current_buf())

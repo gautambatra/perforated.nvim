@@ -687,6 +687,79 @@ local function actions(view)
       end,
     },
     {
+      id = 'describe',
+      desc = 'Describe changelist',
+      keys = { 'gd' },
+      kinds = { change = true, submitted = true, shelf = true },
+      run = function(items)
+        require('perforated.views.describe').open(ws, items[1].change)
+      end,
+    },
+    {
+      id = 'swarm',
+      desc = 'Open review in Swarm',
+      keys = { 'gx' },
+      kinds = { change = true, submitted = true, shelf = true },
+      when = function(item)
+        return item and item.change ~= 'default'
+      end,
+      run = function(items)
+        require('perforated.history').swarm(ws, items[1].change)
+      end,
+    },
+    {
+      id = 'swarm_copy',
+      desc = 'Copy Swarm review URL',
+      keys = { 'gX' },
+      kinds = { change = true, submitted = true, shelf = true },
+      when = function(item)
+        return item and item.change ~= 'default'
+      end,
+      run = function(items)
+        require('perforated.history').swarm(ws, items[1].change, true)
+      end,
+    },
+    {
+      id = 'lookup',
+      desc = 'Go to changelist / path / user',
+      keys = { 'g/' },
+      p4v = { '<C-g>' },
+      nomenu = true,
+      run = function()
+        require('perforated.lookup').run(ws)
+      end,
+    },
+    {
+      id = 'history',
+      desc = 'File history',
+      keys = { 'L' },
+      p4v = { '<C-t>' },
+      kinds = { opened_file = true, shelved_file = true },
+      run = function(items)
+        local it = items[1]
+        require('perforated.views.history').open(
+          ws,
+          it.depotFile or it.clientFile,
+          { local_path = it.clientFile }
+        )
+      end,
+    },
+    {
+      id = 'annotate',
+      desc = 'Annotate',
+      keys = { 'b' },
+      kinds = { opened_file = true },
+      when = function(item)
+        return item and item.action ~= 'add' and item.action ~= 'branch' and item.clientFile ~= nil
+      end,
+      run = function(items)
+        vim.cmd('tabedit ' .. vim.fn.fnameescape(items[1].clientFile))
+        vim.schedule(function()
+          require('perforated.views.annotate').open_buf(0)
+        end)
+      end,
+    },
+    {
       id = 'view_change',
       desc = 'View changelist',
       keys = { 'K' },
@@ -1041,6 +1114,7 @@ function M.open(ws, opts)
   vim.bo[buf].bufhidden = 'hide'
   vim.bo[buf].swapfile = false
   pcall(vim.api.nvim_buf_set_name, buf, 'perforated://client/' .. (ws:client() or ws.key))
+  vim.b[buf].perforated_ws = ws.key
   require('perforated.hl').setup()
   view = {
     ws = ws,

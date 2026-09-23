@@ -117,6 +117,33 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   your client view unless you pass a path; `-u` shows another user's work. Pages load as you
   reach the end (or with `gn`), so no query is unbounded.
 
+### ✅ Describe, history, annotate, blame
+
+- **`:P4 describe N` (`gd` on a changelist anywhere):** a changelist buffer with the header, the
+  full description, the files and any shelved files. `<Tab>` expands a file's diff inline; it
+  is computed in Neovim from two `p4 print` calls, and only when you expand it. `d` opens a
+  side-by-side diff, `D` the diff tab of every file and `Q` sends the files to quickfix
+  (workspace paths when mapped). It works for submitted and pending changelists (your pending
+  files are diffed against the workspace) and for shelves: `d` compares the shelf with its base,
+  `gw` with your workspace file and `gh` with the head revision. `:P4 describe` with no
+  number uses the current file's changelist.
+- **`:P4 filelog [path]` (`L` / `<C-t>`): file history.** A float lists the revisions, with
+  the files a branch came from. `<CR>` opens the action menu: `d` diff against the previous
+  revision, `w` against your workspace file, `gd` describe, `K` view changelist, `o` open the
+  revision read-only, `b` annotate it. Pages load as you reach the end (or `gn`). `Q` moves
+  the list to the location list. Set `history.presenter` to `'picker'` or `'quickfix'` to
+  use those instead. A directory's history is its list of changelists.
+- **`:P4 annotate` (`b`):** a split left of the file shows the changelist, user and date that
+  last changed each line, coloured by age. It scrolls with the file. Your local edits show
+  "Not submitted". `<CR>` describes the line's changelist, `~` re-annotates the revision
+  before that change (`<BS>` goes back), `d` diffs that change and `Q` lists every line from
+  it in the location list. It takes two p4 calls whatever the file's size or history.
+- **`:P4 blame` (or `blame_line = { enabled = true }`): current-line blame** as virtual text.
+  The file is annotated once per revision; moving the cursor makes no p4 calls.
+- **`:P4 lookup` (`g/` / `<C-g>`):** type a changelist number, a path or a user name.
+- **Swarm:** `gx` opens a changelist's review and `gX` copies its URL. The URL comes from
+  `swarm.url` or the server's `P4.Swarm.URL` property.
+
 ### ✅ Pickers
 
 Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
@@ -309,7 +336,6 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 
 | Milestone | Features |
 |---|---|
-| M3 | `:P4 describe` (CL lookup with lazily expanded diffs), file history, annotate (scroll-bound split, age-coloured, walk back), current-line blame, Swarm links |
 | M4 | Shelve / unshelve (file and CL), resolve (auto-merge, then your `$P4MERGE`), submit, sync, delete, move/rename, integrate (cherry-pick a CL) |
 | M5 | Time-lapse view (step through revisions instantly) |
 | M6 | P4V-style time-lapse slider, `p4vc` escape hatches, polish |
@@ -328,6 +354,11 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 | `:P4 change[!] [N\|new]` | Edit a changelist description (`!`: full spec); `new` creates one |
 | `:P4 changes [-u user] [-m N] [path]` | Submitted changelists (paged) |
 | `:P4 pick {pending\|opened\|submitted\|users}` | Pick with your fuzzy finder |
+| `:P4 describe [N]` | Changelist buffer (default: the current file's changelist) |
+| `:P4 filelog [path]` / `:P4 history` | File history (a directory: its changelists) |
+| `:P4 annotate [//depot/path#rev]` | Annotate split for the current file (or a depot revision) |
+| `:P4 blame [on\|off]` | Toggle current-line blame |
+| `:P4 lookup [what]` | Go to a changelist number, a path's history or a user's changelists |
 | `:P4 edit [-c CL] [file…]` | Open for edit (sticky CL, else default) |
 | `:P4 add [-c CL] [file…]` | Open for add |
 | `:P4 revert[!] [-a] [file…]` | Revert; `!` skips confirmation, `-a` = only unchanged files |
@@ -345,7 +376,7 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 
 ## Keymaps
 
-In plugin views (client view, `:P4 changes`), keys are buffer-local, `?` lists them all, and
+In plugin views (client view, `:P4 changes`, describe, history, annotate), keys are buffer-local, `?` lists them all, and
 any action's keys can be changed or removed:
 
 ```lua
@@ -367,7 +398,9 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-hunks)          <Plug>(perforated-hunks-file)
 <Plug>(perforated-opened)         <Plug>(perforated-status)
 <Plug>(perforated-info)           <Plug>(perforated-log)
-<Plug>(perforated-notifications)
+<Plug>(perforated-notifications)  <Plug>(perforated-history)
+<Plug>(perforated-annotate)       <Plug>(perforated-blame-line)
+<Plug>(perforated-describe)       <Plug>(perforated-lookup)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
@@ -382,6 +415,8 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pq` / `<leader>pQ` | All hunks → quickfix / this file's hunks → location list |
 | `<leader>po` / `<leader>ps` | Opened files / stale & unresolved |
 | `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
+| `<leader>pL` / `<leader>pb` / `<leader>pB` | History / annotate / toggle current-line blame |
+| `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
 
 ## Configuration
 
@@ -414,6 +449,15 @@ These are the defaults for everything that has an effect today:
   picker = 'auto', -- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'
   client_view = { kind = 'tab', submitted_limit = 20 }, -- kind: 'tab' | 'float' | 'split'
   changes = { page_size = 50 }, -- :P4 changes page size
+  history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
+  annotate = {
+    width = 36,
+    integrations = false, -- true: -I, follow integrations to the change that wrote each line
+    history_max = 1000, -- filelog depth used for the changelist metadata
+    gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
+  },
+  blame_line = { enabled = false, delay = 150, format = '{user} • {date} • {desc}' }, -- also {change}, {client}
+  swarm = { url = nil }, -- default: the server's P4.Swarm.URL property
   keys = { p4v = true }, -- plus per-action overrides (see Keymaps)
   keymaps = false, -- 'default' = <leader>p preset in Perforce buffers
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
@@ -435,8 +479,7 @@ These are the defaults for everything that has an effect today:
 }
 ```
 
-Some keys are reserved for upcoming features and have no effect yet: `history`, `merge`,
-`blame_line`, `swarm`. `:checkhealth perforated`
+The `merge` key is reserved for an upcoming feature and has no effect yet. `:checkhealth perforated`
 reports unknown keys, which catches typos.
 
 Highlight groups (`PerforatedAdd`, `PerforatedChange`, `PerforatedDelete`, `PerforatedStale`,
@@ -456,6 +499,7 @@ Budgets are enforced by `make bench` in CI:
 | Lua memory per attached buffer | ≤ 2 KB | ~1.8 KB |
 | Client view: render 5000 rows | ≤ 15 ms | ~10 ms |
 | Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
+| Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~10 / ~16 ms |
 
 The timing figures are the best of several runs, which filters out noise from other processes.
 

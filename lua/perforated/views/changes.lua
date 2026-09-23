@@ -94,6 +94,8 @@ function M.open(ws, opts)
   vim.wo.cursorline, vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn =
     true, false, false, 'no'
   require('perforated.hl').setup()
+  vim.b[buf].perforated_ws = ws.key
+  vim.b[buf].perforated_ws = ws.key
   local view = { ws = ws, buf = buf, opts = opts, changes = {}, more = true }
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = {
@@ -125,6 +127,49 @@ function M.open(ws, opts)
             load_page(view)
           end,
         })
+      end,
+    },
+    {
+      id = 'describe',
+      desc = 'Describe changelist',
+      keys = { 'gd' },
+      kinds = { submitted = true },
+      run = function(items)
+        require('perforated.views.describe').open(ws, items[1].change)
+      end,
+    },
+    {
+      id = 'swarm',
+      desc = 'Open review in Swarm',
+      keys = { 'gx' },
+      kinds = { submitted = true },
+      when = function(item)
+        return item and item.change ~= 'default'
+      end,
+      run = function(items)
+        require('perforated.history').swarm(ws, items[1].change)
+      end,
+    },
+    {
+      id = 'swarm_copy',
+      desc = 'Copy Swarm review URL',
+      keys = { 'gX' },
+      kinds = { submitted = true },
+      when = function(item)
+        return item and item.change ~= 'default'
+      end,
+      run = function(items)
+        require('perforated.history').swarm(ws, items[1].change, true)
+      end,
+    },
+    {
+      id = 'lookup',
+      desc = 'Go to changelist / path / user',
+      keys = { 'g/' },
+      p4v = { '<C-g>' },
+      nomenu = true,
+      run = function()
+        require('perforated.lookup').run(ws)
       end,
     },
     {
