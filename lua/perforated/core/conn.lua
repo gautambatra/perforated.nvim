@@ -66,6 +66,7 @@ end
 ---@field timer uv.uv_timer_t?
 ---@field auth_waiters fun()[]   jobs to retry after a successful login
 ---@field last_error string?
+---@field epoch integer          bumped on every successful login
 local Conn = {}
 Conn.__index = Conn
 
@@ -73,7 +74,7 @@ Conn.__index = Conn
 ---@return perforated.Conn
 function M.new(ws)
   return setmetatable(
-    { state = 'unknown', ws = ws, backoff = BACKOFF_MIN, auth_waiters = {} },
+    { state = 'unknown', ws = ws, backoff = BACKOFF_MIN, auth_waiters = {}, epoch = 0 },
     Conn
   )
 end
@@ -217,6 +218,7 @@ function Conn:login(cb)
     { probe = true, force = true, stdin = pw, priority = 1, no_auth_retry = true },
     function(res)
       if res.ok then
+        self.epoch = self.epoch + 1
         self:_set('online')
         cb(true)
       else

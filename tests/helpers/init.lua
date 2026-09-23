@@ -39,7 +39,8 @@ end
 ---@param path string
 ---@param rules table[]
 function H.rules(path, rules)
-  H.write(path, 'return ' .. vim.inspect(rules))
+  -- JSON, not vim.inspect: inspect writes shared tables as `<1>` references (invalid Lua).
+  H.write(path, ('return vim.json.decode(%q)'):format(vim.json.encode(rules)))
 end
 
 --- Decode the fake-p4 call log.
