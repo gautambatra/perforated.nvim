@@ -25,6 +25,10 @@ function M.parse(name)
 end
 
 --- Create (or reuse) the buffer for a spec, bound to a workspace. Loading starts immediately.
+---
+--- Loads the content directly rather than relying on BufReadCmd: autocmds don't fire from
+--- inside another autocmd (unless it is `nested`), so a `bufload` from e.g. a CursorMoved
+--- handler would otherwise produce an empty buffer.
 ---@param ws perforated.Workspace
 ---@param spec string
 ---@return integer buf
@@ -34,6 +38,9 @@ function M.buffer(ws, spec)
   vim.b[buf].perforated_ws = ws.key
   if not vim.api.nvim_buf_is_loaded(buf) then
     vim.fn.bufload(buf)
+  end
+  if vim.b[buf].perforated_spec ~= spec then
+    M.read(buf) -- BufReadCmd didn't run (nested autocmd) or an earlier load was lost
   end
   return buf
 end
@@ -45,6 +52,8 @@ function M.read(buf)
   if not spec then
     return
   end
+  vim.b[buf].perforated_spec = spec
+  vim.b[buf].perforated_loaded = false
   local wsmod = require('perforated.core.workspace')
   -- Workspace: set by whoever created the buffer, else the buffer the user came from, else
   -- cwd's workspace, else a plain connection.
@@ -60,9 +69,10 @@ function M.read(buf)
   vim.bo[buf].swapfile = false
   vim.bo[buf].bufhidden = 'hide'
   vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '' })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ('loading %s …'):format(spec) })
   vim.bo[buf].modifiable = false
   vim.bo[buf].readonly = true
+  local t0 = vim.uv.hrtime()
   local path = spec:gsub('[#@].*$', '')
   local ft = vim.filetype.match({ filename = path })
   if ft then
@@ -73,8 +83,22 @@ function M.read(buf)
     if not vim.api.nvim_buf_is_valid(buf) then
       return
     end
+    require('perforated.core.debug').log(
+      lines and 'debug' or 'warn',
+      'uri',
+      '%s: %s in %.0fms',
+      spec,
+      lines and (#lines .. ' lines') or ('failed: ' .. tostring(err)),
+      (vim.uv.hrtime() - t0) / 1e6
+    )
     vim.bo[buf].modifiable = true
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or { '[perforated] ' .. tostring(err) })
+    vim.api.nvim_buf_set_lines(
+      buf,
+      0,
+      -1,
+      false,
+      lines or { ('[perforated] could not load %s: %s'):format(spec, tostring(err)) }
+    )
     vim.bo[buf].modifiable = false
     vim.bo[buf].modified = false
     vim.b[buf].perforated_loaded = true

@@ -25,6 +25,7 @@ local LINKS = {
   PerforatedRev = 'Comment',
   PerforatedBadge = 'WarningMsg',
   PerforatedShelved = 'Constant',
+  PerforatedShelvedFile = 'Special',
   PerforatedMark = 'Todo',
   PerforatedFooter = 'StatusLineNC',
   PerforatedLoading = 'Comment',

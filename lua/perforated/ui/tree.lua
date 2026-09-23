@@ -85,11 +85,12 @@ function Tree:is_open(node)
   return o
 end
 
+-- Triangles exist in every common font, nerd or not.
 local function glyphs()
   if require('perforated.ui.icons').style() == 'nerd' then
-    return { open = ' ', closed = ' ', leaf = '  ', mark = '● ' }
+    return { open = '▾ ', closed = '▸ ', leaf = '  ', mark = '● ' }
   end
-  return { open = 'v ', closed = '> ', leaf = '  ', mark = '* ' }
+  return { open = '▾ ', closed = '▸ ', leaf = '  ', mark = '* ' }
 end
 
 --- Replace the tree content and redraw (keeps folds, marks and the cursor's node).

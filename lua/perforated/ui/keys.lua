@@ -1,5 +1,5 @@
 --- Action registry for plugin views. One definition per action drives the buffer keymaps, the
---- `<Space>` action menu, the `?` help and the always-visible footer, so they can't drift apart.
+--- `.` action menu, the `?` help and the always-visible footer, so they can't drift apart.
 ---
 ---   {
 ---     id = 'diff', desc = 'Diff', keys = { 'd' }, p4v = { '<C-d>' },
@@ -25,7 +25,7 @@ local M = {}
 ---@field run fun(items: any[], ctx: table)
 ---@field multi boolean?
 ---@field footer integer?
----@field nomenu boolean?       hide from the <Space> menu (navigation keys)
+---@field nomenu boolean?       hide from the `.` menu (navigation keys)
 
 --- Effective keys of an action after user overrides.
 ---@param a perforated.Action
@@ -142,7 +142,7 @@ function M.valid(actions, node)
   end, actions)
 end
 
---- `<Space>`: menu of the actions valid for the cursor's node.
+--- `.` / right-click: menu of the actions valid for the cursor's node.
 ---@param actions perforated.Action[]
 ---@param view table
 function M.menu(actions, view)
@@ -239,7 +239,11 @@ function M.footer(actions, node, max)
       chunks[#chunks + 1] = { ' ' .. list[i].desc:lower() .. ' ', 'PerforatedDim' }
     end
   end
-  chunks[#chunks + 1] = { ' <Space>', 'PerforatedKey' }
+  for _, a in ipairs(actions) do
+    if a.id == 'menu' then
+      chunks[#chunks + 1] = { ' ' .. (M.keys_of(a)[1] or '.'), 'PerforatedKey' }
+    end
+  end
   chunks[#chunks + 1] = { ' actions ', 'PerforatedDim' }
   chunks[#chunks + 1] = { ' ?', 'PerforatedKey' }
   chunks[#chunks + 1] = { ' help', 'PerforatedDim' }

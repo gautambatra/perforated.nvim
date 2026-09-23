@@ -7,7 +7,7 @@
 ---   Reconcile     local files not opened (scanned only when expanded; cancellable)
 ---
 --- Always fresh: every open/refresh re-queries in one parallel round (+1 call for shelves),
---- painting a skeleton first. Actions come from one registry (keys, <Space> menu, ? help,
+--- painting a skeleton first. Actions come from one registry (keys, `.` menu, ? help,
 --- footer).
 
 local p4 = require('perforated.p4')
@@ -173,8 +173,8 @@ local function build(view, data)
             kind = 'shelved_file',
             item = sf,
             text = {
-              { ('%-10s'):format(sf.action or ''), 'PerforatedAction' },
-              { sf.depotFile, 'PerforatedPath' },
+              { ('%-10s'):format(sf.action or ''), 'PerforatedShelvedFile' },
+              { sf.depotFile, 'PerforatedShelvedFile' },
               { '  #' .. (sf.rev or '?'), 'PerforatedRev' },
             },
           }
@@ -528,7 +528,7 @@ local function actions(view)
     end
   end
   return {
-    -- Navigation (not in the <Space> menu)
+    -- Navigation (not in the action menu)
     {
       id = 'expand',
       desc = 'Expand / toggle',
@@ -620,7 +620,7 @@ local function actions(view)
     {
       id = 'menu',
       desc = 'Action menu',
-      keys = { '<Space>', '<RightMouse>' },
+      keys = { '.', '<RightMouse>' },
       nomenu = true,
       run = function()
         keys.menu(view.actions, view)
@@ -659,25 +659,41 @@ local function actions(view)
     -- Files
     {
       id = 'diff',
-      desc = 'Diff',
+      desc = 'Diff against have revision',
       keys = { 'd' },
       p4v = { '<C-d>' },
-      kinds = { opened_file = true, shelved_file = true },
+      kinds = { opened_file = true },
+      footer = 10,
+      run = function(items)
+        diff_file(items[1])
+      end,
+    },
+    {
+      id = 'diff_shelved',
+      desc = 'Diff shelved vs base revision',
+      keys = { 'd' },
+      p4v = { '<C-d>' },
+      kinds = { shelved_file = true },
       footer = 10,
       run = function(items)
         local it = items[1]
-        if it.depotFile and it.change and not it.clientFile then
-          -- shelved file: base revision vs shelved content
-          local base = it.rev and (it.depotFile .. '#' .. it.rev) or nil
-          require('perforated.diff.view').pair(
-            ws,
-            base and { spec = base } or { empty = 'new file' },
-            { spec = it.depotFile .. '@=' .. it.change },
-            { spec = base, path = it.depotFile }
-          )
-        else
-          diff_file(it)
-        end
+        local base = it.rev and (it.depotFile .. '#' .. it.rev) or nil
+        require('perforated.diff.view').pair(
+          ws,
+          base and { spec = base } or { empty = 'new file' },
+          { spec = it.depotFile .. '@=' .. it.change },
+          { spec = base, path = it.depotFile }
+        )
+      end,
+    },
+    {
+      id = 'view_change',
+      desc = 'View changelist',
+      keys = { 'K' },
+      kinds = { change = true, submitted = true, shelf = true },
+      footer = 12,
+      run = function(items)
+        require('perforated.views.change_info').open(ws, items[1])
       end,
     },
     {
@@ -770,19 +786,14 @@ local function actions(view)
     },
     {
       id = 'yank',
-      desc = 'Copy depot path / CL number',
+      desc = 'Copy CL number',
       keys = { 'y' },
-      p4v = { '<C-S-c>' },
-      kinds = {
-        opened_file = true,
-        shelved_file = true,
-        reconcile_file = true,
-        change = true,
-        submitted = true,
-      },
+      kinds = { change = true, submitted = true },
+      when = function(item)
+        return item.change ~= 'default'
+      end,
       run = function(items)
-        local it = items[1]
-        local text = it.depotFile or it.change
+        local text = items[1].change
         vim.fn.setreg('"', text)
         pcall(vim.fn.setreg, '+', text)
         notify('copied ' .. text)

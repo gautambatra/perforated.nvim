@@ -165,6 +165,9 @@ function M.open(ws, title, entries)
   vim.api.nvim_create_autocmd('CursorMoved', {
     group = group,
     buffer = panel_buf,
+    -- nested: switching files must fire the usual autocmds (BufReadCmd for depot revisions,
+    -- FileType, OptionSet 'diff' for user diff settings, …).
+    nested = true,
     callback = function()
       local row = vim.api.nvim_win_get_cursor(panel)[1]
       if row >= 3 then
@@ -205,6 +208,8 @@ function M.open(ws, title, entries)
     end
   end)
 
+  -- Panel keeps its width; the two diff windows share the rest equally.
+  vim.cmd('wincmd =')
   vim.api.nvim_set_current_win(panel)
   vim.api.nvim_win_set_cursor(panel, { 3, 0 })
   show_entry(1)
