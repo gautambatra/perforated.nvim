@@ -28,6 +28,16 @@ T['jsonl']['severity >= 3 is an error'] = function()
   H.eq(#p.records, 0)
 end
 
+T['jsonl']['{ data, level } records (p4 status) are messages'] = function()
+  local p = parse.jsonl(table.concat({
+    '{"action":"delete","clientFile":"/w/c.txt","depotFile":"//depot/c.txt","localFile":"c.txt"}',
+    '{"data":"//depot/c.txt - also opened by alice@ws2","level":1}',
+    '',
+  }, '\n'))
+  H.eq(#p.records, 1)
+  H.eq(p.warnings, { '//depot/c.txt - also opened by alice@ws2' })
+end
+
 T['jsonl']['tolerates blank lines and garbage'] = function()
   local p = parse.jsonl('\n{"User":"alice"}\nnot json\n')
   H.eq(p.records, { { User = 'alice' } })

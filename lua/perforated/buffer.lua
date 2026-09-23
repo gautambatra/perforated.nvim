@@ -37,7 +37,10 @@ local group ---@type integer
 ---@param buf integer
 ---@return perforated.BufState?
 function M.get(buf)
-  return states[buf or vim.api.nvim_get_current_buf()]
+  if buf == nil or buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  return states[buf]
 end
 
 -- ---------------------------------------------------------------------------------------------

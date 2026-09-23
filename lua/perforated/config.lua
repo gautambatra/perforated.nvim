@@ -99,8 +99,9 @@ function M.unknown_keys()
     for k, v in pairs(user) do
       local path = prefix == '' and tostring(k) or (prefix .. '.' .. tostring(k))
       if def[k] == nil then
-        -- Keys whose default is nil (e.g. checkout.dirs) are valid.
-        if not M._nil_ok[path] then
+        -- Keys whose default is nil (e.g. checkout.dirs) are valid; `keys.<action>` overrides
+        -- any action's keys.
+        if not M._nil_ok[path] and not path:match('^keys%.') then
           out[#out + 1] = path
         end
       elseif

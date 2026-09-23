@@ -42,6 +42,7 @@ end
 
 local subs = {
   'add',
+  'change',
   'debug',
   'diff',
   'dismiss',
@@ -55,6 +56,7 @@ local subs = {
   'refresh',
   'revert',
   'status',
+  'view',
 }
 
 vim.api.nvim_create_user_command('P4', function(o)
