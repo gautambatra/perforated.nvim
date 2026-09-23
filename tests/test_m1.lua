@@ -295,6 +295,38 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   H.eq(child.wo.diff, false)
 end
 
+T['ops'][':P4 diff fires User PerforatedDiffOpen / PerforatedDiffClose (once)'] = function()
+  child.lua([[
+    _G.events = {}
+    for _, name in ipairs({ 'PerforatedDiffOpen', 'PerforatedDiffClose' }) do
+      vim.api.nvim_create_autocmd('User', {
+        pattern = name,
+        callback = function(ev) table.insert(_G.events, { name = name, data = ev.data }) end,
+      })
+    end
+  ]])
+  local file_buf = child.api.nvim_get_current_buf()
+  child.cmd('P4 diff')
+  local ev = child.lua_get('_G.events')
+  H.eq(#ev, 1)
+  H.eq(ev[1].name, 'PerforatedDiffOpen')
+  local d = ev[1].data
+  H.eq(d.tab, child.api.nvim_get_current_tabpage())
+  H.eq(d.bufs.right, file_buf)
+  H.eq(child.api.nvim_buf_get_name(d.bufs.left), 'perforated:////depot/a.txt#1')
+  H.eq(d.spec, '//depot/a.txt#1')
+  H.eq(child.api.nvim_win_get_buf(d.wins.left), d.bufs.left)
+  -- Closing via :tabclose (not q) must still fire the close event exactly once.
+  child.cmd('tabclose')
+  H.eq(H.wait(child, '#_G.events == 2'), true)
+  vim.uv.sleep(200)
+  ev = child.lua_get('_G.events')
+  H.eq(#ev, 2)
+  H.eq(ev[2].name, 'PerforatedDiffClose')
+  H.eq(ev[2].data.bufs.right, file_buf)
+  H.eq(child.wo.diff, false)
+end
+
 T['ops'][':P4 diff survives a user OptionSet autocmd that throws'] = function()
   child.lua([[
     vim.api.nvim_create_autocmd('OptionSet', {

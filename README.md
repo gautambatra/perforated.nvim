@@ -118,6 +118,18 @@ Saving a new file inside the workspace offers to `p4 add` it, using the same men
 - Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
 - `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
   environment. GUI tools run detached; terminal tools open in a terminal tab.
+- **Events for customising the diff tab.** `User PerforatedDiffOpen` fires when the diff tab is
+  ready, and `User PerforatedDiffClose` fires once it closes, whether by `q`, `:q` or
+  `:tabclose`. `ev.data` holds `{ tab, wins = { left, right }, bufs = { left, right }, spec,
+  path }`. Example:
+  ```lua
+  vim.api.nvim_create_autocmd('User', {
+    pattern = 'PerforatedDiffOpen',
+    callback = function(ev) vim.wo[ev.data.wins.left].cursorline = true end,
+  })
+  ```
+  For settings that should apply to every diff (`nvim -d`, `:diffsplit`, `:P4 diff`), use
+  `OptionSet` with pattern `diff` instead, and restore them when the last diff window closes.
 - Any depot revision can be opened as a read-only buffer, e.g.
   `:e perforated:////depot/path/file.c\#3` (escape `#` in `:e`).
 
