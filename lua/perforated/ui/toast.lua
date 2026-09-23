@@ -164,6 +164,14 @@ end
 function M.show(title, lines, level)
   setup()
   local t = { title = title, lines = lines, level = level, time = os.time() }
+  require('perforated.core.debug').info(
+    'toast',
+    '%s: %s (focused=%s backend=%s)',
+    title,
+    table.concat(lines, ' | '),
+    tostring(M.focused),
+    cfg().backend
+  )
   table.insert(history, t)
   local max = cfg().history
   while #history > max do

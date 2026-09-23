@@ -8,6 +8,7 @@
 
 local p4 = require('perforated.p4')
 local config = require('perforated.config')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -94,6 +95,16 @@ end
 ---@param res perforated.RunResult
 ---@param count integer
 local function report(verb, res, count)
+  dbg.log(
+    (#res.errors > 0 or not res.ok) and 'warn' or 'info',
+    'checkout',
+    '%s: %d file(s) ok=%s errors=%s warnings=%s',
+    verb,
+    count,
+    tostring(res.ok),
+    table.concat(res.errors, ' | '),
+    table.concat(res.warnings, ' | ')
+  )
   if #res.errors > 0 then
     local head = res.errors[1]
     if #res.errors > 1 then
@@ -157,6 +168,7 @@ function M.edit(ws, paths, cl, cb)
     end
     local ok = #res.records > 0 and #res.errors == 0
     if not ok then
+      dbg.warn('checkout', 'edit failed; restoring file modes for %d path(s)', #paths)
       restore()
     end
     report('edit', res, #res.records)
@@ -350,6 +362,15 @@ function M.prompt(buf, verb)
   })
   c.prompting = false
   local v = choice and choice.value or 'skip'
+  dbg.info(
+    'checkout',
+    'buf %d %s prompt: choice=%s replayed=%d key(s) sticky=%s',
+    buf,
+    verb,
+    v,
+    #replay,
+    tostring(ws.sticky_cl)
+  )
   if v == 'sticky' then
     run(nil)
   elseif v == 'pick' then
@@ -394,6 +415,18 @@ local function on_first_change(buf)
     return
   end
   local c = state(buf)
+  dbg.debug(
+    'checkout',
+    'buf %d first change: status=%s skip=%s pending=%s scheduled=%s never=%s auto=%s allowed=%s',
+    buf,
+    st.status,
+    tostring(c.skip),
+    tostring(c.pending),
+    tostring(c.scheduled),
+    tostring(session.never),
+    tostring(session.auto),
+    tostring(allowed(st.path))
+  )
   if st.status == 'pending' then
     c.wanted = true -- decide once fstat answers
     return
@@ -467,9 +500,17 @@ local function before_write(buf)
     M.edit(st.ws, { st.path }, st.ws.sticky_cl)
   end
   if c.pending then
+    local t0 = vim.uv.hrtime()
     vim.wait(config.get().runner.timeout, function()
       return not c.pending
     end, 10)
+    dbg.debug(
+      'checkout',
+      'buf %d write waited %.0fms for edit (done=%s)',
+      buf,
+      (vim.uv.hrtime() - t0) / 1e6,
+      tostring(not c.pending)
+    )
   end
 end
 

@@ -151,6 +151,21 @@ Where it's used:
 | Time-lapse: lines changed in current revision | loclist | added/changed lines at rev N |
 | p4 command errors that name files (e.g. revert on unopened files, batch edit failures) | qf | file + error text (instead of a wall of notifications) |
 
+## Debug log (added after M1)
+- **Off by default, free when off.**
+- **Turned on** by config `debug.enabled`, env `PERFORATED_DEBUG=1|<level>` (no config change needed on a live machine), or `:P4 debug on [level]`.
+- **One file,** `stdpath('log')/perforated.log`, shared by sessions: every line has a timestamp, level, pid and scope. Buffered writes every 250 ms (errors flushed immediately); rotates at `debug.max_kb`.
+- **Logged:**
+  - gate decisions, including why a file isn't a workspace file (gate logging only loads when debugging is requested, so dormancy is preserved)
+  - every p4 call: argv, cwd, env mode, stdin summary, timing, result, errors, stderr
+  - workspace, connection and queue state changes
+  - buffer transitions and base loads
+  - check-out decisions and prompt choices
+  - poll probes and refreshes
+  - toasts
+- **Never logged:** `p4 login`/`passwd` stdin, or `P4PASSWD` values.
+- **Commands:** `:P4 debug snapshot` dumps workspaces, buffers, queue and recent p4 calls for bug reports; also `:P4 debug open|clear|off`.
+
 ## Pickers
 - Telescope is the author's primary, but a **picker-agnostic adapter** (telescope, fzf-lua, snacks, mini.pick, fallback `vim.ui.select`).
 

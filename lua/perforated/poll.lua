@@ -8,6 +8,7 @@
 --- Newly stale opened files raise a toast (once per head revision).
 
 local p4 = require('perforated.p4')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -145,6 +146,15 @@ function M.refresh(ws, opts, cb)
     end
     ws.opened = opened
     ws.opened_count, ws.stale_count, ws.unresolved_count = #recs, stale, unres
+    dbg.info(
+      'poll',
+      '%s refresh: opened=%d stale=%d unresolved=%d newly-reported=%d',
+      ws.key,
+      #recs,
+      stale,
+      unres,
+      #fresh
+    )
     -- Push fresh records into loaded buffers (cheap: no base refetch unless the have rev moved).
     for buf, st in pairs(require('perforated.buffer').all()) do
       if st.ws == ws and st.rec and opened[st.rec.depotFile] then
@@ -171,6 +181,14 @@ end
 ---@param ws perforated.Workspace
 function M.probe(ws)
   if ws.idle or ws.conn.state ~= 'online' or not require('perforated.ui.toast').focused then
+    dbg.trace(
+      'poll',
+      '%s probe skipped (idle=%s conn=%s focused=%s)',
+      ws.key,
+      tostring(ws.idle),
+      ws.conn.state,
+      tostring(require('perforated.ui.toast').focused)
+    )
     return
   end
   local files = watched_files(ws)
@@ -185,6 +203,14 @@ function M.probe(ws)
       ws.clmemo[c] = ws.clmemo[c]
         or { user = r.user, client = r.client, time = r.time, desc = r.desc }
     end
+    dbg.debug(
+      'poll',
+      '%s probe: %d file(s) newest change=%s last=%s',
+      ws.key,
+      #files,
+      tostring(max),
+      tostring(ws.last_max)
+    )
     if ws.last_max and max <= ws.last_max then
       return
     end

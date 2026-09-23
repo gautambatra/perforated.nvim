@@ -45,7 +45,7 @@ end
 local function check_env()
   h.start('Perforce environment')
   local env = require('perforated.core.env')
-  local gate = package.loaded['perforated.gate']
+  local gate = require('perforated.gate')
   local name = env.config_name()
   if name then
     h.ok('P4CONFIG = ' .. name)
@@ -157,6 +157,20 @@ local function check_config()
   end
 end
 
+local function check_debug()
+  h.start('Debug log')
+  local dbg = package.loaded['perforated.core.debug']
+  if dbg and dbg.enabled then
+    h.ok('Debug logging is ON → ' .. dbg.file())
+  else
+    local default = require('perforated.core.debug').default_file()
+    h.info(
+      'Debug logging is off. Enable: :P4 debug on | PERFORATED_DEBUG=1 | debug = { enabled = true }'
+    )
+    h.info('Log file: ' .. default)
+  end
+end
+
 local function check_integrations()
   h.start('Optional integrations')
   for _, mod in ipairs({
@@ -212,6 +226,7 @@ function M.check()
     end
   end
   check_config()
+  check_debug()
   check_integrations()
   check_terminal()
 end

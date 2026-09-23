@@ -15,6 +15,7 @@ local queue = require('perforated.core.queue')
 local conn = require('perforated.core.conn')
 local parse = require('perforated.core.parse')
 local events = require('perforated.core.events')
+local dbg = require('perforated.core.debug')
 
 local M = {}
 
@@ -104,6 +105,14 @@ function M.get_or_create(spec)
   }, Workspace)
   ws.conn = conn.new(ws)
   registry[spec.key] = ws
+  dbg.info(
+    'workspace',
+    'created %s mode=%s anchor=%s config=%s',
+    spec.key,
+    spec.mode,
+    tostring(ws.anchor),
+    tostring(spec.config_file)
+  )
   if spec.mode ~= 'connection' then
     ensure_autocmds()
     events.emit('WorkspaceActivated', { ws = ws.key })
@@ -257,6 +266,17 @@ end
 
 ---@param rec table
 function Workspace:_set_info(rec)
+  dbg.info(
+    'workspace',
+    '%s info: client=%s root=%s user=%s server=%s case=%s stream=%s',
+    self.key,
+    tostring(rec.clientName),
+    tostring(rec.clientRoot),
+    tostring(rec.userName),
+    tostring(rec.serverVersion),
+    tostring(rec.caseHandling),
+    tostring(rec.clientStream)
+  )
   self.info = rec
   self.icase = rec.caseHandling == 'insensitive'
   if rec.clientRoot and rec.clientName and rec.clientName ~= '*unknown*' then
@@ -312,6 +332,7 @@ function Workspace:_maybe_idle()
     end
   end
   self.idle = true
+  dbg.info('workspace', '%s idle (no buffers, cwd outside)', self.key)
   self.conn:dispose()
   self.fstat = {}
   self.clmemo = {}

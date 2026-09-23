@@ -172,6 +172,40 @@ A `User PerforatedStatus` event fires whenever they change.
   background retry backs off from 5 s to 5 min. The statusline shows `⊘`.
 - **Command log:** `:P4 log` lists every p4 command the plugin ran, with timings.
 
+### ✅ Debug log
+
+For diagnosing issues on a live machine, perforated can write a detailed log file. The log is
+off by default, and costs nothing while off. There are three ways to turn it on:
+
+```sh
+PERFORATED_DEBUG=1 nvim          # for one session, no config change (or PERFORATED_DEBUG=trace)
+```
+```vim
+:P4 debug on [trace|debug|info]  " at runtime
+```
+```lua
+opts = { debug = { enabled = true } }  -- always
+```
+
+The file is `stdpath('log')/perforated.log`, typically `~/.local/state/nvim/perforated.log`. It
+records:
+- why each file was or wasn't treated as a Perforce file
+- every p4 command, with its working directory, timing, result, errors and stderr
+- workspace and connection state changes (offline, login)
+- buffer status changes, and check-out prompts and choices
+- background stale checks and notifications
+
+Each line carries the Neovim session's process ID, so several sessions can share the file. It
+rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `p4 login` and
+`P4PASSWD` are redacted.
+
+| Command | |
+|---|---|
+| `:P4 debug` | Show whether logging is on and where the file is |
+| `:P4 debug on [level]` / `off` | Toggle at runtime |
+| `:P4 debug snapshot` | Write the current state (workspaces, buffers, queue, recent p4 calls) to the log, for bug reports |
+| `:P4 debug open` / `clear` | Open or delete the log file |
+
 ### ✅ Icons
 
 - File-type icons come from mini.icons or nvim-web-devicons, when installed.
@@ -209,6 +243,7 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 | `:P4 dismiss` | Close notifications |
 | `:P4 info` | Workspace, client, root, user, server, connection state |
 | `:P4 log` | Every p4 command the plugin ran, with timings |
+| `:P4 debug [on [level]\|off\|open\|clear\|snapshot]` | Diagnostic log file (see Debug log) |
 | `:P4 login` | Log in (password prompt) |
 | `:P4 refresh[!]` | Refresh cached state (`!` also forgets workspace detection) |
 
@@ -280,6 +315,12 @@ These are the defaults for everything that has an effect today:
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 }, -- ms
   cache = { content_mb = 32 }, -- in-memory cache of depot revisions
   log = { size = 500 }, -- entries kept for :P4 log
+  debug = {
+    enabled = false, -- or env PERFORATED_DEBUG=1|trace, or :P4 debug on
+    level = 'debug', -- 'error' | 'warn' | 'info' | 'debug' | 'trace'
+    file = nil, -- default: stdpath('log')/perforated.log
+    max_kb = 5120, -- rotate to <file>.1 above this size
+  },
 }
 ```
 
@@ -296,12 +337,14 @@ Budgets are enforced by `make bench` in CI:
 
 | Metric | Budget | Current |
 |---|---|---|
-| Startup cost (`plugin/`) | < 0.5 ms | ~0.44 ms |
+| Startup cost (`plugin/`) | < 0.5 ms | ~0.3 ms |
 | Opening a file outside a workspace | < 0.3 ms | ~0.002 ms |
-| Opening a workspace file (synchronous part) | < 0.3 ms | ~0.03 ms |
-| Sign refresh, 10k-line file (UI time, debounced) | ≤ 5 ms | ~4.3 ms |
+| Opening a workspace file (synchronous part) | < 0.3 ms | ~0.015 ms |
+| Sign refresh, 10k-line file (UI time, debounced) | ≤ 5 ms | ~2–3 ms |
 | Lua memory for an active workspace | ≤ 250 KB | ~200 KB |
 | Lua memory per attached buffer | ≤ 2 KB | ~1.6 KB |
+
+The timing figures are the best of several runs, which filters out noise from other processes.
 
 ## Development
 
