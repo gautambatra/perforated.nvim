@@ -1,0 +1,105 @@
+#!/usr/bin/env -S nvim -l
+-- Fake `p4` for tests.
+--
+-- Behaviour is driven by a Lua rules file ($FAKE_P4_RULES) returning a list of rules:
+--   { match = '^info', records = { {...} }, stdout = '...', stderr = '...', code = 0,
+--     sleep = 0.2, hang = true, unless = '/path', touch = '/path' }
+-- `unless`: skip the rule when that file exists; `touch`: create that file when the rule fires
+-- (lets tests model state changes such as logging in).
+-- `match` is a Lua pattern tested against the command line after the global options
+-- (-Mj, -ztag, -c/-u/-p/-C/-d/-x/-b <arg>), joined with spaces. First match wins.
+--
+-- Every invocation is appended as one JSON line to $FAKE_P4_LOG:
+--   { argv, cmd, cwd, stdin, env = { P4DIFF, P4MERGE, P4EDITOR, P4PAGER, PWD, P4CONFIG } }
+
+local argv = {}
+for i = 1, #arg do
+  argv[i] = arg[i]
+end
+
+-- Strip global options to find the command.
+local i = 1
+local with_arg = {
+  ['-c'] = true,
+  ['-u'] = true,
+  ['-p'] = true,
+  ['-C'] = true,
+  ['-d'] = true,
+  ['-x'] = true,
+  ['-b'] = true,
+  ['-P'] = true,
+  ['-H'] = true,
+  ['-r'] = true,
+}
+while argv[i] and argv[i]:sub(1, 1) == '-' do
+  if with_arg[argv[i]] then
+    i = i + 2
+  else
+    i = i + 1
+  end
+end
+local cmd = table.concat(argv, ' ', i)
+
+local stdin = ''
+if argv[1] ~= '-V' then
+  stdin = io.read('a') or ''
+end
+
+local log = os.getenv('FAKE_P4_LOG')
+if log and log ~= '' then
+  local env = {}
+  for _, k in ipairs({ 'P4DIFF', 'P4MERGE', 'P4EDITOR', 'P4PAGER', 'PWD', 'P4CONFIG', 'P4CLIENT' }) do
+    env[k] = os.getenv(k) or vim.NIL
+  end
+  local fd = assert(io.open(log, 'a'))
+  fd:write(
+    vim.json.encode({ argv = argv, cmd = cmd, cwd = vim.uv.cwd(), stdin = stdin, env = env }),
+    '\n'
+  )
+  fd:close()
+end
+
+if argv[1] == '-V' then
+  io.stdout:write('Rev. P4/FAKE/2025.2/0 (2026/01/01).\n')
+  os.exit(0)
+end
+
+local rules = {}
+local rules_file = os.getenv('FAKE_P4_RULES')
+if rules_file and rules_file ~= '' then
+  rules = dofile(rules_file)
+end
+
+for _, rule in ipairs(rules) do
+  if cmd:find(rule.match) and not (rule.unless and vim.uv.fs_stat(rule.unless)) then
+    if rule.touch then
+      local t = assert(io.open(rule.touch, 'w'))
+      t:close()
+    end
+    if rule.sleep then
+      vim.uv.sleep(math.floor(rule.sleep * 1000))
+    end
+    if rule.hang then
+      vim.uv.sleep(600000)
+    end
+    if rule.records then
+      for _, rec in ipairs(rule.records) do
+        io.stdout:write(vim.json.encode(rec), '\n')
+      end
+    end
+    if rule.stdout then
+      io.stdout:write(rule.stdout)
+    end
+    if rule.stderr then
+      io.stderr:write(rule.stderr)
+    end
+    io.stdout:flush()
+    os.exit(rule.code or 0)
+  end
+end
+
+io.stdout:write(
+  vim.json.encode({ data = 'fake p4: no rule for: ' .. cmd .. '\n', generic = 1, severity = 3 }),
+  '\n'
+)
+os.exit(1)
