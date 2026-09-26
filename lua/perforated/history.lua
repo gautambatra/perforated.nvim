@@ -80,43 +80,42 @@ end
 ---@field cls integer[]           line → changelist that last changed it
 ---@field meta table<integer, { change: integer, user: string?, time: string?, desc: string?, client: string? }>  time: 'YYYY/MM/DD hh:mm:ss' (annotate -u)
 
---- Split the (possibly chunked) annotate data records into lines with their changelist, and
---- collect each changelist's user and date (`-u`).
+--- Walk the annotate data records: each line's changelist, and each changelist's user and date
+--- (`-u`). The text itself isn't kept (the view shows the buffer), so this is one byte check
+--- per record. Long lines arrive in several chunks; a line ends with a chunk ending in "\n".
 ---@param records table[]
----@return table head, string[] lines, integer[] cls, table<integer, table> meta
+---@return table head, integer count, integer[] cls, table<integer, table> meta
 local function annotate_lines(records)
-  local head, lines, cls, meta = nil, {}, {}, {}
-  local pending = nil -- a data chunk without a trailing newline (long lines are split)
-  local pending_cl
-  for _, r in ipairs(records) do
-    if r.depotFile and not r.data then
-      head = head or r
-    elseif r.data then
-      local d = r.data
-      local cl = tonumber(r.lower or r.upper) or 0
-      if pending then
-        d, cl = pending .. d, pending_cl
-        pending = nil
-      elseif r.user and not meta[cl] then
-        meta[cl] = { change = cl, user = r.user, time = r.time, client = r.client }
-      end
-      if d:sub(-1) == '\n' then
-        d = d:sub(1, -2)
-        if d:sub(-1) == '\r' then
-          d = d:sub(1, -2)
+  local head, cls, meta = nil, {}, {}
+  local n = 0
+  local open_cl = nil -- changelist of a line whose chunks haven't ended yet
+  for i = 1, #records do
+    local r = records[i]
+    local d = r.data
+    if d then
+      local cl = open_cl
+      if not cl then
+        cl = tonumber(r.lower) or tonumber(r.upper) or 0
+        if r.user and not meta[cl] then
+          meta[cl] = { change = cl, user = r.user, time = r.time, client = r.client }
         end
-        lines[#lines + 1] = d
-        cls[#cls + 1] = cl
-      else
-        pending, pending_cl = d, cl
       end
+      if d:byte(-1) == 10 then
+        n = n + 1
+        cls[n] = cl
+        open_cl = nil
+      else
+        open_cl = cl
+      end
+    elseif r.depotFile and not head then
+      head = r
     end
   end
-  if pending then
-    lines[#lines + 1] = pending
-    cls[#cls + 1] = pending_cl
+  if open_cl then
+    n = n + 1
+    cls[n] = open_cl
   end
-  return head or {}, lines, cls, meta
+  return head or {}, n, cls, meta
 end
 M._annotate_lines = annotate_lines
 
@@ -213,7 +212,7 @@ function M.annotate(ws, spec, opts, cb)
   end
   args[#args + 1] = spec
   ws:run(args, {}, function(res)
-    local head, lines, cls, meta = annotate_lines(res.records)
+    local head, count, cls, meta = annotate_lines(res.records)
     if head.depotFile then
       for _, c in ipairs(cls) do
         meta[c] = meta[c] or { change = c }
@@ -222,7 +221,7 @@ function M.annotate(ws, spec, opts, cb)
         depotFile = head.depotFile,
         rev = head.rev,
         change = head.change,
-        count = #lines,
+        count = count,
         cls = cls,
         meta = meta,
       }

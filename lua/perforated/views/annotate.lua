@@ -132,8 +132,9 @@ function M.render(view)
   local width = require('perforated.config').get().annotate.width
   local lines, hls, line_cl = {}, {}, {}
   local labels, groups = {}, {} -- one formatted label and group per changelist
+  local identity = not view.local_file
   for l = 1, n do
-    local b = map(l)
+    local b = identity and l or map(l)
     local cl = b and cls[b] or nil
     line_cl[l] = cl or false
     if cl then
