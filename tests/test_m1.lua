@@ -289,6 +289,8 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   H.eq(child.api.nvim_buf_get_name(left), 'perforated:////depot/a.txt#1')
   wait(('vim.b[%d].perforated_loaded == true'):format(left))
   H.eq(child.api.nvim_buf_get_lines(left, 0, -1, false), { 'one', 'two', 'three', 'four', 'five' })
+  H.eq(child.cmd_capture('messages'):find('W10', 1, true), nil) -- no "Changing a readonly file"
+  H.eq(child.api.nvim_get_option_value('readonly', { buf = left }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[1] }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[2] }), true)
   child.api.nvim_set_current_win(wins[1])

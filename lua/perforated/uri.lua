@@ -68,6 +68,7 @@ function M.read(buf)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].swapfile = false
   vim.bo[buf].bufhidden = 'hide'
+  vim.bo[buf].readonly = false -- a re-read: filling a 'readonly' buffer warns (W10)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ('loading %s …'):format(spec) })
   vim.bo[buf].modifiable = false
@@ -91,6 +92,8 @@ function M.read(buf)
       lines and (#lines .. ' lines') or ('failed: ' .. tostring(err)),
       (vim.uv.hrtime() - t0) / 1e6
     )
+    -- 'readonly' off while filling it: changing a readonly buffer warns (W10).
+    vim.bo[buf].readonly = false
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(
       buf,
@@ -100,6 +103,7 @@ function M.read(buf)
       lines or { ('[perforated] could not load %s: %s'):format(spec, tostring(err)) }
     )
     vim.bo[buf].modifiable = false
+    vim.bo[buf].readonly = true
     vim.bo[buf].modified = false
     vim.b[buf].perforated_loaded = true
     for _, win in ipairs(vim.fn.win_findbuf(buf)) do
