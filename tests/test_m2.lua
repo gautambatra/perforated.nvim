@@ -118,6 +118,7 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(#child.api.nvim_list_tabpages(), 2)
   H.eq(has_line('Client alice_ws'), true)
   H.eq(has_line('Sync CL: 1  initial import'), true) -- the newest changelist we have
+  H.eq(lines()[goto_line('Sync CL:')]:match('^(%s*)Sync CL:'), '      ') -- tree indent + 4 spaces
   H.eq(goto_line('Sync CL:') < goto_line('Pending'), true)
   H.eq(vim.trim(lines()[goto_line('Pending') - 1]), '') -- a blank line between sections
   H.eq(vim.trim(lines()[goto_line('Recent submitted') - 1]), '')
