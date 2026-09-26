@@ -482,6 +482,16 @@ T['client view']['reconcile scans on expand; a opens found files'] = function()
   H.eq(opened()['//depot/new.txt'], 'default')
 end
 
+T['client view']['multi-key actions (gY) can be chosen from the action menu'] = function()
+  open_view()
+  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 3 end]])
+  goto_line('b.txt')
+  child.type_keys('.')
+  vim.uv.sleep(300) -- the menu waits for keys (no RPC meanwhile)
+  child.type_keys('g', 'Y')
+  wait([[_G.asked == 'Sync the whole workspace?']])
+end
+
 T['client view']['Q sends a CL to quickfix; action menu lists only valid actions'] = function()
   open_view()
   goto_line('default')

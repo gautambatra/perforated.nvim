@@ -88,10 +88,20 @@ function M.menu(opts)
   for _, it in ipairs(opts.items) do
     by_key[it.key] = it
   end
+  -- Multi-key choices (`gY`, `g@`): keys typed so far that start a longer key wait for the rest.
+  local function is_prefix(typed)
+    for k in pairs(by_key) do
+      if #k > #typed and k:sub(1, #typed) == typed then
+        return true
+      end
+    end
+    return false
+  end
   local grace = opts.grace or 0
   local opened = vim.uv.now()
   local replay = {}
   local choice
+  local typed = ''
   while true do
     local ok, raw = pcall(vim.fn.getcharstr)
     if not ok then
@@ -100,11 +110,21 @@ function M.menu(opts)
     local key = vim.fn.keytrans(raw)
     if vim.uv.now() - opened < grace then
       replay[#replay + 1] = raw
-    elseif key == '<Esc>' or key == 'q' or key == '<C-C>' then
+    elseif key == '<Esc>' or key == '<C-C>' or (key == 'q' and typed == '' and not by_key.q) then
       break
-    elseif by_key[key] then
-      choice = by_key[key]
-      break
+    else
+      typed = typed .. key
+      if by_key[typed] then
+        choice = by_key[typed]
+        break
+      elseif not is_prefix(typed) then
+        -- Not a known sequence: start over from this key.
+        if by_key[key] then
+          choice = by_key[key]
+          break
+        end
+        typed = is_prefix(key) and key or ''
+      end
     end
   end
   M.active = nil
