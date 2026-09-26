@@ -161,6 +161,8 @@ end
 ---@field force boolean?         bypass a paused queue group (login)
 ---@field no_auth_retry boolean?
 ---@field cwd string?           override the working directory (connection context only)
+---@field on_record fun(rec: table)?  streamed records (fast context; see runner)
+---@field on_spawn fun(ctl: { cancel: fun() })?  the running process's control
 
 --- Run a p4 command for this workspace through the shared queue.
 ---@param args string[]
@@ -200,6 +202,8 @@ function Workspace:run(args, opts, cb)
         timeout = timeout,
         env_mode = opts.env_mode,
         ws = self.key,
+        on_record = opts.on_record,
+        on_spawn = opts.on_spawn,
       }, done)
     end,
     cb = function(res)

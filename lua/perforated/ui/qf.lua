@@ -209,6 +209,15 @@ on_qf_buf = function(buf)
       end
     end)
   end, 'perforated: move entry to changelist')
+  map('R', function()
+    local ws, path = entry_ws()
+    if not ws then
+      return vim.notify('[perforated] no workspace file under cursor')
+    end
+    require('perforated.resolve').run(ws, { path }, function()
+      refresh_current()
+    end)
+  end, 'perforated: resolve entry')
   map('d', function()
     local it = entry_under_cursor()
     if it and it.valid == 1 and it.bufnr > 0 then

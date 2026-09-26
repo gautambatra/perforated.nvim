@@ -38,6 +38,17 @@ T['jsonl']['{ data, level } records (p4 status) are messages'] = function()
   H.eq(p.warnings, { '//depot/c.txt - also opened by alice@ws2' })
 end
 
+T['jsonl']['{ data, level } messages are never errors, whatever the level'] = function()
+  local p = parse.jsonl(table.concat({
+    '{"data":"Diff chunks: 0 yours + 0 theirs + 0 both + 1 conflicting","level":34}',
+    '{"data":"//alice_ws/a.txt - resolve skipped.","level":0}',
+    '{"data":"No files to submit.\\n","generic":17,"severity":3}',
+    '',
+  }, '\n'))
+  H.eq(#p.warnings, 2)
+  H.eq(p.errors, { 'No files to submit.' })
+end
+
 T['jsonl']['tolerates blank lines and garbage'] = function()
   local p = parse.jsonl('\n{"User":"alice"}\nnot json\n')
   H.eq(p.records, { { User = 'alice' } })

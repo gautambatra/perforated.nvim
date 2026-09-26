@@ -146,6 +146,39 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **Swarm:** `gx` opens a changelist's review and `gX` copies its URL. The URL comes from
   `swarm.url` or the server's `P4.Swarm.URL` property.
 
+### ✅ Shelve, submit, sync, resolve, integrate
+
+- **Shelve (`s`), unshelve (`S`), delete shelved files (`z`)** on a changelist or on marked
+  files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
+  [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
+  shelf's own changelist when it's yours, otherwise you pick one; files that need a resolve are
+  listed in quickfix.
+- **Submit (`P` / `<C-s>`, `:P4 submit [CL]`):** a confirmation float shows the description and
+  file count, and warns about out-of-date, unresolved or shelved files. `s` submits, `e` edits
+  the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
+- **Sync (`gy`, `:P4 sync [path|%|@CL|#head]`):** open buffers reload without "file changed"
+  prompts, and their signs follow the new revision. Files that need attention (can't clobber,
+  must resolve) go to quickfix.
+- **Watch or stop long operations:** a sync or submit shows a live progress message (files so
+  far, last file, elapsed time). `:P4 jobs` lists running jobs in a float that updates live,
+  where `x` stops one; `:P4 cancel` stops them all. p4 is sent SIGTERM, then SIGKILL after 2 s.
+  Stopping a sync midway is safe: p4 updates your have list file by file.
+- **Resolve (`R`, `:P4 resolve [file…]`):** `resolve -am` first, so p4 takes every clean merge.
+  Each remaining conflict opens your merge tool (`$P4MERGE`, or `merge.tool`) as
+  `tool base theirs yours merged`, asynchronously. When it exits 0 with a changed result, the
+  result is written (through the buffer if it's open) and accepted. Anything else stays
+  unresolved and goes to quickfix, where `R` on an entry tries again. There's no merge logic in
+  the plugin.
+- **Delete and move:** `:P4 delete [file…]` (after a confirmation; the buffer is closed) and
+  `:P4 move {new path}` (opens the file for edit if needed; the buffer follows the file and
+  keeps any unsaved edits).
+- **Integrate / cherry-pick (`I` on a submitted changelist, `:P4 integrate [CL]`):** the source
+  is the changelist's common directory. You give the target as a path (`//depot/rel/...`) or a
+  branch spec (`-b name`), remembered for the session, and pick the target changelist. A
+  preview goes to quickfix, and after you confirm the integrate runs and resolves (clean merges
+  accepted, conflicts to the merge tool). `:P4 integrate` with no number asks for a source path
+  and lets you pick one of its changelists.
+
 ### ✅ Pickers
 
 Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
@@ -338,7 +371,6 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 
 | Milestone | Features |
 |---|---|
-| M4 | Shelve / unshelve (file and CL), resolve (auto-merge, then your `$P4MERGE`), submit, sync, delete, move/rename, integrate (cherry-pick a CL) |
 | M5 | Time-lapse view (step through revisions instantly) |
 | M6 | P4V-style time-lapse slider, `p4vc` escape hatches, polish |
 
@@ -347,8 +379,8 @@ The detailed plan is in [docs/plan.md](docs/plan.md). Agreed behaviour is in
 
 ## Commands
 
-Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on the subcommand
-(`:P4 revert!`).
+Every command also has a flat alias (`:P4edit`, `:P4diff`, …), defined the first time you use
+it. A bang goes on the subcommand (`:P4 revert!`).
 
 | Command | Description |
 |---|---|
@@ -361,6 +393,15 @@ Every command also has a flat alias (`:P4edit`, `:P4diff`, …). A bang goes on 
 | `:P4 annotate [//depot/path#rev]` | Annotate split for the current file (or a depot revision) |
 | `:P4 blame [on\|off]` | Toggle current-line blame |
 | `:P4 lookup [what]` | Go to a changelist number, a path's history or a user's changelists |
+| `:P4 shelve [-c CL] [-d] [file…]` | Shelve a changelist (or files); `-d` deletes the shelf |
+| `:P4 unshelve CL [-c target] [file…]` | Unshelve |
+| `:P4 submit [CL\|default]` | Submit (with a confirmation) |
+| `:P4 sync [path\|%\|@CL\|#head …]` | Sync (no args: the whole workspace) |
+| `:P4 jobs` / `:P4 cancel` | Watch running syncs and submits / stop them |
+| `:P4 resolve [file…]` | Resolve (auto-merge, then your merge tool) |
+| `:P4 delete [file…]` | Open for delete |
+| `:P4 move {new}` | Move/rename the current file |
+| `:P4 integrate [CL]` | Cherry-pick a submitted changelist |
 | `:P4 edit [-c CL] [file…]` | Open for edit (sticky CL, else default) |
 | `:P4 add [-c CL] [file…]` | Open for add |
 | `:P4 revert[!] [-a] [file…]` | Revert; `!` skips confirmation, `-a` = only unchanged files |
@@ -403,6 +444,9 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-notifications)  <Plug>(perforated-history)
 <Plug>(perforated-annotate)       <Plug>(perforated-blame-line)
 <Plug>(perforated-describe)       <Plug>(perforated-lookup)
+<Plug>(perforated-sync)           <Plug>(perforated-sync-file)
+<Plug>(perforated-resolve)        <Plug>(perforated-submit)
+<Plug>(perforated-shelve)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
@@ -419,6 +463,8 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
 | `<leader>pL` / `<leader>pb` / `<leader>pB` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
+| `<leader>py` / `<leader>pY` | Sync this file / the workspace |
+| `<leader>pR` / `<leader>pP` / `<leader>pz` | Resolve this file / submit its changelist / shelve its changelist |
 
 ## Configuration
 
@@ -448,6 +494,7 @@ These are the defaults for everything that has an effect today:
     external_terminal = 'auto', -- true: terminal tab; false: detached GUI; auto: guess from tool name
   },
   change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
+  merge = { tool = nil }, -- merge tool command (default: $P4MERGE), run as `tool base theirs yours merged`
   picker = 'auto', -- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'
   client_view = { kind = 'tab', submitted_limit = 20 }, -- kind: 'tab' | 'float' | 'split'
   changes = { page_size = 50 }, -- :P4 changes page size
@@ -481,7 +528,7 @@ These are the defaults for everything that has an effect today:
 }
 ```
 
-The `merge` key is reserved for an upcoming feature and has no effect yet. `:checkhealth perforated`
+`:checkhealth perforated`
 reports unknown keys, which catches typos.
 
 Highlight groups (`PerforatedAdd`, `PerforatedChange`, `PerforatedDelete`, `PerforatedStale`,

@@ -82,7 +82,9 @@ function M.classify(recs, bad)
   local out = { records = {}, warnings = {}, errors = {}, bad = bad or 0 }
   for _, rec in ipairs(recs) do
     if M.is_message(rec) then
-      local sev = tonumber(rec.severity) or tonumber(rec.level) or 0
+      -- Only `severity` means failure; `{ data, level }` messages are informational (`level`
+      -- is not a severity: e.g. resolve's "Diff chunks: …" comes with level 34).
+      local sev = tonumber(rec.severity) or 0
       if sev >= M.severity.FAILED then
         out.errors[#out.errors + 1] = M.message_text(rec)
       else

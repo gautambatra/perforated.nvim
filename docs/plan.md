@@ -460,6 +460,19 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
 
 ### M4 — Shelve, resolve, submit, sync, integrate, rename · ~3 weeks
 
+> **Status (2026-09-26): done.** New modules: `ops.lua` (shelve/unshelve/delete shelved,
+> submit, sync, delete, move), `resolve.lua`, `integrate.lua`, `tools.lua` (user tools via
+> `p4 set`), `jobs.lua` + `ui/progress.lua` (long operations: live progress, `:P4 jobs`,
+> `:P4 cancel`).
+> Implementation notes:
+> - The runner streams records to an `on_record` callback and hands out a `cancel()` control
+>   (SIGTERM, SIGKILL after 2 s); sync and submit run without a timeout.
+> - `{ data, level }` messages are never errors: `level` isn't a severity (resolve's "Diff
+>   chunks" line has level 34). Only `severity` ≥ 3 is.
+> - `:P4<sub>` aliases are created on first use (`CmdUndefined`): creating ~40 commands up front
+>   was most of plugin/'s startup cost.
+> - The first-paint benchmark is now the best of 3 fresh Neovims: a single sample was noisy.
+
 **Scope**
 1. **Shelve and unshelve** at file and CL level:
    - `s` shelves the marked files or a CL (`shelve -f -c CL`, with a replace confirmation).

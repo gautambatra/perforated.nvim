@@ -47,6 +47,8 @@ T['dormant']['no P4CONFIG/P4CLIENT: nothing loads, no processes, autocmd removed
   H.eq(child.lua_get([[#vim.api.nvim_get_autocmds({ group = 'perforated' })]]), 0)
   -- Commands still exist.
   H.eq(child.fn.exists(':P4'), 2)
+  H.eq(child.fn.exists(':P4info'), 0) -- aliases are defined on first use
+  child.cmd('P4info')
   H.eq(child.fn.exists(':P4info'), 2)
 end
 

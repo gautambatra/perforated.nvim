@@ -55,6 +55,8 @@ local GUI = {
   ['p4vc'] = true,
 }
 
+M.GUI = GUI
+
 --- Open the user's $P4DIFF tool on (depot revision, workspace file).
 ---
 --- p4 itself can't be relied on for this: `p4 diff` only launches P4DIFF when the files differ

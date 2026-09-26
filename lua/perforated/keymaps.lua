@@ -45,6 +45,11 @@ M.actions = {
   ['blame-line'] = cmd('blame'),
   describe = cmd('describe'),
   lookup = cmd('lookup'),
+  sync = cmd('sync'),
+  ['sync-file'] = cmd('sync', { '%' }),
+  resolve = cmd('resolve', { '%' }),
+  submit = cmd('submit'),
+  shelve = cmd('shelve'),
 }
 
 --- Preset: lhs → action name.
@@ -70,6 +75,11 @@ M.PRESET = {
   ['<leader>pB'] = 'blame-line',
   ['<leader>pc'] = 'describe',
   ['<leader>pg'] = 'lookup',
+  ['<leader>py'] = 'sync-file',
+  ['<leader>pY'] = 'sync',
+  ['<leader>pR'] = 'resolve',
+  ['<leader>pP'] = 'submit',
+  ['<leader>pz'] = 'shelve',
 }
 
 ---@param name string
