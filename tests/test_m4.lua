@@ -292,6 +292,13 @@ T['m4']['reconcile scans only the configured paths; p changes them'] = function(
     table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('noise.txt', 1, true),
     nil
   )
+  -- r scans again (a finished scan isn't repeated by expanding)
+  H.write(root .. '/team/newer.txt', 'z\n')
+  goto_line('Workspace reconcile')
+  child.type_keys('r')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('newer.txt', 1, true) ~= nil]]
+  )
   -- p with an empty answer: the whole client
   child.lua([[vim.ui.input = function(_, cb) cb('') end]])
   goto_line('Workspace reconcile')
