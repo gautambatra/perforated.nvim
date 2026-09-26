@@ -223,6 +223,19 @@ end
 
 T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   setup()
+  -- every sync is confirmed: "Cancel" runs nothing
+  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 2 end]])
+  child.lua([[require('perforated.core.log').clear(); _G.r = nil]])
+  child.cmd('P4 sync')
+  H.eq(child.lua_get('_G.asked'), 'Sync the whole workspace?')
+  H.eq(H.wait(child, 'false', 500), false)
+  H.eq(
+    #child.lua_get(
+      [[vim.tbl_filter(function(e) return vim.tbl_contains(e.argv, 'sync') end, require('perforated.core.log').entries())]]
+    ),
+    0
+  )
+  child.lua([[vim.fn.confirm = function() return 1 end]])
   bob_submits('main/a.txt', 'l1\nfrom bob\nl3\nl4\nl5\n')
   child.lua(
     [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
@@ -439,6 +452,7 @@ T['sync monitoring'] = function()
   })
   child.cmd('edit ' .. r .. '/a.c')
   H.wait(child, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
+  child.lua([[vim.fn.confirm = function() return 1 end]])
   child.lua(
     [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
   )

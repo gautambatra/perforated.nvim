@@ -887,9 +887,7 @@ local function actions(view)
             end, node.children or {}))
           )
         end
-        if vim.fn.confirm('Sync the whole workspace?', '&Sync\n&Cancel', 2) == 1 then
-          ops.sync(ws, {})
-        end
+        ops.sync(ws, {}) -- asks for confirmation
       end,
     },
     {

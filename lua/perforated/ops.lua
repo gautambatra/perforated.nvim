@@ -544,6 +544,13 @@ function M.sync(ws, args, cb)
   cb = cb or function() end
   args = args or {}
   local what = #args == 0 and 'workspace' or table.concat(args, ' ')
+  -- Every sync is confirmed, however it was started.
+  local shown = #args == 0 and 'the whole workspace'
+    or (#args == 1 and vim.fn.fnamemodify(args[1], ':~:.'))
+    or (#args .. ' paths')
+  if not confirm(('Sync %s?'):format(shown), '&Sync\n&Cancel') then
+    return cb(false)
+  end
   local jobs = require('perforated.jobs')
   local job, run_opts = jobs.start(ws, 'sync ' .. what)
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
