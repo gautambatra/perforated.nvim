@@ -179,7 +179,14 @@ revision instantly:
   removed above it.
 - `d` diffs against the previous revision, `D` describes the changelist, `K` shows it in a
   popup, `y` copies its number, `Q` lists the lines added in that revision (location list),
-  `a` toggles an age gutter, `b` annotates the revision, `L` opens the history.
+  `a` toggles an age gutter, `b` annotates the revision, `gL` opens the history.
+- **Slider** (P4V-style, above the file): a tick per revision, `●` for the shown revision; click
+  the track to jump. `S` switches its labels between revisions, changelists and dates, and `s`
+  hides it (`timelapse.slider = false` to start without it).
+- **Modes** (`m` cycles): *single* (the default), *incremental diff* — revision `◆` in a window
+  on the left, diffed against `●` — and *range* — revision `●` with every line added since `◆`
+  highlighted and tagged with the revision that added it, and every line deleted since `◆`
+  shown where it was. `H` / `L` move `◆`; `h` / `l` still move `●`.
 
 It takes two p4 calls (`filelog` and `annotate -a`, which lists every line the file ever had
 with the revisions it lived in); every revision is then rebuilt in memory, and a step only
@@ -559,7 +566,7 @@ These are the defaults for everything that has an effect today:
     reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
-  timelapse = { max_bytes = 20 * 1024 * 1024 }, -- larger files: use history instead
+  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true }, -- larger files: use history instead
   changes = { page_size = 50 }, -- :P4 changes page size
   history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
   annotate = {
