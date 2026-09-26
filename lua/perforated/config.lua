@@ -71,6 +71,8 @@ local defaults = {
   --- Debug log file (also: env PERFORATED_DEBUG=1|trace, or :P4 debug on).
   debug = { enabled = false, level = 'debug', file = nil, max_kb = 5120 },
   swarm = { url = nil },
+  --- Experimental: Perforce actions as LSP code actions (`gra`) in Perforce buffers
+  lsp = { enabled = false },
   notify = 'minimal',
 }
 

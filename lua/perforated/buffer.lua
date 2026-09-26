@@ -338,6 +338,9 @@ function M.attach(ws, buf)
   if config.get().blame_line.enabled then
     require('perforated.blame').setup()
   end
+  if config.get().lsp.enabled then
+    require('perforated.lsp').attach(buf, ws) -- experimental: code actions
+  end
   M.refresh(buf)
 end
 

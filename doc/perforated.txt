@@ -491,6 +491,9 @@ keys):
       log = {
         size = 500
       },
+      lsp = {
+        enabled = false
+      },
       merge = {},
       notify = "minimal",
       p4 = "p4",
