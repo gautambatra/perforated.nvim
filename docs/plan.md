@@ -501,6 +501,17 @@ Each milestone ends in a usable, tested release. Estimates assume one developer 
 
 ### M5 — Time-lapse (time-machine buffer) · ~1.5 weeks
 
+> **Status (2026-09-26): done.** `timelapse.lua` (engine) and `views/timelapse.lua`.
+> Implementation notes:
+> - `annotate -a` of the newest revision with content, plus one `filelog -l` for the metadata.
+>   Revision numbers are the file's own revisions (no `-i`).
+> - A step applies only the edits between the two revisions (one pass over the entries also
+>   gives the cursor anchor and the added/removed lines). Replacing the buffer cost ~9 ms for
+>   20k lines; a step is now ~3 ms.
+> - `r` (not `g`) goes to a revision: a bare `g` mapping would break `gg`.
+> - The size guard (`timelapse.max_bytes`) points to the history instead of a print-per-revision
+>   fallback; revisit if large files need time-lapse.
+
 **Scope**
 - `:P4 timelapse` (`t`, `C-S-t`) runs **one** `annotate -a -c [-I]` and **one** `filelog -l`. It builds an in-memory line table `{text, lower, upper}` and reconstructs revision N by filtering `lower ≤ N ≤ upper`. This is O(lines), cached per N, so stepping is instant.
 - A read-only buffer with the file's filetype:

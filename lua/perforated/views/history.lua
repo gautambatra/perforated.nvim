@@ -134,6 +134,20 @@ function M.rev_actions(ctx)
       end,
     },
     {
+      id = 'timelapse',
+      desc = 'Time-lapse',
+      keys = { 't' },
+      p4v = { '<C-S-t>' },
+      kinds = K,
+      run = function(items)
+        require('perforated.views.timelapse').open(
+          ws,
+          items[1].depotFile,
+          { rev = tonumber(items[1].rev) }
+        )
+      end,
+    },
+    {
       id = 'annotate',
       desc = 'Annotate this revision',
       keys = { 'b' },

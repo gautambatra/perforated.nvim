@@ -394,6 +394,22 @@ M.commands = {
     end,
   },
 
+  timelapse = {
+    scope = 'connection',
+    desc = 'Time-lapse: step through every revision of the current file (or a depot path)',
+    run = function(ws, _, args)
+      local tl = require('perforated.views.timelapse')
+      if args[1] then
+        local path = args[1]
+        if not path:match('^//') then
+          path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+        end
+        return tl.open(ws, path)
+      end
+      tl.open_buf(0)
+    end,
+  },
+
   annotate = {
     scope = 'connection',
     desc = 'Annotate the current file (or a depot revision): :P4 annotate [//depot/path#rev]',

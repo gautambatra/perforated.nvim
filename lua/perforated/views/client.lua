@@ -1056,6 +1056,19 @@ local function actions(view)
       end,
     },
     {
+      id = 'timelapse',
+      desc = 'Time-lapse',
+      keys = { 't' },
+      p4v = { '<C-S-t>' },
+      kinds = { opened_file = true, shelved_file = true },
+      when = function(item)
+        return item and item.action ~= 'add' and item.action ~= 'branch'
+      end,
+      run = function(items)
+        require('perforated.views.timelapse').open(ws, items[1].depotFile or items[1].clientFile)
+      end,
+    },
+    {
       id = 'annotate',
       desc = 'Annotate',
       keys = { 'b' },
