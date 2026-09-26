@@ -43,8 +43,14 @@ local defaults = {
     -- it for the session.
     reconcile = { paths = {} },
   },
-  sync = { resolve_prompt = true },
-  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true, info_height = 8 }, -- max_bytes: larger files use history -- after a sync that leaves files unresolved: offer to resolve
+  sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
+  timelapse = {
+    max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
+    slider = true,
+    info_position = 'right', -- the revision details panel: 'right' | 'bottom'
+    info_width = 50, -- right-hand panel
+    info_height = 12, -- bottom panel
+  },
   history = { presenter = 'float', limit = 100 },
   annotate = {
     width = 36,
