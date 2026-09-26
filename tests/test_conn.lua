@@ -124,6 +124,31 @@ T['auth']['a call that started before the login succeeded is retried without a s
   H.eq(child.lua_get('_G.r2.ok'), true)
 end
 
+T['auth']['a call succeeding during the login does not cause a second prompt'] = function()
+  local marker = H.tmp() .. '/logged-in'
+  setup({
+    { match = '^login', sleep = 1.0, touch = marker, records = { { User = 'alice' } } },
+    { match = '^fstat', unless = marker, records = AUTH_ERR }, -- fails first: triggers the login
+    { match = '^fstat', records = { { depotFile = '//depot/a.c' } } },
+    { match = '^info', sleep = 0.3, records = { { userName = 'alice' } } }, -- no auth needed
+    { match = '^opened', unless = marker, sleep = 0.6, records = AUTH_ERR }, -- fails mid-login
+    { match = '^opened', records = { { depotFile = '//depot/a.c' } } },
+  })
+  child.lua([[
+    _G.prompts = 0
+    vim.fn.inputsecret = function() _G.prompts = _G.prompts + 1; return 'pw' end
+    _G.r1, _G.r2, _G.r3 = nil, nil, nil
+    _G.ws:run({ 'fstat', 'x' }, {}, function(r) _G.r1 = r end)
+    _G.ws:run({ 'info' }, {}, function(r) _G.r2 = r end)
+    _G.ws:run({ 'opened' }, {}, function(r) _G.r3 = r end)
+  ]])
+  H.eq(H.wait(child, '_G.r1 ~= nil and _G.r2 ~= nil and _G.r3 ~= nil', 15000), true)
+  H.eq(child.lua_get('_G.prompts'), 1)
+  H.eq(child.lua_get('_G.r1.ok'), true)
+  H.eq(child.lua_get('_G.r3.ok'), true)
+  H.eq(#H.calls_matching(child.fake.log, 'login'), 1)
+end
+
 T['auth']['cancelled prompt → offline_auth, calls fail fast with a hint'] = function()
   setup({ { match = '^opened', records = AUTH_ERR } })
   child.lua([[vim.fn.inputsecret = function() return '' end]])
