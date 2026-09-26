@@ -78,13 +78,14 @@ end
 ---@field change string?
 ---@field count integer         number of lines
 ---@field cls integer[]           line → changelist that last changed it
----@field meta table<integer, { change: integer, rev: string?, user: string?, time: string?, desc: string?, client: string? }>
+---@field meta table<integer, { change: integer, user: string?, time: string?, desc: string?, client: string? }>  time: 'YYYY/MM/DD hh:mm:ss' (annotate -u)
 
---- Split the (possibly chunked) annotate data records into lines with their changelist.
+--- Split the (possibly chunked) annotate data records into lines with their changelist, and
+--- collect each changelist's user and date (`-u`).
 ---@param records table[]
----@return table head, string[] lines, integer[] cls
+---@return table head, string[] lines, integer[] cls, table<integer, table> meta
 local function annotate_lines(records)
-  local head, lines, cls = nil, {}, {}
+  local head, lines, cls, meta = nil, {}, {}, {}
   local pending = nil -- a data chunk without a trailing newline (long lines are split)
   local pending_cl
   for _, r in ipairs(records) do
@@ -96,6 +97,8 @@ local function annotate_lines(records)
       if pending then
         d, cl = pending .. d, pending_cl
         pending = nil
+      elseif r.user and not meta[cl] then
+        meta[cl] = { change = cl, user = r.user, time = r.time, client = r.client }
       end
       if d:sub(-1) == '\n' then
         d = d:sub(1, -2)
@@ -113,22 +116,31 @@ local function annotate_lines(records)
     lines[#lines + 1] = pending
     cls[#cls + 1] = pending_cl
   end
-  return head or {}, lines, cls
+  return head or {}, lines, cls, meta
 end
 M._annotate_lines = annotate_lines
 
---- Annotate a revision: `annotate -c -q [-I] spec` and `filelog -l [-i] path` in parallel
---- (two p4 calls, whatever the file's size or history). Changelists that the file's own
---- history doesn't cover (only possible with `integrations`) are described in one more call.
+--- Annotate a revision: `annotate -c -i -u -q [-I] spec`. `-i` follows branches, so a line
+--- keeps the change that wrote it rather than the one that branched the file; `-u` gives each
+--- line's user and date. One p4 call.
+---
+--- `descriptions` (for the blame line) also runs `filelog -l -i` in parallel for the
+--- changelist descriptions; changelists it doesn't reach are described in one more call.
 ---@param ws perforated.Workspace
 ---@param spec string   //depot/path#rev (or a local path)
----@param opts { integrations: boolean? }?
+---@param opts { integrations: boolean?, descriptions: boolean? }?
 ---@param cb fun(a: perforated.Annotation?, err: string?)
 function M.annotate(ws, spec, opts, cb)
   opts = opts or {}
   -- A numbered revision never changes: reuse a recent result (blame line, re-opened views).
   local ckey = spec:match('#%d+$')
-    and (ws.key .. '\0' .. spec .. (opts.integrations and '\0I' or ''))
+    and (
+      ws.key
+      .. '\0'
+      .. spec
+      .. (opts.integrations and '\0I' or '')
+      .. (opts.descriptions and '\0D' or '')
+    )
   if ckey then
     for i, e in ipairs(cache) do
       if e.key == ckey then
@@ -159,8 +171,8 @@ function M.annotate(ws, spec, opts, cb)
     end
   end
   local path = spec:gsub('[#@].*$', '')
-  local ann, revs, errmsg
-  local pending = 2
+  local ann, descs, errmsg
+  local pending = opts.descriptions and 2 or 1
   local function done()
     pending = pending - 1
     if pending > 0 then
@@ -169,31 +181,15 @@ function M.annotate(ws, spec, opts, cb)
     if not ann then
       return cb(nil, errmsg or 'annotate failed')
     end
-    local meta = {}
-    for _, r in ipairs(revs or {}) do
-      local c = tonumber(r.change)
-      if c and not meta[c] and r.depotFile == ann.depotFile then
-        meta[c] = {
-          change = c,
-          rev = r.rev,
-          user = r.user,
-          time = r.time,
-          desc = first_line(r.desc),
-          client = r.client,
-        }
-      end
+    if not opts.descriptions then
+      return cb(ann)
     end
-    for _, r in ipairs(revs or {}) do -- ancestors (branch sources) second
-      local c = tonumber(r.change)
-      if c and not meta[c] then
-        meta[c] =
-          { change = c, user = r.user, time = r.time, desc = first_line(r.desc), client = r.client }
-      end
-    end
-    ann.meta = meta
     local missing, seen = {}, {}
     for _, c in ipairs(ann.cls) do
-      if c > 0 and not meta[c] and not seen[c] then
+      local m = ann.meta[c]
+      if descs[c] then
+        m.desc = descs[c]
+      elseif c > 0 and not seen[c] then
         seen[c] = true
         missing[#missing + 1] = tostring(c)
       end
@@ -203,52 +199,55 @@ function M.annotate(ws, spec, opts, cb)
     end
     require('perforated.changelists').describe(ws, missing, {}, function(by)
       for ch, d in pairs(by) do
-        local c = tonumber(ch)
-        meta[c] = {
-          change = c,
-          user = d.rec.user,
-          time = d.rec.time,
-          desc = first_line(d.rec.desc),
-          client = d.rec.client,
-        }
+        local m = ann.meta[tonumber(ch)]
+        if m then
+          m.desc = first_line(d.rec.desc)
+        end
       end
       cb(ann)
     end)
   end
-  local args = { 'annotate', '-c', '-q' }
+  local args = { 'annotate', '-c', '-i', '-u', '-q' }
   if opts.integrations then
     args[#args + 1] = '-I'
   end
   args[#args + 1] = spec
   ws:run(args, {}, function(res)
-    local head, lines, cls = annotate_lines(res.records)
+    local head, lines, cls, meta = annotate_lines(res.records)
     if head.depotFile then
+      for _, c in ipairs(cls) do
+        meta[c] = meta[c] or { change = c }
+      end
       ann = {
         depotFile = head.depotFile,
         rev = head.rev,
         change = head.change,
         count = #lines,
         cls = cls,
+        meta = meta,
       }
     else
       errmsg = res.errors[1] or res.warnings[1]
     end
     done()
   end)
-  -- History for the CL metadata; a file's own history covers every line unless -I is used.
-  local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
-  ws:run({ 'filelog', '-l', '-i', '-m', tostring(max), path }, {}, function(res)
-    revs = {}
-    for _, rec in ipairs(res.records) do
-      if rec.depotFile then
-        for _, r in ipairs(parse.indexed(rec, FILELOG_FIELDS)) do
-          r.depotFile = rec.depotFile
-          revs[#revs + 1] = r
+  if opts.descriptions then
+    local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
+    ws:run({ 'filelog', '-l', '-i', '-m', tostring(max), path }, {}, function(res)
+      descs = {}
+      for _, rec in ipairs(res.records) do
+        if rec.depotFile then
+          for _, r in ipairs(parse.indexed(rec, { 'change', 'desc' })) do
+            local c = tonumber(r.change)
+            if c and not descs[c] then
+              descs[c] = first_line(r.desc)
+            end
+          end
         end
       end
-    end
-    done()
-  end)
+      done()
+    end)
+  end
 end
 
 --- The Swarm URL for this server (config `swarm.url`, else the `P4.Swarm.URL` property).

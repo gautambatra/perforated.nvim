@@ -137,7 +137,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   last changed each line, coloured by age. It scrolls with the file. Your local edits show
   "Not submitted". `<CR>` describes the line's changelist, `~` re-annotates the revision
   before that change (`<BS>` goes back), `d` diffs that change and `Q` lists every line from
-  it in the location list. It takes two p4 calls whatever the file's size or history.
+  it in the location list. It follows branches (`p4 annotate -i`), so each line shows the change
+  that wrote it, not the one that branched the file. It takes one p4 call (`annotate -c -i -u`)
+  whatever the file's size or history.
 - **`:P4 blame` (or `blame_line = { enabled = true }`): current-line blame** as virtual text.
   The file is annotated once per revision; moving the cursor makes no p4 calls.
 - **`:P4 lookup` (`g/` / `<C-g>`):** type a changelist number, a path or a user name.
@@ -453,7 +455,7 @@ These are the defaults for everything that has an effect today:
   annotate = {
     width = 36,
     integrations = false, -- true: -I, follow integrations to the change that wrote each line
-    history_max = 1000, -- filelog depth used for the changelist metadata
+    history_max = 1000, -- filelog depth for descriptions (blame line) and `~` / `d` in annotate
     gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
   },
   blame_line = { enabled = false, delay = 150, format = 'CL {change} • {user} • {date} • {desc}' }, -- also {client}

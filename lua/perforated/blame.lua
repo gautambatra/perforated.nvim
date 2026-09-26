@@ -31,10 +31,9 @@ end
 function M.format(m)
   local fmt = require('perforated.config').get().blame_line.format
   m = m or {}
-  local t = tonumber(m.time)
   local fields = {
     user = m.user or '?',
-    date = t and os.date('%Y-%m-%d', t) or '',
+    date = require('perforated.views.base').date(m.time),
     desc = m.desc or '',
     change = tostring(m.change or ''),
     client = m.client or '',
@@ -72,7 +71,7 @@ function M.update()
   end
   local win = vim.api.nvim_get_current_win()
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  require('perforated.history').annotate(st.ws, spec, {}, function(ann)
+  require('perforated.history').annotate(st.ws, spec, { descriptions = true }, function(ann)
     if not ann or not vim.api.nvim_buf_is_valid(buf) then
       return
     end

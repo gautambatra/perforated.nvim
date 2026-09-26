@@ -221,9 +221,9 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   H.eq(lines[1]:match('^(%d+)%s+(%S+)'), '1')
   H.eq({ lines[2]:match('^(%d+)%s+(%S+)') }, { '2', 'bob' })
   H.eq({ lines[3]:match('^(%d+)%s+(%S+)') }, { '3', 'alice' })
-  H.eq(#p4_calls('annotate'), 1)
-  H.eq(#p4_calls('filelog'), 1)
-  H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 2)
+  -- One call: `annotate -c -i -u -q` carries the user and date of every line.
+  H.eq(p4_calls('annotate')[1]:match('annotate .*'), 'annotate -c -i -u -q //depot/a.txt#3')
+  H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 1)
   H.eq(child.wo.scrollbind, true)
   H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
   H.eq(child.lua_get([=[vim.api.nvim_win_get_cursor(vim.fn.win_getid(vim.fn.winnr('l')))[1]]=]), 3)
@@ -231,6 +231,7 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   child.api.nvim_win_set_cursor(0, { 3, 0 })
   child.type_keys('~')
   wait([[vim.api.nvim_buf_get_lines(0, 2, 3, false)[1]:find('^1 ') ~= nil]])
+  H.eq(#p4_calls('filelog'), 1) -- the file's history, fetched for the first ~
   H.eq(
     child.lua_get(
       [[vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.fn.win_getid(vim.fn.winnr('l'))))]]
@@ -252,6 +253,24 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   child.lua([[vim.api.nvim_set_current_win(require('perforated.views.annotate')._last.win)]])
   child.type_keys('<CR>') -- describe
   wait_text('bob fixes line 2')
+end
+
+T['m3']['annotate follows branches: lines keep the change that wrote them'] = function()
+  server:p4({ 'integrate', '//depot/a.txt', '//depot/c.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'submit', '-d', 'branch a to c' }, { client = 'alice_ws', cwd = root }) -- CL 5
+  child.cmd('edit ' .. root .. '/c.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.cmd('P4 annotate')
+  wait([[vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]:find('^1 ') ~= nil]])
+  local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
+  H.eq({ lines[2]:match('^(%d+)%s+(%S+)') }, { '2', 'bob' })
+  H.eq({ lines[3]:match('^(%d+)%s+(%S+)') }, { '3', 'alice' })
+  -- ~ on line 3 (CL 3 changed a.txt, the branch source): annotates a.txt#2.
+  child.api.nvim_win_set_cursor(0, { 3, 0 })
+  child.type_keys('~')
+  wait(
+    [[vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.fn.win_getid(vim.fn.winnr('l')))) == 'perforated:////depot/a.txt#2']]
+  )
 end
 
 T['m3']['annotate: local edits show "Not submitted"; q closes'] = function()
@@ -289,6 +308,7 @@ T['m3']['blame line: virtual text after the debounce, one annotate for many move
   child.type_keys('<Ignore>')
   H.eq(H.wait(child, 'false', 500), false)
   H.eq(#p4_calls('annotate'), 1)
+  H.eq(#p4_calls('filelog'), 1) -- descriptions
   child.cmd('P4 blame off')
   H.eq(
     child.lua_get(
