@@ -536,7 +536,7 @@ vim.g.perforated = {
   checkout = { prompt = true, on_write = false, sticky = true, dirs = nil, add_on_write = 'prompt' },
   signs = { enabled = true, base = 'have', priority = 6, max_lines = 50000, hard_max = 500000,
             text = { add = '▎', change = '▎', delete = '▁', stale = '↓' } },
-  blame_line = { enabled = false, delay = 150, format = '{user} • {date} • {desc}' },
+  blame_line = { enabled = false, delay = 150, format = 'CL {change} • {user} • {date} • {desc}' },
   diff = { layout = 'tab', tool = 'builtin' },           -- 'external' uses $P4DIFF
   client_view = { kind = 'tab', sections = { 'pending', 'unresolved', 'submitted', 'reconcile' },
                   submitted_limit = 20 },
