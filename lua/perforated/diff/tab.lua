@@ -306,6 +306,44 @@ function M.open_change(ws, item)
   M.open(ws, ('CL %s (shelved)'):format(item.change), entries)
 end
 
+--- A shelf against the workspace: every shelved file (right) next to its workspace file (left).
+--- Files that aren't in the workspace (unmapped or not synced) show an empty side.
+---@param ws perforated.Workspace
+---@param change string
+---@param shelved table[]?  the shelf's files (fetched when nil)
+function M.open_shelf_vs_workspace(ws, change, shelved)
+  if not shelved then
+    return cls.shelved_files(ws, { change }, function(by)
+      M.open_shelf_vs_workspace(ws, change, by[change] or {})
+    end)
+  end
+  local depot = vim.tbl_map(function(f)
+    return f.depotFile
+  end, shelved)
+  require('perforated.revs').where(ws, depot, function(map)
+    local entries = {}
+    for _, f in ipairs(shelved) do
+      local path = map[f.depotFile]
+      local label = path or f.depotFile
+      if path and ws.root and label:sub(1, #ws.root + 1) == ws.root .. '/' then
+        label = label:sub(#ws.root + 2)
+      end
+      entries[#entries + 1] = {
+        label = label,
+        action = f.action,
+        left = (path and vim.uv.fs_stat(path)) and { path = path }
+          or { empty = 'not in workspace' },
+        right = (f.action == 'delete' or f.action == 'move/delete') and { empty = 'deleted' }
+          or { spec = f.depotFile .. '@=' .. change },
+      }
+    end
+    table.sort(entries, function(a, b)
+      return a.label < b.label
+    end)
+    M.open(ws, ('CL %s (shelved vs workspace)'):format(change), entries)
+  end)
+end
+
 --- Every opened file of the workspace.
 ---@param ws perforated.Workspace
 function M.open_opened(ws)
