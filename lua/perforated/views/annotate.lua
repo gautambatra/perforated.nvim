@@ -162,6 +162,25 @@ function M.render(view)
   vim.bo[view.buf].modifiable = false
   if vim.api.nvim_win_is_valid(view.win) then
     vim.api.nvim_win_set_width(view.win, width)
+    -- Line up with the source window. On the first render, restore where the source was
+    -- when annotate opened: until now the column was empty, and cursorbind may have pulled
+    -- the source's cursor to its line 1.
+    if vim.api.nvim_win_is_valid(view.src_win) then
+      local src = view.start_view or vim.api.nvim_win_call(view.src_win, vim.fn.winsaveview)
+      if view.start_view then
+        view.start_view = nil
+        vim.api.nvim_win_call(view.src_win, function()
+          vim.fn.winrestview(src)
+        end)
+      end
+      vim.api.nvim_win_call(view.win, function()
+        vim.fn.winrestview({
+          lnum = math.min(src.lnum, #lines),
+          col = 0,
+          topline = math.min(src.topline, #lines),
+        })
+      end)
+    end
   end
 end
 
@@ -484,6 +503,7 @@ function M.open_buf(buf)
   require('perforated.hl').setup()
   M.define_age_groups()
 
+  local start_view = vim.fn.winsaveview()
   local abuf = vim.api.nvim_create_buf(false, true)
   vim.bo[abuf].bufhidden = 'wipe'
   vim.bo[abuf].buftype = 'nofile'
@@ -512,6 +532,7 @@ function M.open_buf(buf)
     src_wrap = vim.wo[src_win].wrap,
     spec = spec,
     stack = {},
+    start_view = start_view,
   }
   view.tree = {
     node_at = function()
@@ -522,7 +543,6 @@ function M.open_buf(buf)
     end,
   }
   vim.wo[src_win].wrap = false
-  vim.api.nvim_win_set_cursor(win, { vim.api.nvim_win_get_cursor(src_win)[1], 0 })
   set_bind(win, true)
   set_bind(src_win, true)
   view.actions = actions(view)

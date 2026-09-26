@@ -26,7 +26,11 @@ local defaults = {
     hard_max = 500000, -- above this, no signs
     text = { add = '▎', change = '▎', delete = '▁', stale = '↓' },
   },
-  blame_line = { enabled = false, delay = 150, format = '{user} • {date} • {desc}' },
+  blame_line = {
+    enabled = false,
+    delay = 150,
+    format = 'CL {change} • {user} • {date} • {desc}',
+  },
   diff = { layout = 'tab', tool = 'builtin', external_terminal = 'auto' },
   client_view = {
     kind = 'tab',

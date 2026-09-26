@@ -456,7 +456,7 @@ These are the defaults for everything that has an effect today:
     history_max = 1000, -- filelog depth used for the changelist metadata
     gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
   },
-  blame_line = { enabled = false, delay = 150, format = '{user} • {date} • {desc}' }, -- also {change}, {client}
+  blame_line = { enabled = false, delay = 150, format = 'CL {change} • {user} • {date} • {desc}' }, -- also {client}
   swarm = { url = nil }, -- default: the server's P4.Swarm.URL property
   keys = { p4v = true }, -- plus per-action overrides (see Keymaps)
   keymaps = false, -- 'default' = <leader>p preset in Perforce buffers

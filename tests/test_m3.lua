@@ -214,6 +214,7 @@ end
 
 T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = function()
   child.lua([[require('perforated.core.log').clear()]])
+  child.api.nvim_win_set_cursor(0, { 3, 0 }) -- not line 1: the column starts empty
   child.cmd('P4 annotate')
   wait([[vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]:find('^1 ') ~= nil]])
   local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -224,6 +225,8 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   H.eq(#p4_calls('filelog'), 1)
   H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 2)
   H.eq(child.wo.scrollbind, true)
+  H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
+  H.eq(child.lua_get([=[vim.api.nvim_win_get_cursor(vim.fn.win_getid(vim.fn.winnr('l')))[1]]=]), 3)
   -- ~ on line 3 (CL 3 = #3): the file at #2, where line 3 came from CL 1.
   child.api.nvim_win_set_cursor(0, { 3, 0 })
   child.type_keys('~')
@@ -281,6 +284,7 @@ T['m3']['blame line: virtual text after the debounce, one annotate for many move
   )
   H.neq(vt:find('bob', 1, true), nil)
   H.neq(vt:find('bob fixes line 2', 1, true), nil)
+  H.neq(vt:find('CL 2 ', 1, true), nil)
   child.api.nvim_win_set_cursor(0, { 3, 0 })
   child.type_keys('<Ignore>')
   H.eq(H.wait(child, 'false', 500), false)
