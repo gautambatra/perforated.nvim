@@ -80,6 +80,7 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   (so do `:P4 jobs` and `:P4 cancel`). To scan only the parts you care about, set
   `client_view.reconcile.paths` (e.g. `{ 'src/myteam' }`, relative to the client root; local
   or depot paths work too), or press `p` on the section to change the paths for the session.
+  `r` on the section scans again.
 - **Always fresh:** the view re-queries every time it opens or refreshes, drawing a skeleton
   instantly while the data loads. It also updates after check-outs and reverts made anywhere
   in Neovim.

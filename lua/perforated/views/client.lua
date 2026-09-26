@@ -267,7 +267,7 @@ local function build(view, data)
       n.kind = 'reconcile_file'
       rec_children[#rec_children + 1] = n
     end
-    label = ('  (%d)'):format(#rec_children)
+    label = ('  (%d · r rescans)'):format(#rec_children)
   elseif view.reconcile.state == 'running' then
     rec_children = {
       {
@@ -1187,6 +1187,25 @@ local function actions(view)
       run = function()
         -- Stops p4 itself (the scan's callback then resets the section).
         require('perforated.jobs').cancel(view.reconcile.job)
+      end,
+    },
+    {
+      id = 'reconcile_rescan',
+      desc = 'Reconcile: scan again',
+      keys = { 'r' },
+      kinds = { section_reconcile = true, reconcile_file = true, loading = true },
+      footer = 12,
+      when = function(_, node)
+        return (node.kind ~= 'loading' or (node.id or ''):match('^r:') ~= nil)
+          and view.reconcile.state ~= 'running'
+      end,
+      run = function()
+        M.scan_reconcile(view)
+        local sec = view.tree.by_id['sec:reconcile']
+        if sec then
+          view.tree.folds[sec.id] = true
+          view.tree:render()
+        end
       end,
     },
     {
