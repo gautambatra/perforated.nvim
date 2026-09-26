@@ -1,10 +1,9 @@
 # perforated.nvim
 
 > [!WARNING]
-> **perforated.nvim is under active development.** The features marked ✅ below are
-> implemented and tested (including against a real Helix Core server). Features marked 🚧 are
-> designed and scheduled but not written yet. Commands, options and defaults may still change
-> between commits until the first tagged release.
+> **perforated.nvim is pre-release.** Every feature below is implemented and tested (including
+> against a real Helix Core server); 🧪 marks an experimental one. Commands, options and
+> defaults may still change between commits until the first tagged release.
 
 Perforce (Helix Core) integration for Neovim. It is built to be fast and lightweight, and to
 keep out of your way:
@@ -59,19 +58,24 @@ A p4v-style overview of your workspace in a tab (`:P4 view float` or `:P4 view s
 other layouts):
 
 ```
-Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
- Pending  (3)
-    default  (2)
-      edit        src/lexer.cpp  #3/#3
-      edit        src/parser.cpp  #4/#5  ↓ stale
-    CL 123470  Fix crash in parser  (1)  S 1
-      edit        src/parse.cpp  #8/#8
-     S Shelved (1)
-    CL 123488  WIP refactor  (0)
- Needs attention  (1)
- Workspace reconcile  (not scanned)
- Recent submitted  (20)
- d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  . actions  ? help
+  Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
+      Sync CL: 123501  Nightly integration  bob 2026-09-26
+
+▾ Pending  (3)
+  ▾ default  (2)
+    ● edit      src/lexer.cpp  #3/#3
+      edit      src/util.cpp  #7/#7                  ← dimmed: opened, unchanged
+  ▾ CL 123470  Fix crash in parser  (1)  S 1
+    ● edit      src/parser.cpp  #4/#5  ↓ stale
+    ▸ S Shelved (1)
+
+▾ Needs attention  (1)
+    ● edit (123470)  src/parser.cpp  #4/#5  ↓ stale
+
+▸ Workspace reconcile  · src/myteam  (not scanned)
+
+▸ Recent submitted  (20)
+ d diff against have revision  D diff all files  …  . actions  ? help
 ```
 
 - **Sync CL:** the newest changelist your workspace has synced (`p4 changes -m1
@@ -453,15 +457,6 @@ changelist or the one that last changed the line, history, annotate, time-lapse.
 - File-type icons come from mini.icons or nvim-web-devicons, when installed.
 - Status glyphs use Nerd Font symbols, with an ASCII fallback. Both are configurable.
 
-### 🚧 Coming next
-
-| Milestone | Features |
-|---|---|
-| M6 | P4V-style time-lapse slider, `p4vc` escape hatches, polish |
-
-The detailed plan is in [docs/plan.md](docs/plan.md). Agreed behaviour is in
-[docs/design-decisions.md](docs/design-decisions.md).
-
 ## Commands
 
 Full reference: `:h perforated` (generated from the code, so it's always current). Coming from
@@ -651,12 +646,15 @@ Budgets are enforced by `make bench` in CI:
 | Opening a file outside a workspace | < 0.3 ms | ~0.002 ms |
 | Opening a workspace file (synchronous part) | < 0.3 ms | ~0.015 ms |
 | Sign refresh, 10k-line file (UI time, debounced) | ≤ 5 ms | ~2–3 ms |
-| Lua memory for an active workspace | ≤ 250 KB | ~200 KB |
-| Lua memory per attached buffer | ≤ 2 KB | ~1.8 KB |
-| Client view: render 5000 rows | ≤ 15 ms | ~10 ms |
+| Lua memory for an active workspace | ≤ 250 KB | ~210–220 KB |
+| Lua memory per attached buffer | ≤ 2 KB | ~1.5 KB |
+| Client view: render 5000 rows | ≤ 15 ms | ~10–12 ms |
 | Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
-| Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.5 / ~10 ms |
-| Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~3 ms |
+| Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.3 / ~10 ms |
+| Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~2 ms |
+
+A memory soak test (1000 workspace files opened and closed) checks that nothing in the plugin
+grows with the number of buffers.
 
 The timing figures are the best of several runs, which filters out noise from other processes.
 

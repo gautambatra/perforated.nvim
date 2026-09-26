@@ -445,8 +445,7 @@ keys):
         allow_force = false
       },
       changes = {
-        page_size = 50,
-        scope = "client"
+        page_size = 50
       },
       checkout = {
         add_on_write = "prompt",
@@ -460,7 +459,6 @@ keys):
         reconcile = {
           paths = {}
         },
-        sections = { "pending", "unresolved", "reconcile", "submitted" },
         submitted_limit = 20
       },
       commands = {
@@ -473,7 +471,6 @@ keys):
       },
       diff = {
         external_terminal = "auto",
-        layout = "tab",
         tool = "builtin"
       },
       history = {
@@ -496,7 +493,6 @@ keys):
         enabled = false
       },
       merge = {},
-      notify = "minimal",
       p4 = "p4",
       p4vc = "p4vc",
       picker = "auto",
@@ -506,7 +502,6 @@ keys):
         interval = 300
       },
       qf = {
-        loclist_for_file_scoped = true,
         open = true
       },
       runner = {
@@ -516,7 +511,6 @@ keys):
       },
       signs = {
         algorithm = "myers",
-        base = "have",
         enabled = true,
         hard_max = 500000,
         max_lines = 2000,
