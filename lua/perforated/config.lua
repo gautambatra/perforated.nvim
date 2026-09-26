@@ -44,7 +44,7 @@ local defaults = {
     reconcile = { paths = {} },
   },
   sync = { resolve_prompt = true },
-  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true }, -- max_bytes: larger files use history -- after a sync that leaves files unresolved: offer to resolve
+  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true, info_height = 8 }, -- max_bytes: larger files use history -- after a sync that leaves files unresolved: offer to resolve
   history = { presenter = 'float', limit = 100 },
   annotate = {
     width = 36,

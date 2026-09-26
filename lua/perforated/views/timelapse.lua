@@ -1,7 +1,7 @@
 --- Time-lapse view (`:P4 timelapse`, `t`, `<C-S-t>`): a read-only buffer that steps through a
 --- file's revisions instantly (see timelapse.lua: every revision is rebuilt in memory from one
---- `annotate -a`). The winbar shows `#N/#head · CL · user · date · description`; lines added at
---- N are highlighted and deleted lines are shown where they were (virtual lines). The cursor
+--- `annotate -a`). A panel below shows the revision's details (file#rev, changelist, date,
+--- type, user, size, action, full description); lines added at N are highlighted and deleted lines are shown where they were (virtual lines). The cursor
 --- stays on the same line of the file as you step.
 
 local engine = require('perforated.timelapse')
@@ -19,21 +19,130 @@ local function first_line(s)
   return vim.trim((s or ''):match('[^\n]*') or '')
 end
 
---- Revision metadata line for the winbar.
-local function winbar(view)
+local info_ns = vim.api.nvim_create_namespace('perforated.timelapse.info')
+
+local function size_text(n)
+  n = tonumber(n)
+  if not n then
+    return '?'
+  elseif n >= 1048576 then
+    return ('%.1f MB'):format(n / 1048576)
+  elseif n >= 1024 then
+    return ('%.1f KB'):format(n / 1024)
+  end
+  return n .. ' bytes'
+end
+
+--- Lines of the info panel for the selected revision (● ) — and ◆ in diff / range mode.
+---@param view table
+---@param width integer
+---@return string[] lines, integer[] label_rows  rows whose "Key:" parts get highlighted
+function M.info_lines(view, width)
   local tl, n = view.tl, view.n
   local r = tl.revs[n] or {}
   local t = tonumber(r.time)
-  local text = ('#%d/#%d · CL %s · %s · %s · %s%s'):format(
-    n,
-    tl.head,
-    r.change or '?',
-    r.user or '?',
-    t and os.date('%Y-%m-%d', t) or '',
-    r.action or '',
-    first_line(r.desc) ~= '' and (' · ' .. first_line(r.desc)) or ''
-  )
-  return ' ' .. text:gsub('%%', '%%%%')
+  local col = math.max(40, math.floor(width / 2))
+  local function two(l, rt)
+    return l .. (' '):rep(math.max(2, col - vim.fn.strdisplaywidth(l))) .. rt
+  end
+  local lines = {
+    two(('Revision: %s#%d'):format(tl.depotFile, n), 'Changelist: ' .. (r.change or '?')),
+    two(
+      'Date submitted: ' .. (t and os.date('%Y-%m-%d %H:%M:%S', t) or '?'),
+      'Perforce Type: ' .. (r.type or '?')
+    ),
+    two('Submitted by: ' .. (r.user or '?'), 'File size: ' .. size_text(r.fileSize)),
+    'Action: ' .. (r.action or '?'),
+  }
+  if view.mode ~= 'single' and view.a then
+    local ra = tl.revs[view.a] or {}
+    lines[#lines + 1] = ('Comparing: ◆ #%d (CL %s) → ● #%d (CL %s)  [%s]'):format(
+      view.a,
+      ra.change or '?',
+      n,
+      r.change or '?',
+      view.mode == 'diff' and 'incremental diff' or 'range: changes since ◆'
+    )
+  end
+  lines[#lines + 1] = 'Description:'
+  for _, l in ipairs(vim.split(vim.trim(r.desc or ''), '\n', { plain = true })) do
+    lines[#lines + 1] = '  ' .. l
+  end
+  return lines
+end
+
+--- Fill the info panel (if shown).
+function M.render_info(view)
+  if not (view.iwin and vim.api.nvim_win_is_valid(view.iwin)) then
+    return
+  end
+  local lines = M.info_lines(view, vim.api.nvim_win_get_width(view.iwin))
+  local buf = view.ibuf
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.api.nvim_buf_clear_namespace(buf, info_ns, 0, -1)
+  for row, l in ipairs(lines) do
+    if not l:match('^  ') then
+      -- every "Key:" on the line
+      local start = 1
+      while true do
+        local s, e = l:find('[%a ]+:', start)
+        if not s then
+          break
+        end
+        if s == 1 or l:sub(s - 2, s - 1) == '  ' then
+          local ks = l:find('%S', s)
+          vim.api.nvim_buf_set_extmark(buf, info_ns, row - 1, ks - 1, {
+            end_col = e,
+            hl_group = 'PerforatedHeader',
+          })
+        end
+        start = e + 1
+      end
+    end
+  end
+end
+
+--- Show / hide the info panel below the file.
+function M.toggle_info(view, on)
+  local shown = view.iwin and vim.api.nvim_win_is_valid(view.iwin)
+  if on == nil then
+    on = not shown
+  end
+  if not on then
+    if shown then
+      pcall(vim.api.nvim_win_close, view.iwin, true)
+    end
+    view.iwin = nil
+    return
+  end
+  if shown then
+    return M.render_info(view)
+  end
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = 'wipe'
+  pcall(vim.api.nvim_buf_set_name, buf, 'perforated://timelapse-info/' .. view.tl.depotFile)
+  local height = require('perforated.config').get().timelapse.info_height or 8
+  vim.api.nvim_win_call(view.win, function()
+    vim.cmd(('belowright %dsplit'):format(height))
+  end)
+  local win = vim.fn.win_getid(vim.fn.winnr('j'), vim.api.nvim_win_get_tabpage(view.win))
+  win = (win ~= 0 and win ~= view.win) and win or vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(win, buf)
+  local wo = vim.wo[win]
+  wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
+  wo.winfixheight, wo.wrap, wo.linebreak, wo.cursorline, wo.list = true, true, true, false, false
+  wo.winbar = ''
+  view.iwin, view.ibuf = win, buf
+  vim.keymap.set('n', 'q', function()
+    vim.api.nvim_set_current_win(view.win)
+    if #vim.api.nvim_list_tabpages() > 1 then
+      vim.cmd('tabclose')
+    end
+  end, { buffer = buf, nowait = true })
+  vim.api.nvim_set_current_win(view.win)
+  M.render_info(view)
 end
 
 --- Show revision n, keeping the cursor on the same line of the file.
@@ -70,7 +179,6 @@ function M.show(view, n)
   view.n = n
   M.decorate(view)
   if vim.api.nvim_win_is_valid(view.win) then
-    vim.wo[view.win].winbar = winbar(view)
     local count = vim.api.nvim_buf_line_count(buf)
     pcall(vim.api.nvim_win_set_cursor, view.win, { math.max(1, math.min(lnum, count)), 0 })
   end
@@ -80,6 +188,7 @@ function M.show(view, n)
   if view.slider then
     view.slider:render()
   end
+  M.render_info(view)
   require('perforated.core.debug').timing('time-lapse: step', (vim.uv.hrtime() - t0) / 1e6)
   if view.footer then
     view.footer:set(keys.footer(view.actions, view.tree:node_at()))
@@ -248,6 +357,7 @@ function M.set_mode(view, mode)
   if view.slider then
     view.slider:render()
   end
+  M.render_info(view)
 end
 
 local function go(view, n)
@@ -272,6 +382,7 @@ local function go_a(view, n)
   if view.slider then
     view.slider:render()
   end
+  M.render_info(view)
 end
 
 local function spec_of(view, n)
@@ -365,14 +476,21 @@ local function actions(view)
     },
     {
       id = 'scale',
-      desc = 'Slider labels: revision / changelist / date',
+      desc = 'Slider labels: changelists / revisions',
       keys = { 'S' },
       run = function()
-        local nxt = { rev = 'change', change = 'date', date = 'rev' }
-        view.scale = nxt[view.scale or 'rev']
+        view.scale = view.scale == 'rev' and 'change' or 'rev'
         if view.slider then
           view.slider:render()
         end
+      end,
+    },
+    {
+      id = 'info',
+      desc = 'Show / hide the revision details',
+      keys = { 'i' },
+      run = function()
+        M.toggle_info(view)
       end,
     },
     {
@@ -586,7 +704,7 @@ function M.open(ws, path, opts)
   pcall(vim.api.nvim_buf_set_name, buf, 'perforated://timelapse/' .. path)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'loading time-lapse of ' .. path .. ' …' })
   vim.bo[buf].modifiable = false
-  vim.wo[win].winbar = ' time-lapse · loading…'
+
   local view = { ws = ws, buf = buf, win = win, start_line = opts.line }
   view.tree = {
     node_at = function()
@@ -622,8 +740,9 @@ function M.open(ws, path, opts)
     keys.attach(buf, view.actions, view)
     view.footer = require('perforated.ui.footer').attach(win)
     local start = opts.rev and tl.revs[opts.rev] and opts.rev or tl.head
-    view.mode, view.scale = 'single', 'rev'
+    view.mode, view.scale = 'single', 'change'
     M.show(view, start)
+    M.toggle_info(view, true)
     if require('perforated.config').get().timelapse.slider ~= false then
       view.slider = require('perforated.views.slider').attach(view, function(rev)
         go(view, rev)
@@ -642,6 +761,9 @@ function M.open(ws, path, opts)
         end
         if view.dwin and vim.api.nvim_win_is_valid(view.dwin) then
           pcall(vim.api.nvim_win_close, view.dwin, true)
+        end
+        if view.iwin and vim.api.nvim_win_is_valid(view.iwin) then
+          pcall(vim.api.nvim_win_close, view.iwin, true)
         end
       end,
     })
