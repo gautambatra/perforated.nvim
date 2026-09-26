@@ -254,9 +254,10 @@ do
 end
 
 -- 7. Annotate: parsing 20k `annotate -c` records and rendering the 20k-line column.
+-- Pure-Lua loops: best of 3 fresh Neovims (a CI runner occasionally gives one process a
+-- much slower Lua; a real regression shows in all three).
 do
-  local c = H.child()
-  local parse_ms, render_ms = unpack(c.lua([[
+  local code = [[
     local n = 20000
     local records = { { depotFile = '//depot/big.c', rev = '400', change = '9000' } }
     for i = 1, n do
@@ -293,17 +294,22 @@ do
       best_render = math.min(best_render, vim.uv.hrtime() - t0)
     end
     return { best_parse / 1e6, best_render / 1e6 }
-  ]]))
+  ]]
+  local parse_ms, render_ms = math.huge, math.huge
+  for _ = 1, 3 do
+    local c = H.child()
+    local p, r = unpack(c.lua(code))
+    parse_ms, render_ms = math.min(parse_ms, p), math.min(render_ms, r)
+    c.stop()
+  end
   record('annotate: parse 20k lines', parse_ms, 'ms', 20)
   record('annotate: render 20k lines', render_ms, 'ms', 25)
-  c.stop()
 end
 
 -- 8. Time-lapse: one step (rebuild the revision, set the buffer, decorations) for a 20k-line
 --    file with 200 revisions. Revisions aren't cached in the measured runs.
 do
-  local c = H.child()
-  local ms = c.lua([[
+  local code = [[
     local engine = require('perforated.timelapse')
     local view_mod = require('perforated.views.timelapse')
     require('perforated.hl').setup()
@@ -365,10 +371,18 @@ do
     local t_dec = best(function() view_mod.decorate(view) end)
     local t_wb = best(function() vim.wo[view.win].winbar = ' #190/#200 · CL 1190 · u · date' end)
     return { samples[1] / 1e6, ('transition %.2f · edits %.2f (%d) · decorate %.2f · winbar %.2f ms'):format(t_tr, t_ed, #edits, t_dec, t_wb) }
-  ]])
+  ]]
+  local ms = { math.huge, '' }
+  for _ = 1, 3 do
+    local c = H.child()
+    local one = c.lua(code)
+    if one[1] < ms[1] then
+      ms = one
+    end
+    c.stop()
+  end
   record('time-lapse: step, 20k lines × 200 revs', ms[1], 'ms', 5)
   print('  time-lapse step breakdown: ' .. ms[2])
-  c.stop()
 end
 
 -- Report.
