@@ -132,6 +132,14 @@ end
 
 local function file_node(view, f, id_prefix)
   local rev = f.rev and ('#' .. f.rev) or ''
+  -- ● changed / dimmed unchanged, for this client's opened files
+  local changed
+  if not f.shelved and view.data and view.data.modified ~= nil then
+    local modified = require('perforated.modified')
+    view.data.overlay = view.data.overlay or modified.overlay(view.ws)
+    changed = modified.is_changed(view.ws, f, view.data.modified, view.data.overlay)
+  end
+  local marker, row_hl = require('perforated.modified').marker(changed)
   local node = {
     id = id_prefix .. f.depotFile,
     kind = f.shelved and 'describe_shelved' or 'describe_file',
@@ -142,11 +150,13 @@ local function file_node(view, f, id_prefix)
       load_diff(view, n)
     end,
     text = {
+      marker or { '' },
       {
         ('%-10s'):format(f.action or ''),
-        f.shelved and 'PerforatedShelvedFile' or 'PerforatedAction',
+        f.shelved and 'PerforatedShelvedFile'
+          or (row_hl == 'PerforatedUnchanged' and row_hl or 'PerforatedAction'),
       },
-      { f.depotFile, f.shelved and 'PerforatedShelvedFile' or 'PerforatedPath' },
+      { f.depotFile, f.shelved and 'PerforatedShelvedFile' or row_hl or 'PerforatedPath' },
       { rev, 'PerforatedRev' },
     },
   }
@@ -216,14 +226,14 @@ end
 --- changelists, the opened files' fstat records for workspace paths and bases).
 local function load(view, cb)
   local ws, change = view.ws, view.change
-  local function finish(rec, files, shelved)
+  local function finish(rec, files, shelved, modified)
     for _, f in ipairs(files) do
       f.change, f.status = rec.change, rec.status
     end
     for _, f in ipairs(shelved) do
       f.change, f.status, f.shelved = rec.change, rec.status, true
     end
-    view.data = { rec = rec, files = files, shelved = shelved }
+    view.data = { rec = rec, files = files, shelved = shelved, modified = modified }
     view.item = {
       change = rec.change,
       status = rec.status,
@@ -251,7 +261,15 @@ local function load(view, cb)
           }
         end
       end
-      finish(rec, #files > 0 and files or fallback, shelved)
+      if #files == 0 then
+        return finish(rec, fallback, shelved)
+      end
+      local paths = vim.tbl_map(function(f)
+        return f.clientFile
+      end, files)
+      require('perforated.modified').query(ws, paths, function(set)
+        finish(rec, files, shelved, set or false)
+      end)
     end)
   end
   if change == 'default' then

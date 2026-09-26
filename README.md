@@ -81,6 +81,12 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   `client_view.reconcile.paths` (e.g. `{ 'src/myteam' }`, relative to the client root; local
   or depot paths work too), or press `p` on the section to change the paths for the session.
   `r` on the section scans again.
+- **Changed or not:** an opened file that differs from its base gets a `●` and the "modified"
+  colour (`PerforatedModified`); one that's opened but unchanged is dimmed
+  (`PerforatedUnchanged`), like P4V's blue and white file icons. Unsaved edits count, and the
+  marker updates when you save. The same markers appear in the describe buffer and the
+  `:P4 opened` quickfix list (`·` for unchanged there). It costs one `p4 diff -sa` per refresh,
+  which compares the files locally. The glyph is `icons.glyphs.modified` (ASCII: `*`).
 - **Always fresh:** the view re-queries every time it opens or refreshes, drawing a skeleton
   instantly while the data loads. It also updates after check-outs and reverts made anywhere
   in Neovim.
