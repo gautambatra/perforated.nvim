@@ -267,6 +267,31 @@ T['timelapse']['range: added after ◆ and deleted after ◆'] = function()
   H.eq(r.removed['3'] or r.removed[3], { { text = 'x', rev = 2 }, { text = 'y', rev = 3 } })
 end
 
+T['timelapse']['reopen works; with a global winbar the slider still shows its labels'] = function()
+  setup()
+  child.o.winbar = 'GLOBAL WINBAR' -- like a winbar plugin
+  local V = [[require('perforated.views.timelapse')._last]]
+  for _ = 1, 2 do
+    child.cmd('P4 timelapse')
+    wait(INFO .. [[:find('f.txt#30 ', 1, true) ~= nil]])
+    H.eq(child.lua_get('vim.v.errmsg'), '')
+    local sw = child.lua_get(V .. '.slider.win')
+    H.eq(child.api.nvim_win_get_height(sw), 3)
+    H.neq(child.lua_get(('vim.wo[%d].winbar'):format(sw)):find('Time-lapse', 1, true), nil)
+    local lines = child.lua_get(
+      V .. '.slider and vim.api.nvim_buf_get_lines(' .. V .. '.slider.buf, 0, -1, false)'
+    )
+    H.eq(#lines, 2) -- track + labels, both visible under the title
+    H.neq(lines[2]:find('30', 1, true), nil)
+    H.neq(
+      child.lua_get(('vim.wo[%s.iwin].winbar'):format(V)):find('Revision details', 1, true),
+      nil
+    )
+    child.type_keys('q')
+    H.eq(#child.api.nvim_list_tabpages(), 1)
+  end
+end
+
 T['timelapse']['anchor: insertions above the cursor keep it on the same line'] = function()
   child = H.child()
   local lnum = child.lua_get([[(function()

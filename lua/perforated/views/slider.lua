@@ -144,6 +144,15 @@ function Slider:render()
   end
   local labels = table.concat(line, '', 0, width + 1)
 
+  local mode = view.mode == 'diff'
+      and ('incremental diff ◆ %s → ● %s'):format(label(view, a), label(view, b))
+    or view.mode == 'range' and ('range: changes since ◆ %s'):format(label(view, a))
+    or 'single'
+  vim.wo[self.win].winbar = ('%%#PerforatedTitle# Time-lapse%%#PerforatedDim#  %s  ·  %s  ·  labels: %s (S)'):format(
+    (view.tl.depotFile:gsub('%%', '%%%%')),
+    mode,
+    view.scale == 'rev' and 'revisions' or 'changelists'
+  )
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, { track, labels })
   vim.bo[self.buf].modifiable = false
@@ -205,12 +214,9 @@ end
 function M.attach(view, on_click)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
-  vim.api.nvim_win_call(view.win, function()
-    vim.cmd('aboveleft 2split')
-  end)
-  local win = vim.fn.win_getid(vim.fn.winnr('k'), vim.api.nvim_win_get_tabpage(view.win))
-  win = (win ~= 0 and win ~= view.win) and win or vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(win, buf)
+  -- Three lines: a title winbar (always ours: a global 'winbar' would otherwise take one of
+  -- the slider's lines), the track and the labels.
+  local win = vim.api.nvim_open_win(buf, false, { split = 'above', win = view.win, height = 3 })
   pcall(
     vim.api.nvim_buf_set_name,
     buf,
@@ -219,8 +225,8 @@ function M.attach(view, on_click)
   local wo = vim.wo[win]
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
   wo.cursorline, wo.wrap, wo.winfixheight, wo.list = false, false, true, false
-  wo.winbar, wo.statusline = '', ' '
-  vim.api.nvim_win_set_height(win, 2)
+  wo.statusline = ' '
+  vim.api.nvim_win_set_height(win, 3)
   local self = setmetatable({ view = view, win = win, buf = buf }, Slider)
   -- Clicks jump; otherwise focus goes straight back to the time-lapse window.
   vim.keymap.set('n', '<LeftMouse>', function()
