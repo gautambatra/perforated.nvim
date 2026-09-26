@@ -271,12 +271,20 @@ M.commands = {
 
   change = {
     scope = 'workspace',
-    desc = "Edit a changelist description: :P4 change[!] [N|new]  (! = full spec; no N = current file's CL)",
+    desc = "Edit a changelist description: :P4 change[!] [N|new]  (! = full spec; no N = current file's CL); :P4 change -d N deletes a pending CL",
     complete = function()
-      return { 'new' }
+      return { 'new', '-d' }
     end,
     run = function(ws, o, args)
       local editor = require('perforated.views.change_editor')
+      if args[1] == '-d' then
+        local st = require('perforated.buffer').get(0)
+        local target = args[2] or (st and st.rec and st.rec.change)
+        if not target then
+          return notify('usage: :P4 change -d N', vim.log.levels.WARN)
+        end
+        return require('perforated.ops').delete_change(ws, target)
+      end
       local cl = args[1]
       if cl == 'new' then
         return editor.new(ws)

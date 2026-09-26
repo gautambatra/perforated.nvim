@@ -107,6 +107,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   accident. `gS` or `:P4 change! N` opens the full spec instead. Admins can set
   `change.allow_force = true` to retry with `-f`, with a confirmation. The default changelist
   has no description, so move its files to a numbered changelist instead.
+- **`<Del>` / `:P4 change -d N`: delete a pending changelist.** One confirmation says what's in
+  it; its opened files move to the default changelist (or are reverted, if you choose that) and
+  its shelved files are deleted, then the changelist is. The default changelist can't be
+  deleted; another client's changelist needs `change.allow_force`.
 - **`M`: move files between changelists.** Pick an existing changelist or create a new one.
 - **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
   diff on the right; moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
@@ -385,7 +389,7 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | Command | Description |
 |---|---|
 | `:P4` / `:P4 view [tab\|float\|split]` | Client view |
-| `:P4 change[!] [N\|new]` | Edit a changelist description (`!`: full spec); `new` creates one |
+| `:P4 change[!] [N\|new]` | Edit a changelist description (`!`: full spec); `new` creates one; `-d N` deletes a pending one |
 | `:P4 changes [-u user] [-m N] [path]` | Submitted changelists (paged) |
 | `:P4 pick {pending\|opened\|submitted\|users}` | Pick with your fuzzy finder |
 | `:P4 describe [N]` | Changelist buffer (default: the current file's changelist) |

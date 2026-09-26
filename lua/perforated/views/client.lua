@@ -1030,6 +1030,19 @@ local function actions(view)
       end,
     },
     {
+      id = 'delete_change',
+      desc = 'Delete changelist',
+      keys = { '<Del>' },
+      kinds = { change = true },
+      when = function(item)
+        return item.change ~= 'default'
+          and (item.mine ~= false or require('perforated.config').get().change.allow_force)
+      end,
+      run = function(items)
+        require('perforated.ops').delete_change(ws, items[1].change)
+      end,
+    },
+    {
       id = 'edit_description',
       desc = 'Edit description',
       keys = { 'C' },

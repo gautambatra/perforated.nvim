@@ -129,6 +129,63 @@ T['m4']['shelve (replace after confirm), delete shelved, unshelve into the same 
   H.eq(p4({ 'describe', '-S', '-s', cl }):find('//depot/main/b.txt#', 1, true), nil)
 end
 
+local function changes_pending()
+  return p4({ 'changes', '-s', 'pending' })
+end
+
+T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = function()
+  setup()
+  local cl = new_change('doomed')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  H.write(root .. '/main/b.txt', 'b2\n')
+  p4({ 'shelve', '-c', cl })
+  child.lua(
+    [[_G.confirm_msg = nil; vim.fn.confirm = function(msg) _G.confirm_msg = msg; return 1 end]]
+  )
+  child.cmd('P4 change -d ' .. cl)
+  wait('_G.confirm_msg ~= nil')
+  H.neq(child.lua_get('_G.confirm_msg'):find('1 opened file', 1, true), nil)
+  H.neq(child.lua_get('_G.confirm_msg'):find('1 shelved file', 1, true), nil)
+  H.eq(
+    vim.wait(10000, function()
+      return not changes_pending():find('doomed', 1, true)
+    end, 100),
+    true
+  )
+  H.eq(changes_pending():find('doomed', 1, true), nil)
+  H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = 'default' })
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b2') -- edits kept
+end
+
+T['m4']['delete changelist: revert choice, empty CL, default refused'] = function()
+  setup()
+  local cl = new_change('revert me')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  H.write(root .. '/main/b.txt', 'b2\n')
+  child.lua([[vim.fn.confirm = function() return 2 end]]) -- "Revert them"
+  child.lua(
+    ([[require('perforated.ops').delete_change(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r == true')
+  H.eq(opened()['//depot/main/b.txt'], nil)
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b1')
+  local empty = new_change('empty one')
+  child.lua([[vim.fn.confirm = function() return 1 end; _G.r = nil]])
+  child.lua(
+    ([[require('perforated.ops').delete_change(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      empty
+    )
+  )
+  wait('_G.r == true')
+  H.eq(changes_pending():find('empty one', 1, true), nil)
+  child.lua(
+    [[_G.r = nil; require('perforated.ops').delete_change(require('perforated').workspace(), 'default', function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r == false')
+end
+
 T['m4']['submit: confirmation float, s submits; buffer state follows'] = function()
   setup()
   local cl = new_change('ship it')
