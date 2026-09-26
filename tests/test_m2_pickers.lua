@@ -233,6 +233,7 @@ end
 
 T['changes'][':P4 pick pending opens the chosen CL in the diff tab'] = function()
   server:p4({ 'edit', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/b.txt', 'b changed\n')
   child.lua([[vim.ui.select = function(items, opts, cb)
     _G.labels = vim.tbl_map(opts.format_item, items)
     cb(items[1])

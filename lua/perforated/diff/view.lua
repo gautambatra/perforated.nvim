@@ -145,14 +145,13 @@ function M.open(buf, rev, opts)
     return notify('invalid revision: ' .. tostring(rev), vim.log.levels.ERROR)
   end
   local ext = (opts and opts.external) or require('perforated.config').get().diff.tool == 'external'
-  if ext then
-    return M.external(st.ws, st.path, spec)
-  end
-
-  M.pair(st.ws, spec and { spec = spec } or { empty = 'opened for add' }, { buf = buf }, {
-    spec = spec or nil,
-    path = st.path,
-  })
+  local left = spec and { spec = spec } or { empty = 'opened for add' }
+  require('perforated.same').or_open(st.ws, left, { buf = buf }, function()
+    if ext then
+      return M.external(st.ws, st.path, spec)
+    end
+    M.pair(st.ws, left, { buf = buf }, { spec = spec or nil, path = st.path })
+  end)
 end
 
 ---@class perforated.DiffSide

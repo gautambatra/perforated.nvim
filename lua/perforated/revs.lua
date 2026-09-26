@@ -52,10 +52,12 @@ end
 ---@param right perforated.RevSide
 function M.diff(ws, left, right)
   local label = left.spec or right.spec or right.path
-  require('perforated.diff.view').pair(ws, diff_side(left), diff_side(right), {
-    spec = left.spec,
-    path = right.path or (label and label:gsub('[#@].*$', '')),
-  })
+  require('perforated.same').or_open(ws, left, right, function()
+    require('perforated.diff.view').pair(ws, diff_side(left), diff_side(right), {
+      spec = left.spec,
+      path = right.path or (label and label:gsub('[#@].*$', '')),
+    })
+  end)
 end
 
 --- Open a depot revision read-only (or a workspace file) in a new tab, at a line.

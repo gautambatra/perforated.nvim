@@ -748,12 +748,16 @@ local function actions(view)
       run = function(items)
         local it = items[1]
         local base = it.rev and (it.depotFile .. '#' .. it.rev) or nil
-        require('perforated.diff.view').pair(
-          ws,
-          base and { spec = base } or { empty = 'new file' },
-          { spec = it.depotFile .. '@=' .. it.change },
-          { spec = base, path = it.depotFile }
-        )
+        local left = base and { spec = base } or { empty = 'new file' }
+        local right = { spec = it.depotFile .. '@=' .. it.change }
+        require('perforated.same').or_open(ws, left, right, function()
+          require('perforated.diff.view').pair(
+            ws,
+            left,
+            right,
+            { spec = base, path = it.depotFile }
+          )
+        end)
       end,
     },
     -- M4: shelve, submit, resolve, sync, integrate

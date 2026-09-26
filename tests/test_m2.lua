@@ -303,6 +303,7 @@ T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in 
   open_view()
   goto_line('Shelved (1)')
   child.type_keys('l')
+  H.write(root .. '/a.txt', 'a3\n') -- differ from the shelved a2
   goto_line('//depot/a.txt')
   child.type_keys('w')
   wait([[#vim.api.nvim_list_tabpages() == 3]])
@@ -369,6 +370,30 @@ end
 
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
+  -- b.txt and c.txt are opened but unchanged: no diff tab, just a message
+  child.lua(
+    [[_G.msgs = {}; local n = vim.notify; vim.notify = function(m, ...) table.insert(_G.msgs, m); n(m, ...) end]]
+  )
+  goto_line('default')
+  child.type_keys('D')
+  wait(
+    [[vim.tbl_contains(vim.tbl_map(function(m) return m:find('all 2 files are identical', 1, true) ~= nil end, _G.msgs), true)]]
+  )
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+  -- one changed, one identical: only the changed one is diffed; the other is listed
+  H.write(root .. '/b.txt', 'b2\n')
+  goto_line('default')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  local text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  local ident = text:find('Identical (1):', 1, true)
+  H.neq(ident, nil)
+  H.eq(text:find('c.txt', 1, true) > ident, true)
+  H.eq(text:find('b.txt', 1, true) < ident, true)
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  -- both changed
+  H.write(root .. '/c.txt', 'c-mine\n')
   goto_line('default')
   child.type_keys('D')
   wait([[#vim.api.nvim_list_tabpages() == 3]])

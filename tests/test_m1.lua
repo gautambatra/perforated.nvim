@@ -282,7 +282,7 @@ end
 
 T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it'] = function()
   child.cmd('P4 diff')
-  H.eq(#child.api.nvim_list_tabpages(), 2)
+  wait('#vim.api.nvim_list_tabpages() == 2')
   local wins = child.api.nvim_tabpage_list_wins(0)
   H.eq(#wins, 2)
   local left = child.api.nvim_win_get_buf(wins[1])
@@ -309,6 +309,7 @@ T['ops'][':P4 diff fires User PerforatedDiffOpen / PerforatedDiffClose (once)'] 
   ]])
   local file_buf = child.api.nvim_get_current_buf()
   child.cmd('P4 diff')
+  wait('#_G.events == 1')
   local ev = child.lua_get('_G.events')
   H.eq(#ev, 1)
   H.eq(ev[1].name, 'PerforatedDiffOpen')
@@ -337,7 +338,7 @@ T['ops'][':P4 diff survives a user OptionSet autocmd that throws'] = function()
     })
   ]])
   child.cmd('P4 diff')
-  H.eq(#child.api.nvim_list_tabpages(), 2)
+  wait('#vim.api.nvim_list_tabpages() == 2')
   local wins = child.api.nvim_tabpage_list_wins(0)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[1] }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[2] }), true)
@@ -471,6 +472,19 @@ T['modes']["external diff runs p4 diff with the user's own P4DIFF"] = function()
   })
   edit('a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  -- unchanged: no diff (tool not launched), just a message
+  child.lua(
+    [[_G.msgs = {}; local n = vim.notify; vim.notify = function(m, ...) table.insert(_G.msgs, m); n(m, ...) end]]
+  )
+  child.cmd('P4 diff!')
+  wait(
+    [[vim.tbl_contains(vim.tbl_map(function(m) return m:match('identical') ~= nil end, _G.msgs), true)]]
+  )
+  H.eq(vim.uv.fs_stat(tool_log), nil)
+  H.eq(#child.api.nvim_list_tabpages(), 1)
+  child.lua(
+    [[vim.bo.readonly = false; vim.api.nvim_buf_set_lines(0, 0, 1, false, { 'changed' }); vim.cmd('write')]]
+  )
   child.cmd('P4 diff!')
   H.eq(
     vim.wait(10000, function()
