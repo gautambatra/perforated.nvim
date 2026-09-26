@@ -257,31 +257,6 @@ local function build(view, data)
     }
   end
 
-  -- Recent submitted (mine)
-  local sub_children = {}
-  for _, c in ipairs(data.submitted or {}) do
-    sub_children[#sub_children + 1] = {
-      id = 'sub:' .. c.change,
-      kind = 'submitted',
-      item = c,
-      text = {
-        { 'CL ' .. c.change, 'PerforatedChangelist' },
-        { '  ' .. short_date(c.time), 'PerforatedDim' },
-        { '  ' .. first_line(c.desc), 'PerforatedPath' },
-      },
-    }
-  end
-  roots[#roots + 1] = {
-    id = 'sec:submitted',
-    kind = 'section',
-    open = true,
-    text = {
-      { 'Recent submitted', 'PerforatedSection' },
-      { ('  (%d)'):format(#sub_children), 'PerforatedDim' },
-    },
-    children = sub_children,
-  }
-
   -- Workspace reconcile (lazy)
   local rec_children
   local label
@@ -316,7 +291,14 @@ local function build(view, data)
       {
         id = 'r:hint',
         kind = 'loading',
-        text = { { 'expand to scan the workspace', 'PerforatedDim' } },
+        text = {
+          {
+            'expand to scan '
+              .. (#M.reconcile_scope(view.ws) > 0 and 'these paths' or 'the whole client')
+              .. ' · p sets the paths',
+            'PerforatedDim',
+          },
+        },
       },
     }
     label = '  (not scanned)'
@@ -325,7 +307,16 @@ local function build(view, data)
     id = 'sec:reconcile',
     kind = 'section_reconcile',
     open = false,
-    text = { { 'Workspace reconcile', 'PerforatedSection' }, { label, 'PerforatedDim' } },
+    text = {
+      { 'Workspace reconcile', 'PerforatedSection' },
+      {
+        #M.reconcile_scope(view.ws) > 0
+            and ('  · ' .. table.concat(M.reconcile_scope(view.ws), ' '))
+          or '',
+        'PerforatedHeader',
+      },
+      { label, 'PerforatedDim' },
+    },
     children = rec_children,
     on_open = function()
       if view.reconcile.state ~= 'running' and view.reconcile.state ~= 'done' then
@@ -333,6 +324,31 @@ local function build(view, data)
       end
     end,
   }
+  -- Recent submitted (mine)
+  local sub_children = {}
+  for _, c in ipairs(data.submitted or {}) do
+    sub_children[#sub_children + 1] = {
+      id = 'sub:' .. c.change,
+      kind = 'submitted',
+      item = c,
+      text = {
+        { 'CL ' .. c.change, 'PerforatedChangelist' },
+        { '  ' .. short_date(c.time), 'PerforatedDim' },
+        { '  ' .. first_line(c.desc), 'PerforatedPath' },
+      },
+    }
+  end
+  roots[#roots + 1] = {
+    id = 'sec:submitted',
+    kind = 'section',
+    open = true,
+    text = {
+      { 'Recent submitted', 'PerforatedSection' },
+      { ('  (%d)'):format(#sub_children), 'PerforatedDim' },
+    },
+    children = sub_children,
+  }
+
   return roots
 end
 
@@ -434,26 +450,80 @@ end
 
 --- Scan for local changes not opened in Perforce (`p4 status`), cancellable.
 ---@param view table
+--- The reconcile scope: the session's choice (`p` in the view), else
+--- `client_view.reconcile.paths` (a list, or a function(ws) returning one). Entries are paths
+--- relative to the client root, local paths or depot paths; empty = the whole client.
+---@param ws perforated.Workspace
+---@return string[] entries  as configured (for display)
+function M.reconcile_scope(ws)
+  if ws.reconcile_scope then
+    return ws.reconcile_scope
+  end
+  local cfg = (require('perforated.config').get().client_view.reconcile or {}).paths
+  if type(cfg) == 'function' then
+    cfg = cfg(ws)
+  end
+  return type(cfg) == 'table' and cfg or {}
+end
+
+--- Scope entries → `p4 status` arguments (nil = the whole client).
+---@param ws perforated.Workspace
+---@param entries string[]
+---@return string[]?
+function M.reconcile_args(ws, entries)
+  if #entries == 0 then
+    return nil
+  end
+  local out = {}
+  for _, e in ipairs(entries) do
+    e = vim.trim(e)
+    if e ~= '' then
+      if not e:match('^//') and not e:match('^/') and not e:match('^~') then
+        e = (ws.root or ws:cwd()) .. '/' .. e
+      elseif e:match('^~') then
+        e = vim.fn.expand(e)
+      end
+      e = e:gsub('/+$', '')
+      if not e:find('...', 1, true) and not e:find('*', 1, true) then
+        e = e .. '/...'
+      end
+      out[#out + 1] = e
+    end
+  end
+  return #out > 0 and out or nil
+end
+
 function M.scan_reconcile(view)
-  view.reconcile = { state = 'running', t0 = vim.uv.hrtime() }
-  local token = {}
-  view.reconcile.token = token
+  if view.reconcile.job then
+    require('perforated.jobs').cancel(view.reconcile.job)
+  end
+  local jobs = require('perforated.jobs')
+  local entries = M.reconcile_scope(view.ws)
+  local label = #entries > 0 and table.concat(entries, ' ') or 'workspace'
+  local job, run_opts = jobs.start(view.ws, 'reconcile ' .. label)
+  view.reconcile = { state = 'running', t0 = vim.uv.hrtime(), job = job }
   if view.data then
     view.tree:set(build(view, view.data))
   end
-  cls.status(view.ws, nil, function(recs, err)
-    if view.reconcile.token ~= token then
-      return -- cancelled
+  cls.status(view.ws, M.reconcile_args(view.ws, entries), function(recs, err)
+    if view.reconcile.job ~= job then
+      jobs.finish(job, 'superseded', false)
+      return
     end
     if recs then
+      jobs.finish(job, ('%d file(s) to reconcile'):format(#recs))
       view.reconcile = { state = 'done', recs = recs }
+    elseif err == 'cancelled' then
+      jobs.finish(job, 'stopped', true)
+      view.reconcile = { state = 'idle' }
     else
+      jobs.finish(job, tostring(err), true)
       view.reconcile = { state = 'error', err = err }
     end
     if vim.api.nvim_buf_is_valid(view.buf) and view.data then
       view.tree:set(build(view, view.data))
     end
-  end)
+  end, run_opts)
 end
 
 -- -------------------------------------------------------------------------------------------
@@ -1095,8 +1165,36 @@ local function actions(view)
         return view.reconcile.state == 'running'
       end,
       run = function()
-        view.reconcile = { state = 'idle' }
-        view.tree:set(build(view, view.data or {}))
+        -- Stops p4 itself (the scan's callback then resets the section).
+        require('perforated.jobs').cancel(view.reconcile.job)
+      end,
+    },
+    {
+      id = 'reconcile_scope',
+      desc = 'Reconcile: set the paths to scan',
+      keys = { 'p' },
+      kinds = { section_reconcile = true, reconcile_file = true, loading = true },
+      when = function(_, node)
+        return node.kind ~= 'loading' or (node.id or ''):match('^r:') ~= nil
+      end,
+      run = function()
+        local cur = table.concat(M.reconcile_scope(ws), ' ')
+        vim.ui.input({
+          prompt = 'Reconcile paths (relative to the client root, space-separated; empty = whole client): ',
+          default = cur,
+          completion = 'dir',
+        }, function(input)
+          if input == nil then
+            return
+          end
+          ws.reconcile_scope = vim.split(vim.trim(input), '%s+', { trimempty = true })
+          M.scan_reconcile(view)
+          local sec = view.tree.by_id['sec:reconcile']
+          if sec then
+            view.tree.folds[sec.id] = true
+            view.tree:render()
+          end
+        end)
       end,
     },
 

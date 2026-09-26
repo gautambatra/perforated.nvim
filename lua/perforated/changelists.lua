@@ -118,17 +118,23 @@ end
 --- Workspace reconcile preview (`p4 status`): files to add / edit / delete. Can be slow on large
 --- workspaces: no timeout, and the caller may kill it (returns the vim.SystemObj via runner).
 ---@param ws perforated.Workspace
----@param path string?  default //client/...
+---@param path string|string[]|nil  default //client/...
+---@param run_opts table?  extra ws:run options (jobs: on_spawn / on_record)
 ---@param cb fun(recs: table[]?, err: string?)
-function M.status(ws, path, cb)
+function M.status(ws, path, cb, run_opts)
   local client = ws:client()
-  path = path or (client and ('//%s/...'):format(client))
-  if not path then
+  local paths = type(path) == 'table' and path
+    or { path or (client and ('//%s/...'):format(client)) }
+  if #paths == 0 or not paths[1] then
     return vim.schedule(function()
       cb(nil, 'unknown client')
     end)
   end
-  ws:run({ 'status', path }, { timeout = 0, priority = 3 }, function(res)
+  local opts = vim.tbl_extend('force', { timeout = 0, priority = 3 }, run_opts or {})
+  ws:run(vim.list_extend({ 'status' }, paths), opts, function(res)
+    if res.cancelled then
+      return cb(nil, 'cancelled')
+    end
     if res.code ~= 0 and #res.records == 0 then
       return cb(nil, res.errors[1] or vim.trim(res.stderr))
     end

@@ -34,9 +34,14 @@ local defaults = {
   diff = { layout = 'tab', tool = 'builtin', external_terminal = 'auto' },
   client_view = {
     kind = 'tab',
-    sections = { 'pending', 'unresolved', 'submitted', 'reconcile' },
+    sections = { 'pending', 'unresolved', 'reconcile', 'submitted' },
     submitted_limit = 20,
+    -- Paths the reconcile section scans (relative to the client root, local or depot paths;
+    -- or a function(ws) returning them). Empty = the whole client. `p` in the view overrides
+    -- it for the session.
+    reconcile = { paths = {} },
   },
+  sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
   history = { presenter = 'float', limit = 100 },
   annotate = {
     width = 36,
