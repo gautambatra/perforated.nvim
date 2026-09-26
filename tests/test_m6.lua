@@ -164,6 +164,40 @@ T['m6']['memory soak: opening and closing 1000 files returns to baseline'] = fun
   control(21, 1000)
   local neovim_growth = child.lua(gc) - c0
   cycle(1, 20) -- warm up: modules, the workspace, caches
+  -- Sizes of every table reachable from the plugin's modules (and their functions' upvalues).
+  child.lua([[
+    _G.sizes = function()
+      local out, seen = {}, {}
+      local function walk(t, path, depth)
+        if seen[t] or depth > 4 then return end
+        seen[t] = true
+        local n = 0
+        for k, v in pairs(t) do
+          n = n + 1
+          if type(v) == 'table' then walk(v, path .. '.' .. tostring(k), depth + 1) end
+        end
+        out[path] = n
+      end
+      for name, mod in pairs(package.loaded) do
+        if name:match('^perforated') and type(mod) == 'table' then
+          walk(mod, name, 0)
+          for fk, f in pairs(mod) do
+            if type(f) == 'function' then
+              local i = 1
+              while true do
+                local un, uv = debug.getupvalue(f, i)
+                if not un then break end
+                if type(uv) == 'table' then walk(uv, name .. ':' .. fk .. '^' .. un, 1) end
+                i = i + 1
+              end
+            end
+          end
+        end
+      end
+      return out
+    end
+    _G.sizes_before = _G.sizes()
+  ]])
   local before = child.lua(gc)
   cycle(21, 1000)
   local after = child.lua(gc)
@@ -172,8 +206,19 @@ T['m6']['memory soak: opening and closing 1000 files returns to baseline'] = fun
   )
   H.eq(left[1], 0)
   H.eq(left[2], 0)
+  -- A leak is a table that grows with every buffer: none may grow by more than 50 entries.
+  local grown = child.lua_get([[(function()
+    local now, out = _G.sizes(), {}
+    for k, n in pairs(now) do
+      if n - (_G.sizes_before[k] or 0) > 50 then out[#out + 1] = k .. ' +' .. (n - (_G.sizes_before[k] or 0)) end
+    end
+    table.sort(out)
+    return out
+  end)()]])
+  H.eq(grown, {})
+  -- Backstop for large leaks (GC and Neovim's own caches make small numbers noisy).
   local ours = (after - before) - neovim_growth
-  if ours >= 100 then
+  if ours >= 400 then
     error(
       ('Lua memory grew %.0f KB over 980 open/close cycles (Neovim alone: %.0f KB)'):format(
         after - before,
