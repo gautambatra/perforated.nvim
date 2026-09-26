@@ -124,6 +124,8 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(has_line('Shelved (1)'), true)
   H.eq(has_line('stale'), true) -- c.txt
   H.eq(has_line('Needs attention'), true)
+  -- the stale c.txt is in the default changelist: shown after the action
+  H.neq(table.concat(lines(), '\n'):find('edit (default)', 1, true), nil)
   H.eq(has_line('Recent submitted'), true)
   H.eq(has_line('initial import'), true)
   H.eq(has_line('Workspace reconcile'), true)
@@ -286,6 +288,9 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   end
   goto_line('b.txt')
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), true)
+  H.eq(vim.tbl_contains(ids(), 'Get latest revision'), true)
+  H.eq(vim.tbl_contains(ids(), 'Revert if unchanged'), true)
+  H.eq(vim.tbl_contains(ids(), 'Sync workspace'), true)
   H.eq(vim.tbl_contains(ids(), 'Copy CL number'), false)
   goto_line('Shelved (1)')
   child.type_keys('l')
@@ -293,6 +298,8 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   H.eq(vim.tbl_contains(ids(), 'Diff shelved vs base revision'), true)
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), false)
   goto_line('CL 2  Fix parser')
+  H.eq(vim.tbl_contains(ids(), 'Revert unchanged files'), true)
+  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), true)
   child.type_keys('y')
   H.eq(child.fn.getreg('"'), '2')
   H.eq(child.fn.maparg('.', 'n') ~= '', true)

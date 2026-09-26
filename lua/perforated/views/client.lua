@@ -59,7 +59,10 @@ local function file_node(view, rec, prefix)
   local text = {
     marker or { '' },
     {
-      ('%-10s'):format(rec.action or ''),
+      -- In "Needs attention" the changelist isn't visible from the tree: show it.
+      prefix == 'a:' and ('%-18s'):format(
+        ('%s (%s)'):format(rec.action or '', rec.change or 'default')
+      ) or ('%-10s'):format(rec.action or ''),
       row_hl == 'PerforatedUnchanged' and row_hl or 'PerforatedAction',
     },
     { icon ~= '' and (icon .. ' ') or '', row_hl == 'PerforatedUnchanged' and row_hl or icon_hl },
@@ -887,26 +890,54 @@ local function actions(view)
       end,
     },
     {
-      id = 'sync',
-      desc = 'Sync',
+      id = 'get_latest',
+      desc = 'Get latest revision',
       keys = { 'gy' },
-      p4v = { '<C-S-g>' },
+      kinds = { opened_file = true },
       multi = true,
-      run = function(items, ctx)
-        local ops = require('perforated.ops')
-        local node = ctx.node
-        if node and (node.kind == 'opened_file' or node.kind == 'change') then
-          return ops.sync(ws, paths_of(files_of(items)))
-        end
-        if node and node.id == 'sec:attention' then
-          return ops.sync(
-            ws,
-            paths_of(vim.tbl_map(function(c)
-              return c.item
-            end, node.children or {}))
-          )
-        end
-        ops.sync(ws, {}) -- asks for confirmation
+      footer = 43,
+      run = function(items)
+        require('perforated.ops').sync(ws, paths_of(files_of(items)))
+      end,
+    },
+    {
+      id = 'get_latest_change',
+      desc = 'Get latest file revisions',
+      keys = { 'gy' },
+      kinds = { change = true },
+      footer = 43,
+      when = function(item)
+        return #(item.files or {}) > 0
+      end,
+      run = function(items)
+        require('perforated.ops').sync(ws, paths_of(files_of(items)))
+      end,
+    },
+    {
+      id = 'get_latest_attention',
+      desc = 'Get latest revisions of these files',
+      keys = { 'gy' },
+      kinds = { section = true },
+      footer = 43,
+      when = function(_, node)
+        return node.id == 'sec:attention'
+      end,
+      run = function(_, ctx)
+        require('perforated.ops').sync(
+          ws,
+          paths_of(vim.tbl_map(function(c)
+            return c.item
+          end, ctx.node.children or {}))
+        )
+      end,
+    },
+    {
+      id = 'sync',
+      desc = 'Sync workspace',
+      keys = { 'gY' },
+      p4v = { '<C-S-g>' },
+      run = function()
+        require('perforated.ops').sync(ws, {}) -- asks for confirmation
       end,
     },
     {
@@ -1070,10 +1101,21 @@ local function actions(view)
       end,
     },
     {
-      id = 'revert_unchanged',
-      desc = 'Revert unchanged',
+      id = 'revert_if_unchanged',
+      desc = 'Revert if unchanged',
       keys = { 'X' },
-      kinds = { opened_file = true, change = true },
+      kinds = { opened_file = true },
+      multi = true,
+      run = function(items)
+        require('perforated.checkout').revert(ws, paths_of(files_of(items)), true, after(view))
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'revert_unchanged',
+      desc = 'Revert unchanged files',
+      keys = { 'X' },
+      kinds = { change = true },
       multi = true,
       run = function(items)
         require('perforated.checkout').revert(ws, paths_of(files_of(items)), true, after(view))

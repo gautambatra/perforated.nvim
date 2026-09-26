@@ -543,16 +543,18 @@ end
 function M.sync(ws, args, cb)
   cb = cb or function() end
   args = args or {}
-  local what = #args == 0 and 'workspace' or table.concat(args, ' ')
-  -- Every sync is confirmed, however it was started.
-  local shown = #args == 0 and 'the whole workspace'
-    or (#args == 1 and vim.fn.fnamemodify(args[1], ':~:.'))
-    or (#args .. ' paths')
-  if not confirm(('Sync %s?'):format(shown), '&Sync\n&Cancel') then
+  -- Every sync is confirmed, however it was started. With paths it's "get latest revision";
+  -- without, a sync of the whole workspace.
+  local shown = #args == 1 and vim.fn.fnamemodify(args[1], ':~:.') or (#args .. ' files')
+  local question = #args == 0 and 'Sync the whole workspace?'
+    or (#args == 1 and ('Get the latest revision of %s?'):format(shown))
+    or ('Get the latest revisions of %s?'):format(shown)
+  if not confirm(question, #args == 0 and '&Sync\n&Cancel' or '&Get latest\n&Cancel') then
     return cb(false)
   end
+  local what = #args == 0 and 'workspace' or shown
   local jobs = require('perforated.jobs')
-  local job, run_opts = jobs.start(ws, 'sync ' .. what)
+  local job, run_opts = jobs.start(ws, #args == 0 and 'sync workspace' or ('get latest ' .. what))
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
     local changed_paths, counts = {}, {}
     for _, r in ipairs(res.records) do
