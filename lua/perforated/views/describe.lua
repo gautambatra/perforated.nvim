@@ -467,6 +467,33 @@ local function actions(view)
       end,
     },
     {
+      id = 'submit',
+      desc = 'Submit',
+      keys = { 'P' },
+      p4v = { '<C-s>' },
+      when = function()
+        return view.item.status == 'pending'
+          and view.item.client == ws:client()
+          and #view.data.files > 0
+      end,
+      run = function()
+        require('perforated.ops').submit(ws, view.item.change, function()
+          view.refresh()
+        end)
+      end,
+    },
+    {
+      id = 'integrate',
+      desc = 'Integrate (cherry-pick) into this workspace',
+      keys = { 'I' },
+      when = function()
+        return view.item.status == 'submitted' and ws.mode ~= 'connection'
+      end,
+      run = function()
+        require('perforated.integrate').run(ws, view.item.change)
+      end,
+    },
+    {
       id = 'to_qf',
       desc = 'Files to quickfix',
       keys = { 'Q' },

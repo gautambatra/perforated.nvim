@@ -3,7 +3,8 @@
 --
 -- Behaviour is driven by a Lua rules file ($FAKE_P4_RULES) returning a list of rules:
 --   { match = '^info', records = { {...} }, stdout = '...', stderr = '...', code = 0,
---     sleep = 0.2, hang = true, unless = '/path', touch = '/path' }
+--     sleep = 0.2, hang = true, hang_after = true, unless = '/path', touch = '/path' }
+-- `hang_after`: write the records first, then hang (a slow command that streams output).
 -- `unless`: skip the rule when that file exists; `touch`: create that file when the rule fires
 -- (lets tests model state changes such as logging in).
 -- `match` is a Lua pattern tested against the command line after the global options
@@ -94,6 +95,9 @@ for _, rule in ipairs(rules) do
       io.stderr:write(rule.stderr)
     end
     io.stdout:flush()
+    if rule.hang_after then
+      vim.uv.sleep(600000)
+    end
     os.exit(rule.code or 0)
   end
 end

@@ -20,6 +20,8 @@ local M = {}
 ---@field env_mode ('internal'|'user')? default 'internal'
 ---@field ws string?             workspace key, for the log
 ---@field bin string?            p4 executable override
+---@field on_record fun(rec: table)?  each decoded record as it streams in (fast context: no API calls)
+---@field on_spawn fun(ctl: { cancel: fun() })?  called once the process runs; cancel() stops it
 
 ---@class perforated.RunResult
 ---@field ok boolean             exit 0, no severity>=3 message, not timed out
@@ -34,6 +36,7 @@ local M = {}
 ---@field timed_out boolean
 ---@field argv string[]
 ---@field all table[]?          tagged: every record incl. messages, in output order
+---@field cancelled boolean?     stopped by the user (on_spawn's cancel)
 
 M.TIMEOUT_CODE = 124 -- vim.system's exit code on timeout
 M.KILL_GRACE = 2000 -- ms between SIGTERM (timeout) and SIGKILL
@@ -68,6 +71,9 @@ function M.run(spec, cb)
       local rec = parse.json_line(line)
       if rec then
         recs[#recs + 1] = rec
+        if spec.on_record then
+          spec.on_record(rec)
+        end
       elseif not line:find('^%s*$') then
         bad = bad + 1
       end
@@ -78,6 +84,7 @@ function M.run(spec, cb)
   local started = os.time()
   local kill_timer ---@type uv.uv_timer_t?
   local killed = false
+  local cancelled = false
 
   local function finish(obj)
     if kill_timer then
@@ -90,7 +97,9 @@ function M.run(spec, cb)
       signal = obj.signal,
       stderr = obj.stderr or '',
       ms = (vim.uv.hrtime() - t0) / 1e6,
-      timed_out = killed or (obj.code == M.TIMEOUT_CODE and (spec.timeout or 0) > 0),
+      timed_out = not cancelled
+        and (killed or (obj.code == M.TIMEOUT_CODE and (spec.timeout or 0) > 0)),
+      cancelled = cancelled,
       argv = argv,
     }
     if tagged then
@@ -101,9 +110,11 @@ function M.run(spec, cb)
       res.records, res.warnings, res.errors = {}, {}, {}
       res.stdout = table.concat(out_chunks)
     end
-    res.ok = res.code == 0 and #res.errors == 0 and not res.timed_out
+    res.ok = res.code == 0 and #res.errors == 0 and not res.timed_out and not cancelled
     local err = res.errors[1]
-    if not err and res.code ~= 0 then
+    if cancelled then
+      err = 'cancelled'
+    elseif not err and res.code ~= 0 then
       err = res.timed_out and ('timed out after %dms'):format(spec.timeout)
         or vim.trim(res.stderr):match('[^\n]*$')
         or ('exit ' .. res.code)
@@ -186,6 +197,23 @@ function M.run(spec, cb)
       killed = true
       pcall(obj.kill, obj, 'sigkill')
     end)
+  end
+
+  if ok and spec.on_spawn then
+    spec.on_spawn({
+      cancel = function()
+        if cancelled then
+          return
+        end
+        cancelled = true
+        pcall(obj.kill, obj, 'sigterm')
+        local t = vim.uv.new_timer()
+        t:start(M.KILL_GRACE, 0, function()
+          t:close()
+          pcall(obj.kill, obj, 'sigkill')
+        end)
+      end,
+    })
   end
 
   if not ok then

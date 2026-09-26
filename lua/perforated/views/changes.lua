@@ -130,6 +130,18 @@ function M.open(ws, opts)
       end,
     },
     {
+      id = 'integrate',
+      desc = 'Integrate (cherry-pick) into this workspace',
+      keys = { 'I' },
+      kinds = { submitted = true },
+      when = function()
+        return ws.mode ~= 'connection'
+      end,
+      run = function(items)
+        require('perforated.integrate').run(ws, items[1].change)
+      end,
+    },
+    {
       id = 'describe',
       desc = 'Describe changelist',
       keys = { 'gd' },

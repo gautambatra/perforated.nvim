@@ -1,0 +1,7 @@
+#!/bin/sh
+# Fake merge tool for tests: `fake-merge base theirs yours merged`.
+# Writes $FAKE_MERGE_RESULT (if set) over the merged file, records its arguments in
+# $FAKE_MERGE_LOG, and exits with $FAKE_MERGE_EXIT (default 0).
+[ -n "$FAKE_MERGE_LOG" ] && printf '%s\n' "$@" > "$FAKE_MERGE_LOG"
+[ -n "$FAKE_MERGE_RESULT" ] && cp "$FAKE_MERGE_RESULT" "$4"
+exit "${FAKE_MERGE_EXIT:-0}"

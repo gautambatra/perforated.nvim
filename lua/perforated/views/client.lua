@@ -686,6 +686,151 @@ local function actions(view)
         )
       end,
     },
+    -- M4: shelve, submit, resolve, sync, integrate
+    {
+      id = 'shelve',
+      desc = 'Shelve',
+      keys = { 's' },
+      kinds = { opened_file = true, change = true },
+      multi = true,
+      footer = 40,
+      when = function(item)
+        return item.change ~= 'default'
+          and (item.files == nil or #item.files > 0)
+          and item.mine ~= false
+      end,
+      run = function(items, ctx)
+        local ops = require('perforated.ops')
+        if ctx.node.kind == 'change' and #ctx.nodes == 1 then
+          return ops.shelve(ws, items[1].change, nil)
+        end
+        local by_cl = {}
+        for _, f in ipairs(files_of(items)) do
+          local cl = f.change or 'default'
+          by_cl[cl] = by_cl[cl] or {}
+          table.insert(by_cl[cl], f.clientFile or f.depotFile)
+        end
+        for cl, paths in pairs(by_cl) do
+          ops.shelve(ws, cl, paths)
+        end
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'unshelve',
+      desc = 'Unshelve',
+      keys = { 'S' },
+      kinds = { shelf = true, shelved_file = true },
+      multi = true,
+      footer = 41,
+      run = function(items, ctx)
+        local change = items[1].change
+        local files = nil
+        if ctx.node.kind == 'shelved_file' then
+          files = vim.tbl_map(function(it)
+            return it.depotFile
+          end, items)
+        end
+        require('perforated.ops').unshelve(ws, change, files, nil)
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'delete_shelved',
+      desc = 'Delete shelved files',
+      keys = { 'z' },
+      kinds = { shelf = true, shelved_file = true },
+      multi = true,
+      run = function(items, ctx)
+        local files = nil
+        if ctx.node.kind == 'shelved_file' then
+          files = vim.tbl_map(function(it)
+            return it.depotFile
+          end, items)
+        end
+        require('perforated.ops').delete_shelved(ws, items[1].change, files)
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'submit',
+      desc = 'Submit',
+      keys = { 'P' },
+      p4v = { '<C-s>' },
+      kinds = { change = true },
+      footer = 42,
+      when = function(item)
+        return item.mine ~= false and #(item.files or {}) > 0
+      end,
+      run = function(items)
+        require('perforated.ops').submit(ws, items[1].change)
+      end,
+    },
+    {
+      id = 'resolve',
+      desc = 'Resolve',
+      keys = { 'R' },
+      kinds = { opened_file = true, change = true, section = true },
+      multi = true,
+      when = function(item, node)
+        if node.kind == 'section' then
+          return node.id == 'sec:attention'
+        end
+        if item.files then
+          for _, f in ipairs(item.files) do
+            if f.unresolved then
+              return true
+            end
+          end
+          return false
+        end
+        return item.unresolved ~= nil
+      end,
+      run = function(items, ctx)
+        local paths
+        if ctx.node.kind ~= 'section' then
+          paths = paths_of(vim.tbl_filter(function(f)
+            return f.unresolved ~= nil
+          end, files_of(items)))
+        end
+        require('perforated.resolve').run(ws, paths)
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'sync',
+      desc = 'Sync',
+      keys = { 'gy' },
+      p4v = { '<C-S-g>' },
+      multi = true,
+      run = function(items, ctx)
+        local ops = require('perforated.ops')
+        local node = ctx.node
+        if node and (node.kind == 'opened_file' or node.kind == 'change') then
+          return ops.sync(ws, paths_of(files_of(items)))
+        end
+        if node and node.id == 'sec:attention' then
+          return ops.sync(
+            ws,
+            paths_of(vim.tbl_map(function(c)
+              return c.item
+            end, node.children or {}))
+          )
+        end
+        if vim.fn.confirm('Sync the whole workspace?', '&Sync\n&Cancel', 2) == 1 then
+          ops.sync(ws, {})
+        end
+      end,
+    },
+    {
+      id = 'integrate',
+      desc = 'Integrate (cherry-pick) into this workspace',
+      keys = { 'I' },
+      kinds = { submitted = true },
+      run = function(items)
+        require('perforated.integrate').run(ws, items[1].change)
+      end,
+    },
     {
       id = 'describe',
       desc = 'Describe changelist',

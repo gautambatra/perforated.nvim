@@ -220,32 +220,37 @@ do
   local root = H.tmp()
   H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
   H.write(root .. '/a.c', 'x')
-  local c2 = H.child({
-    fake = {
-      rules = {
-        {
-          match = '^info',
-          records = { { clientName = 'ws1', clientRoot = root, userName = 'alice' } },
+  -- First paint happens once per Neovim: best of 3 fresh instances.
+  local paint = math.huge
+  for _ = 1, 3 do
+    local c2 = H.child({
+      fake = {
+        rules = {
+          {
+            match = '^info',
+            records = { { clientName = 'ws1', clientRoot = root, userName = 'alice' } },
+          },
+          { match = '^set', stdout = 'P4CLIENT=ws1\n' },
+          { match = '.', sleep = 0.3, records = {} },
         },
-        { match = '^set', stdout = 'P4CLIENT=ws1\n' },
-        { match = '.', sleep = 0.3, records = {} },
       },
-    },
-    env = { P4CONFIG = '.p4config' },
-    config = { p4 = H.fake_p4, poll = { interval = 0 }, startup_check = false },
-  })
-  c2.cmd('edit ' .. root .. '/a.c')
-  H.wait(c2, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
-  local paint = c2.lua([[
-    require('perforated.views.client') -- module load isn't part of the paint budget
-    require('perforated.ui.tree'); require('perforated.ui.keys'); require('perforated.ui.footer')
-    local ws = require('perforated').workspace()
-    local t0 = vim.uv.hrtime()
-    require('perforated.views.client').open(ws)
-    return (vim.uv.hrtime() - t0) / 1e6
-  ]])
+      env = { P4CONFIG = '.p4config' },
+      config = { p4 = H.fake_p4, poll = { interval = 0 }, startup_check = false },
+    })
+    c2.cmd('edit ' .. root .. '/a.c')
+    H.wait(c2, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
+    local one = c2.lua([[
+      require('perforated.views.client') -- module load isn't part of the paint budget
+      require('perforated.ui.tree'); require('perforated.ui.keys'); require('perforated.ui.footer')
+      local ws = require('perforated').workspace()
+      local t0 = vim.uv.hrtime()
+      require('perforated.views.client').open(ws)
+      return (vim.uv.hrtime() - t0) / 1e6
+    ]])
+    paint = math.min(paint, one)
+    c2.stop()
+  end
   record('client view: first paint (skeleton)', paint, 'ms', 16)
-  c2.stop()
 end
 
 -- 7. Annotate: parsing 20k `annotate -c` records and rendering the 20k-line column.

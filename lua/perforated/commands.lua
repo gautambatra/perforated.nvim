@@ -422,6 +422,150 @@ M.commands = {
     end,
   },
 
+  shelve = {
+    scope = 'workspace',
+    desc = "Shelve: :P4 shelve [-c CL] [file…]  (default: the current file's CL, all its files; -d deletes the shelf)",
+    complete = complete_files,
+    run = function(ws, _, args)
+      local ops = require('perforated.ops')
+      local cl, files, flags = parse_file_args(args)
+      local explicit = #vim.tbl_filter(function(a)
+        return not a:match('^%-') and a ~= cl
+      end, args) > 0
+      local st = require('perforated.buffer').get(0)
+      cl = cl or (st and st.rec and st.rec.change)
+      if not cl then
+        return notify('pass -c CL (the current file is not opened)', vim.log.levels.WARN)
+      end
+      if flags['-d'] then
+        return ops.delete_shelved(ws, cl, nil)
+      end
+      ops.shelve(ws, cl, explicit and files or nil)
+    end,
+  },
+
+  unshelve = {
+    scope = 'workspace',
+    desc = 'Unshelve: :P4 unshelve CL [-c target] [//depot/file…]',
+    run = function(ws, _, args)
+      local shelf, target, files = nil, nil, {}
+      local i = 1
+      while i <= #args do
+        if args[i] == '-c' then
+          target = args[i + 1]
+          i = i + 1
+        elseif not shelf and args[i]:match('^%d+$') then
+          shelf = args[i]
+        else
+          files[#files + 1] = args[i]
+        end
+        i = i + 1
+      end
+      if not shelf then
+        return notify('usage: :P4 unshelve CL [-c target] [files]', vim.log.levels.WARN)
+      end
+      require('perforated.ops').unshelve(ws, shelf, #files > 0 and files or nil, target)
+    end,
+  },
+
+  submit = {
+    scope = 'workspace',
+    desc = "Submit a changelist (with a confirmation): :P4 submit [CL|default]  (default: the current file's CL)",
+    run = function(ws, _, args)
+      local cl = args[1]
+      if not cl then
+        local st = require('perforated.buffer').get(0)
+        cl = st and st.rec and st.rec.change
+        if not cl then
+          return notify('current file is not opened; pass a changelist number', vim.log.levels.WARN)
+        end
+      end
+      require('perforated.ops').submit(ws, cl)
+    end,
+  },
+
+  sync = {
+    scope = 'workspace',
+    desc = 'Sync: :P4 sync [path|%|@CL|#head …]  (no args: the whole workspace)',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local out = {}
+      for _, a in ipairs(args) do
+        if a:match('^[@#]') then
+          out[#out + 1] = '//' .. (ws:client() or '') .. '/...' .. a -- a revision for the workspace
+        elseif a:match('^//') then
+          out[#out + 1] = a
+        else
+          local path, rev = a:match('^(.-)([#@].*)$')
+          path = path or a
+          out[#out + 1] = vim.fn.fnamemodify(vim.fn.expand(path), ':p') .. (rev or '')
+        end
+      end
+      require('perforated.ops').sync(ws, out)
+    end,
+  },
+
+  resolve = {
+    scope = 'workspace',
+    desc = 'Resolve: :P4 resolve [file…]  (-am first, then $P4MERGE for conflicts; no args: all files)',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local files = {}
+      for _, a in ipairs(args) do
+        files[#files + 1] = vim.fn.fnamemodify(vim.fn.expand(a), ':p')
+      end
+      require('perforated.resolve').run(ws, #files > 0 and files or nil)
+    end,
+  },
+
+  delete = {
+    scope = 'workspace',
+    desc = 'Open files for delete (with a confirmation): :P4 delete [file…]',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local _, files = parse_file_args(args)
+      if need_files(files) then
+        require('perforated.ops').delete(ws, files)
+      end
+    end,
+  },
+
+  move = {
+    scope = 'workspace',
+    desc = 'Move/rename the current file: :P4 move {new path}',
+    complete = complete_files,
+    run = function(_, _, args)
+      if not args[1] then
+        return notify('usage: :P4 move {new path}', vim.log.levels.WARN)
+      end
+      require('perforated.ops').move(vim.api.nvim_get_current_buf(), args[1])
+    end,
+  },
+
+  integrate = {
+    scope = 'workspace',
+    desc = 'Cherry-pick a submitted changelist: :P4 integrate [CL]  (no CL: pick from a source path)',
+    run = function(ws, _, args)
+      require('perforated.integrate').run(ws, args[1])
+    end,
+  },
+
+  jobs = {
+    scope = 'none',
+    desc = 'Running p4 jobs (sync, submit), live; x in the list stops one',
+    run = function()
+      require('perforated.jobs').show()
+    end,
+  },
+
+  cancel = {
+    scope = 'none',
+    desc = 'Stop every running p4 job (sync, submit)',
+    run = function()
+      require('perforated.jobs').cancel()
+    end,
+  },
+
   notifications = {
     scope = 'none',
     desc = 'Show recent notifications (stale files, …)',

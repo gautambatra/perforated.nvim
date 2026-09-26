@@ -44,9 +44,11 @@ local subs = {
   'add',
   'annotate',
   'blame',
+  'cancel',
   'change',
   'changes',
   'debug',
+  'delete',
   'describe',
   'diff',
   'dismiss',
@@ -54,16 +56,24 @@ local subs = {
   'filelog',
   'history',
   'hunks',
+  'integrate',
+  'jobs',
   'info',
   'log',
   'login',
   'lookup',
+  'move',
   'notifications',
   'opened',
   'pick',
   'refresh',
+  'resolve',
   'revert',
+  'shelve',
   'status',
+  'submit',
+  'sync',
+  'unshelve',
   'view',
 }
 
@@ -79,20 +89,35 @@ end, {
   end,
 })
 
+-- Flat aliases (`:P4sync` = `:P4 sync`) are defined the first time they're used: creating ~40
+-- user commands up front would be most of this file's startup cost.
 if vim.tbl_get(vim.g, 'perforated', 'commands', 'aliases') ~= false then
+  local is_sub = {}
   for _, sub in ipairs(subs) do
-    vim.api.nvim_create_user_command('P4' .. sub, function(o)
-      require('perforated.commands').dispatch(sub, o)
-    end, {
-      nargs = '*',
-      bang = true,
-      range = true,
-      desc = 'Perforce: :P4 ' .. sub,
-      complete = function(arglead, cmdline, pos)
-        return require('perforated.commands').complete_args(sub, arglead, cmdline, pos)
-      end,
-    })
+    is_sub[sub] = true
   end
+  vim.api.nvim_create_autocmd('CmdUndefined', {
+    group = vim.api.nvim_create_augroup('perforated.aliases', { clear = true }),
+    pattern = 'P4*',
+    desc = 'perforated: define :P4<sub> aliases on first use',
+    callback = function(ev)
+      local sub = ev.match:sub(3)
+      if not is_sub[sub] then
+        return
+      end
+      vim.api.nvim_create_user_command('P4' .. sub, function(o)
+        require('perforated.commands').dispatch(sub, o)
+      end, {
+        nargs = '*',
+        bang = true,
+        range = true,
+        desc = 'Perforce: :P4 ' .. sub,
+        complete = function(arglead, cmdline, pos)
+          return require('perforated.commands').complete_args(sub, arglead, cmdline, pos)
+        end,
+      })
+    end,
+  })
 end
 
 -- Depot revisions as buffers: `:e perforated:////depot/path/file.c#3`.
@@ -128,6 +153,11 @@ for _, name in ipairs({
   'blame-line',
   'describe',
   'lookup',
+  'sync',
+  'sync-file',
+  'resolve',
+  'submit',
+  'shelve',
 }) do
   vim.api.nvim_set_keymap(
     'n',
