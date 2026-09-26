@@ -681,6 +681,16 @@ function M.open(ws, change)
     end)
   end
   view.actions = actions(view)
+  vim.list_extend(
+    view.actions,
+    require('perforated.p4vc').actions(
+      ws,
+      { describe_file = true, describe_shelved = true, diff_line = true },
+      function(it)
+        return it and (it.file or it).depotFile
+      end
+    )
+  )
   base.finish(view)
   M._last = view
   view.refresh()

@@ -145,6 +145,12 @@ function M.refresh(ws, opts, cb)
       end
     end
     ws.opened = opened
+    -- Files no longer opened (reverted, submitted) mustn't keep an "opened" cache entry.
+    for k, rec in pairs(ws.fstat) do
+      if rec.action and not opened[rec.depotFile] then
+        ws.fstat[k] = nil
+      end
+    end
     ws.opened_count, ws.stale_count, ws.unresolved_count = #recs, stale, unres
     dbg.info(
       'poll',
@@ -273,6 +279,12 @@ local function ensure_autocmds()
         last_enter[ev.buf] = now
         require('perforated.buffer').refresh(ev.buf)
       end
+    end,
+  })
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    group = group,
+    callback = function(ev)
+      last_enter[ev.buf] = nil
     end,
   })
 end

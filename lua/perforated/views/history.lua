@@ -418,6 +418,12 @@ function M.open(ws, path, opts)
   end
   view.actions = base.nav(view, 'History', { expand_menu = true })
   vim.list_extend(view.actions, M.rev_actions(ctx))
+  vim.list_extend(
+    view.actions,
+    require('perforated.p4vc').actions(ws, { rev = true }, function(it)
+      return it and it.depotFile
+    end)
+  )
   vim.list_extend(view.actions, {
     {
       id = 'more',

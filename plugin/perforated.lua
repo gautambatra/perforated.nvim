@@ -65,6 +65,7 @@ local subs = {
   'move',
   'notifications',
   'opened',
+  'p4vc',
   'pick',
   'refresh',
   'resolve',
@@ -160,6 +161,7 @@ for _, name in ipairs({
   'submit',
   'shelve',
   'timelapse',
+  'revgraph',
 }) do
   vim.api.nvim_set_keymap(
     'n',

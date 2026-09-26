@@ -1,0 +1,3 @@
+#!/bin/sh
+# Fake p4vc for tests: records its arguments and working directory in $FAKE_P4VC_LOG.
+printf '%s|%s\n' "$*" "$PWD" >> "$FAKE_P4VC_LOG"

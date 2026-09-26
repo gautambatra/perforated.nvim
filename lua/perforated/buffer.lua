@@ -70,11 +70,19 @@ local function flush(ws)
       local pos = r.by_index[i] or {}
       local rec = r.files[k] or pos.rec
       local missing = r.missing[k] or pos.missing
-      ws.fstat[k] = rec
+      local shown = false
       for buf, st in pairs(states) do
         if st.ws == ws and st.key == k then
           M.apply(buf, rec, missing)
+          shown = true
         end
+      end
+      -- Cache only what's still needed: files shown in a buffer, or opened in Perforce (a
+      -- buffer wiped while its fstat was in flight must not leave an entry behind).
+      if shown or (rec and rec.action) then
+        ws.fstat[k] = rec
+      else
+        ws.fstat[k] = nil
       end
     end
   end)
@@ -345,6 +353,16 @@ function M.detach(buf)
     st.timer:close()
   end
   pcall(require('perforated.signs').render, buf, {})
+  -- Drop the cached fstat of a file that's no longer shown and isn't opened in Perforce.
+  local cached = st.ws.fstat and st.ws.fstat[st.key]
+  if cached and not cached.action then
+    for _, other in pairs(states) do
+      if other.ws == st.ws and other.key == st.key then
+        return
+      end
+    end
+    st.ws.fstat[st.key] = nil
+  end
 end
 
 --- Recompute cache keys after the workspace learned its case handling.

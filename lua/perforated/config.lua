@@ -9,6 +9,8 @@ local M = {}
 local defaults = {
   --- p4 executable (name on $PATH or absolute path)
   p4 = 'p4',
+  --- p4vc executable (revision graph, P4V time-lapse, stream graph), when installed
+  p4vc = 'p4vc',
   checkout = {
     prompt = true,
     on_write = false,

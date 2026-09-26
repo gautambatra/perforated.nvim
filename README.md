@@ -422,8 +422,17 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 |---|---|
 | `:P4 debug` | Show whether logging is on and where the file is |
 | `:P4 debug on [level]` / `off` | Toggle at runtime |
+| `:P4 debug timings` | Where the time goes: p4 calls per command (count, avg, max) and the plugin's own work (client view refresh/render, annotate, time-lapse steps, …) |
 | `:P4 debug snapshot` | Write the current state (workspaces, buffers, queue, recent p4 calls) to the log, for bug reports |
 | `:P4 debug open` / `clear` | Open or delete the log file |
+
+### ✅ P4V tools (p4vc)
+
+When `p4vc` is installed: `gR` / `<C-S-r>` opens the **revision graph** of the file under the
+cursor (client view, describe, history, annotate, time-lapse), the `.` menu adds **P4V's
+time-lapse**, and `:P4 p4vc {revgraph|timelapse|streamgraph} [file]` runs them directly (the
+current file by default). `:checkhealth perforated` shows whether it was found; set
+`p4vc = '/path/to/p4vc'` if it isn't on your `PATH`.
 
 ### ✅ Icons
 
@@ -454,6 +463,7 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 filelog [path]` / `:P4 history` | File history (a directory: its changelists) |
 | `:P4 annotate [//depot/path#rev]` | Annotate split for the current file (or a depot revision) |
 | `:P4 timelapse [path]` | Time-lapse: step through every revision of a file |
+| `:P4 p4vc {revgraph\|timelapse\|streamgraph} [file]` | P4V's revision graph, time-lapse or stream graph (needs p4vc) |
 | `:P4 blame [on\|off]` | Toggle current-line blame |
 | `:P4 lookup [what]` | Go to a changelist number, a path's history or a user's changelists |
 | `:P4 shelve [-c CL] [-d] [file…]` | Shelve a changelist (or files); `-d` deletes the shelf |
@@ -510,6 +520,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-sync)           <Plug>(perforated-sync-file)
 <Plug>(perforated-resolve)        <Plug>(perforated-submit)
 <Plug>(perforated-shelve)         <Plug>(perforated-timelapse)
+<Plug>(perforated-revgraph)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
@@ -526,7 +537,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
 | `<leader>ph` / `<leader>pA` / `<leader>pb` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
-| `<leader>pt` | Time-lapse |
+| `<leader>pt` / `<leader>pG` | Time-lapse / revision graph (p4vc) |
 | `<leader>py` / `<leader>pY` | Sync this file / the workspace |
 | `<leader>pR` / `<leader>pP` / `<leader>pS` | Resolve this file / submit its changelist / shelve its changelist |
 
@@ -537,6 +548,7 @@ These are the defaults for everything that has an effect today:
 ```lua
 {
   p4 = 'p4', -- executable name or absolute path
+  p4vc = 'p4vc', -- for the revision graph / P4V time-lapse / stream graph, when installed
   checkout = {
     prompt = true, -- menu on first modification
     on_write = false, -- with prompt = false: check out silently on :w

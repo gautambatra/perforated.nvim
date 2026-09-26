@@ -46,6 +46,7 @@ end
 ---@param list { left: table, right: table }[]
 ---@param cb fun(same: boolean[])
 function M.check(ws, list, cb)
+  local t0 = vim.uv.hrtime()
   local result = {}
   local digest_specs, digest_seen = {}, {}
   local sr_paths = {} -- path → { pair indexes } for `diff -sr`
@@ -56,6 +57,10 @@ function M.check(ws, list, cb)
     if todo == 0 and not finished then
       finished = true
       vim.schedule(function()
+        require('perforated.core.debug').timing(
+          'identical-files check',
+          (vim.uv.hrtime() - t0) / 1e6
+        )
         cb(result)
       end)
     end
