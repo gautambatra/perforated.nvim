@@ -41,7 +41,8 @@ local defaults = {
     -- it for the session.
     reconcile = { paths = {} },
   },
-  sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
+  sync = { resolve_prompt = true },
+  timelapse = { max_bytes = 20 * 1024 * 1024 }, -- larger files: use history instead -- after a sync that leaves files unresolved: offer to resolve
   history = { presenter = 'float', limit = 100 },
   annotate = {
     width = 36,

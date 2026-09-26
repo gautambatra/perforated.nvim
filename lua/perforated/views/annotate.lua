@@ -407,6 +407,19 @@ local function actions(view)
       end,
     },
     {
+      id = 'timelapse',
+      desc = 'Time-lapse from this revision',
+      keys = { 't' },
+      p4v = { '<C-S-t>' },
+      run = function()
+        local line = vim.api.nvim_win_get_cursor(view.win)[1]
+        require('perforated.views.timelapse').open(ws, view.ann.depotFile, {
+          rev = tonumber(view.ann.rev),
+          line = line,
+        })
+      end,
+    },
+    {
       id = 'history',
       desc = 'File history',
       keys = { 'L' },

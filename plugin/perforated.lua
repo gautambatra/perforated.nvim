@@ -73,6 +73,7 @@ local subs = {
   'status',
   'submit',
   'sync',
+  'timelapse',
   'unshelve',
   'view',
 }
@@ -158,6 +159,7 @@ for _, name in ipairs({
   'resolve',
   'submit',
   'shelve',
+  'timelapse',
 }) do
   vim.api.nvim_set_keymap(
     'n',

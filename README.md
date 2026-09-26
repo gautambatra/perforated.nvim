@@ -165,6 +165,27 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **Swarm:** `gx` opens a changelist's review and `gX` copies its URL. The URL comes from
   `swarm.url` or the server's `P4.Swarm.URL` property.
 
+### ✅ Time-lapse
+
+`:P4 timelapse` (`t` on a file in the client view, describe, history or annotate; `<C-S-t>`)
+opens the file in a read-only buffer (with its syntax highlighting) that steps through every
+revision instantly:
+
+- `h` / `l` (or `[r` / `]r`) step back and forward, `[R` / `]R` jump to the first / last
+  revision, `r` goes to `#N` or `@CL`, and `T` picks a revision by its description.
+- The winbar shows `#N/#head · CL · user · date · action · description`. Lines added in that
+  revision are highlighted and lines it deleted are shown where they were.
+- The cursor stays on the same line of the file as you step, even when lines are added or
+  removed above it.
+- `d` diffs against the previous revision, `D` describes the changelist, `K` shows it in a
+  popup, `y` copies its number, `Q` lists the lines added in that revision (location list),
+  `a` toggles an age gutter, `b` annotates the revision, `L` opens the history.
+
+It takes two p4 calls (`filelog` and `annotate -a`, which lists every line the file ever had
+with the revisions it lived in); every revision is then rebuilt in memory, and a step only
+edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions). Files above
+`timelapse.max_bytes` (20 MB) point you to their history instead.
+
 ### ✅ Shelve, submit, sync, resolve, integrate
 
 - **Shelve (`s`), unshelve (`S`), delete shelved files (`z`)** on a changelist or on marked
@@ -406,7 +427,6 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 
 | Milestone | Features |
 |---|---|
-| M5 | Time-lapse view (step through revisions instantly) |
 | M6 | P4V-style time-lapse slider, `p4vc` escape hatches, polish |
 
 The detailed plan is in [docs/plan.md](docs/plan.md). Agreed behaviour is in
@@ -426,6 +446,7 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 describe [N]` | Changelist buffer (default: the current file's changelist) |
 | `:P4 filelog [path]` / `:P4 history` | File history (a directory: its changelists) |
 | `:P4 annotate [//depot/path#rev]` | Annotate split for the current file (or a depot revision) |
+| `:P4 timelapse [path]` | Time-lapse: step through every revision of a file |
 | `:P4 blame [on\|off]` | Toggle current-line blame |
 | `:P4 lookup [what]` | Go to a changelist number, a path's history or a user's changelists |
 | `:P4 shelve [-c CL] [-d] [file…]` | Shelve a changelist (or files); `-d` deletes the shelf |
@@ -481,7 +502,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-describe)       <Plug>(perforated-lookup)
 <Plug>(perforated-sync)           <Plug>(perforated-sync-file)
 <Plug>(perforated-resolve)        <Plug>(perforated-submit)
-<Plug>(perforated-shelve)
+<Plug>(perforated-shelve)         <Plug>(perforated-timelapse)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
@@ -498,6 +519,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
 | `<leader>ph` / `<leader>pA` / `<leader>pb` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
+| `<leader>pt` | Time-lapse |
 | `<leader>py` / `<leader>pY` | Sync this file / the workspace |
 | `<leader>pR` / `<leader>pP` / `<leader>pS` | Resolve this file / submit its changelist / shelve its changelist |
 
@@ -537,6 +559,7 @@ These are the defaults for everything that has an effect today:
     reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
+  timelapse = { max_bytes = 20 * 1024 * 1024 }, -- larger files: use history instead
   changes = { page_size = 50 }, -- :P4 changes page size
   history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
   annotate = {
@@ -588,7 +611,8 @@ Budgets are enforced by `make bench` in CI:
 | Lua memory per attached buffer | ≤ 2 KB | ~1.8 KB |
 | Client view: render 5000 rows | ≤ 15 ms | ~10 ms |
 | Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
-| Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~10 / ~16 ms |
+| Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.5 / ~10 ms |
+| Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~3 ms |
 
 The timing figures are the best of several runs, which filters out noise from other processes.
 

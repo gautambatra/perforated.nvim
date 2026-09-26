@@ -299,6 +299,52 @@ do
   c.stop()
 end
 
+-- 8. Time-lapse: one step (rebuild the revision, set the buffer, decorations) for a 20k-line
+--    file with 200 revisions. Revisions aren't cached in the measured runs.
+do
+  local c = H.child()
+  local ms = c.lua([[
+    local engine = require('perforated.timelapse')
+    local view_mod = require('perforated.views.timelapse')
+    require('perforated.hl').setup()
+    local entries, seed = {}, 1
+    local function rnd(n) seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n end
+    for i = 1, 20000 do
+      entries[#entries + 1] = { text = ('local x%d = compute(%d) -- typical source line'):format(i, i), lo = 1, hi = 200 }
+    end
+    -- ~50 changed lines per revision: an old version ending at r-1, a new one from r
+    for r = 2, 200 do
+      for _ = 1, 50 do
+        local at = 1 + rnd(#entries)
+        local e = entries[at]
+        if e.lo < r and e.hi == 200 then
+          e.hi = r - 1
+          table.insert(entries, at + 1, { text = e.text .. ' -- r' .. r, lo = r, hi = 200 })
+        end
+      end
+    end
+    local revs = {}
+    for r = 1, 200 do revs[r] = { rev = tostring(r), change = tostring(1000 + r), user = 'u', time = '0', desc = 'd' } end
+    local tl = { depotFile = '//depot/big.c', revs = revs, first = 1, last = 200, head = 200, entries = entries, cache = {} }
+    local buf = vim.api.nvim_get_current_buf()
+    vim.bo[buf].buftype = 'nofile'
+    local view = { tl = tl, buf = buf, win = vim.api.nvim_get_current_win(), actions = {},
+      tree = { node_at = function() return nil end } }
+    view_mod.show(view, 200)
+    local samples = {}
+    for i = 1, 9 do
+      tl.cache = {}
+      local t0 = vim.uv.hrtime()
+      view_mod.show(view, 200 - i)
+      samples[#samples + 1] = vim.uv.hrtime() - t0
+    end
+    table.sort(samples)
+    return samples[1] / 1e6
+  ]])
+  record('time-lapse: step, 20k lines × 200 revs', ms, 'ms', 5)
+  c.stop()
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))

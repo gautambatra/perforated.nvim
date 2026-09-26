@@ -50,6 +50,7 @@ M.actions = {
   resolve = cmd('resolve', { '%' }),
   submit = cmd('submit'),
   shelve = cmd('shelve'),
+  timelapse = cmd('timelapse'),
 }
 
 --- Preset: lhs → action name.
@@ -80,6 +81,7 @@ M.PRESET = {
   ['<leader>pR'] = 'resolve',
   ['<leader>pP'] = 'submit',
   ['<leader>pS'] = 'shelve',
+  ['<leader>pt'] = 'timelapse',
 }
 
 ---@param name string
