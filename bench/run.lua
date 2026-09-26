@@ -339,9 +339,35 @@ do
       samples[#samples + 1] = vim.uv.hrtime() - t0
     end
     table.sort(samples)
-    return samples[1] / 1e6
+    -- Breakdown (printed, no budget): where a step's time goes.
+    local function best(f)
+      local b = math.huge
+      for _ = 1, 5 do
+        local t = vim.uv.hrtime()
+        f()
+        b = math.min(b, vim.uv.hrtime() - t)
+      end
+      return b / 1e6
+    end
+    local edits
+    local t_tr = best(function() edits = engine.transition(tl, 190, 189, 100) end)
+    local t_ed = best(function()
+      vim.bo[buf].modifiable = true
+      for _, e in ipairs(edits) do
+        vim.api.nvim_buf_set_lines(buf, e.start, e.start + e.del, false, e.ins)
+      end
+      local back = engine.transition(tl, 189, 190, 1)
+      for _, e in ipairs(back) do
+        vim.api.nvim_buf_set_lines(buf, e.start, e.start + e.del, false, e.ins)
+      end
+    end) / 2
+    view.n, view.changes = 190, nil
+    local t_dec = best(function() view_mod.decorate(view) end)
+    local t_wb = best(function() vim.wo[view.win].winbar = ' #190/#200 · CL 1190 · u · date' end)
+    return { samples[1] / 1e6, ('transition %.2f · edits %.2f (%d) · decorate %.2f · winbar %.2f ms'):format(t_tr, t_ed, #edits, t_dec, t_wb) }
   ]])
-  record('time-lapse: step, 20k lines × 200 revs', ms, 'ms', 5)
+  record('time-lapse: step, 20k lines × 200 revs', ms[1], 'ms', 5)
+  print('  time-lapse step breakdown: ' .. ms[2])
   c.stop()
 end
 
