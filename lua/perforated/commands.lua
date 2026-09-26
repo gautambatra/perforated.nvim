@@ -497,6 +497,9 @@ M.commands = {
     desc = 'Sync the whole workspace (:P4 sync), or get the latest revision of files (:P4 sync %|path …); @CL / #head for a revision',
     complete = complete_files,
     run = function(ws, _, args)
+      if #args == 1 and args[1] == '@' then
+        return require('perforated.ops').pick_sync_change(ws) -- pick a changelist
+      end
       local out = {}
       for _, a in ipairs(args) do
         if a:match('^[@#]') then

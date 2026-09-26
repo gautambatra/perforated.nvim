@@ -224,7 +224,7 @@ end
 T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   setup()
   -- every sync is confirmed: "Cancel" runs nothing
-  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 2 end]])
+  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 3 end]]) -- Sync/Preview/Cancel
   child.lua([[require('perforated.core.log').clear(); _G.r = nil]])
   child.cmd('P4 sync')
   H.eq(child.lua_get('_G.asked'), 'Sync the whole workspace?')
@@ -247,6 +247,49 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   wait([[(require('perforated.buffer').get() or {}).rec.haveRev == '2']])
   H.eq(child.bo.modified, false)
   H.eq(child.lua_get([[#require('perforated.jobs').list()]]), 0)
+
+  -- Preview on request: `sync -n`, then the question again with the counts (cancelled here)
+  child.lua([[
+    _G.asks = {}
+    vim.fn.confirm = function(msg) table.insert(_G.asks, msg); return 2 end -- Preview, then Cancel
+    _G.r = nil
+  ]])
+  child.cmd('P4 sync @1')
+  wait('#_G.asks == 2')
+  H.neq(child.lua_get('_G.asks[2]'):find('Preview: 1 updated', 1, true), nil)
+  H.eq(child.api.nvim_buf_get_lines(0, 1, 2, false)[1], 'from bob') -- nothing synced
+
+  -- g@ on a submitted changelist in the client view: the workspace goes back to CL 1
+  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.cmd('P4')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Sync CL: 2', 1, true) ~= nil]]
+  )
+  local row
+  for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+    if l:find('CL 1', 1, true) and not l:find('Sync CL', 1, true) then
+      row = i
+    end
+  end
+  child.api.nvim_win_set_cursor(0, { row, 0 })
+  child.type_keys('g@')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Sync CL: 1', 1, true) ~= nil]]
+  )
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/a.txt'), '\n'), 'l1\nl2\nl3\nl4\nl5')
+
+  -- :P4 sync @ with no number: pick a changelist
+  child.lua(
+    [[vim.ui.select = function(items, _, cb) for _, c in ipairs(items) do if c.change == '2' then return cb(c) end end end]]
+  )
+  child.cmd('P4 sync @')
+  H.eq(
+    vim.wait(10000, function()
+      return table.concat(vim.fn.readfile(root .. '/main/a.txt'), '\n'):find('from bob', 1, true)
+        ~= nil
+    end, 100),
+    true
+  )
 end
 
 T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = function()
