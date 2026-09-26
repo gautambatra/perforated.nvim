@@ -67,6 +67,7 @@ end
 ---@field auth_waiters fun()[]   jobs to retry after a successful login
 ---@field last_error string?
 ---@field epoch integer          bumped on every successful login
+---@field login_pending boolean? a login (prompt + p4 login) is in progress
 local Conn = {}
 Conn.__index = Conn
 
@@ -118,7 +119,9 @@ function Conn:observe(res)
   local kind = M.classify(res)
   if kind == 'ok' or kind == 'error' then
     -- A server-side error still proves the server is reachable and we're authenticated.
-    if self.state ~= 'online' then
+    -- Not while a login is in progress: only the login decides that (some commands, like
+    -- `p4 info`, succeed without one).
+    if self.state ~= 'online' and not self.login_pending then
       self:_stop_timer()
       self.backoff = BACKOFF_MIN
       self:_set('online')
@@ -185,14 +188,18 @@ end
 ---@param retry fun(ok: boolean)
 function Conn:need_auth(retry)
   self.auth_waiters[#self.auth_waiters + 1] = retry
-  if self.state == 'auth_needed' then
+  -- One login at a time. The state alone isn't enough: another call can succeed while the
+  -- prompt is up (e.g. `p4 info` needs no login) and set it back to 'online'.
+  if self.login_pending then
     return
   end
+  self.login_pending = true
   self:_set('auth_needed')
   local queue = require('perforated.core.queue').global()
   queue:pause(self.ws.key)
   vim.schedule(function()
     self:login(function(ok)
+      self.login_pending = false
       queue:resume(self.ws.key)
       local waiters = self.auth_waiters
       self.auth_waiters = {}
