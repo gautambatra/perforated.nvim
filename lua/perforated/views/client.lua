@@ -130,7 +130,7 @@ local function build(view, data)
       kind = 'have_cl',
       item = have,
       text = {
-        { 'Sync CL: ', 'PerforatedSection' },
+        { '    Sync CL: ', 'PerforatedSection' },
         { have.change, 'PerforatedChangelist' },
         { '  ' .. first_line(have.desc), 'PerforatedPath' },
         {
@@ -143,7 +143,7 @@ local function build(view, data)
     roots[#roots + 1] = {
       id = 'have',
       kind = 'header',
-      text = { { 'Sync CL: ', 'PerforatedSection' }, { 'nothing synced', 'PerforatedDim' } },
+      text = { { '    Sync CL: ', 'PerforatedSection' }, { 'nothing synced', 'PerforatedDim' } },
     }
   end
 
