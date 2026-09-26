@@ -41,7 +41,7 @@ local defaults = {
   annotate = {
     width = 36,
     integrations = false, -- -I: follow integrations to the change that really wrote the line
-    history_max = 1000, -- filelog depth used for the changelist metadata
+    history_max = 1000, -- filelog depth for descriptions (blame line) and `~` / `d` in annotate
     gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
   },
   changes = { page_size = 50, scope = 'client' },

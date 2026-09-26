@@ -164,12 +164,16 @@ function M.finish(view)
   end)
 end
 
---- `p4` date → "YYYY-MM-DD".
+--- `p4` date (epoch seconds, or "YYYY/MM/DD hh:mm:ss" from `annotate -u`) → "YYYY-MM-DD".
 ---@param t string|number|nil
 ---@return string
 function M.date(t)
-  t = tonumber(t)
-  return t and os.date('%Y-%m-%d', t) or ''
+  local n = tonumber(t)
+  if n then
+    return os.date('%Y-%m-%d', n) --[[@as string]]
+  end
+  local y, m, d = tostring(t or ''):match('^(%d+)/(%d+)/(%d+)')
+  return y and (y .. '-' .. m .. '-' .. d) or ''
 end
 
 ---@param s string?

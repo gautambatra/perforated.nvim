@@ -1,7 +1,8 @@
 --- Annotate (`:P4 annotate`, `b`): a scroll- and cursor-bound split left of the file with the
 --- changelist, user and date that last changed each line, coloured by age.
 ---
---- Two p4 calls (`annotate -c -q` + `filelog -l`, see history.annotate), one `set_lines`.
+--- One p4 call (`annotate -c -i -u -q`: follows branches, carries user and date), one
+--- `set_lines`. `~` and `d` fetch the file's history the first time they need it.
 --- Lines changed locally (the workspace file differs from its base) show "Not submitted".
 --- `<CR>` describes the line's changelist, `~` re-annotates at the revision before that
 --- change (`<BS>` goes back), `Q` lists every line from that changelist in the location list.
@@ -256,33 +257,77 @@ local function annotate(view, cb)
   end)
 end
 
+--- The revision a changelist made to the annotated file or, since `annotate -i` follows
+--- branches, to one of the files it was branched from. The history is fetched the first time
+--- `~` or `d` needs it (the annotate column itself doesn't).
+---@param cb fun(r: perforated.Rev?)
+local function rev_of(view, change, cb)
+  local function find()
+    local hit
+    for _, r in ipairs(view.revs or {}) do
+      if tonumber(r.change) == change then
+        if r.depotFile == view.ann.depotFile then
+          return cb(r)
+        end
+        hit = hit or r
+      end
+    end
+    cb(hit)
+  end
+  if view.revs and view.revs_of == view.ann.depotFile then
+    return find()
+  end
+  local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
+  history.filelog(view.ws, view.ann.depotFile, { max = max }, function(list, err)
+    if not list then
+      return notify('filelog failed: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+    view.revs, view.revs_of = list, view.ann.depotFile
+    find()
+  end)
+end
+
+--- The revision before `r`: the previous revision of its file, or for a branch/copy at #1 the
+--- source revision it came from. nil: the file was added in `r`.
+---@param r perforated.Rev
+---@return string?
+local function before(r)
+  local n = tonumber(r.rev) or 1
+  if n > 1 then
+    return r.depotFile .. '#' .. (n - 1)
+  end
+  if r.from and r.from.file and (r.from.how or ''):match('from$') then
+    return r.from.file .. (r.from.erev or '#head')
+  end
+  return nil
+end
+
 --- `~`: annotate the revision before the change that last touched this line.
 local function walk_back(view, item)
-  local m = item.meta
-  local rev = tonumber(m.rev)
-  if not rev then
-    return notify(
-      ('CL %s is not a revision of %s (it came from an integration)'):format(
-        item.change,
-        view.ann.depotFile
-      ),
-      vim.log.levels.INFO
-    )
-  end
-  if rev <= 1 then
-    return notify(
-      ('line added in CL %s (revision #1): nothing before it'):format(item.change),
-      vim.log.levels.INFO
-    )
-  end
-  local lnum = item.lnum
-  table.insert(view.stack, {
-    spec = view.spec,
-    buf = vim.api.nvim_win_get_buf(view.src_win),
-    local_file = view.local_file,
-    lnum = lnum,
-  })
-  M.goto_spec(view, view.ann.depotFile .. '#' .. (rev - 1), lnum)
+  local change = tonumber(item.change)
+  rev_of(view, change, function(r)
+    if not r then
+      return notify(
+        ('CL %s is not in the history of %s'):format(item.change, view.ann.depotFile),
+        vim.log.levels.INFO
+      )
+    end
+    local spec = before(r)
+    if not spec then
+      return notify(
+        ('line added in CL %s (%s#%s): nothing before it'):format(item.change, r.depotFile, r.rev),
+        vim.log.levels.INFO
+      )
+    end
+    local lnum = item.lnum
+    table.insert(view.stack, {
+      spec = view.spec,
+      buf = vim.api.nvim_win_get_buf(view.src_win),
+      local_file = view.local_file,
+      lnum = lnum,
+    })
+    M.goto_spec(view, spec, lnum)
+  end)
 end
 
 --- Show another revision in the source window and annotate it.
@@ -354,16 +399,18 @@ local function actions(view)
       p4v = { '<C-d>' },
       kinds = LINE,
       run = function(items)
-        local rev = tonumber(items[1].meta.rev)
-        if not rev then
-          return require('perforated.views.describe').open(ws, items[1].change)
-        end
-        local f = view.ann.depotFile
-        require('perforated.revs').diff(
-          ws,
-          rev > 1 and { spec = f .. '#' .. (rev - 1) } or { empty = 'added' },
-          { spec = f .. '#' .. rev }
-        )
+        local change = tonumber(items[1].change)
+        rev_of(view, change, function(r)
+          if not r then
+            return require('perforated.views.describe').open(ws, items[1].change)
+          end
+          local prev = before(r)
+          require('perforated.revs').diff(
+            ws,
+            prev and { spec = prev } or { empty = 'added' },
+            { spec = r.depotFile .. '#' .. r.rev }
+          )
+        end)
       end,
     },
     {
