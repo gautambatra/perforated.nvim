@@ -177,7 +177,11 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
 - **Sync the workspace (`gY` / `<C-S-g>`, `:P4 sync`) or get the latest revision of files
   (`gy` on a file, a changelist or "Needs attention"; `:P4 sync %` / `:P4 sync path…`).** Both
-  ask for confirmation first. open buffers reload without "file changed"
+  ask for confirmation first, with a **Preview** choice (`p4 sync -n`: how many files would
+  update, be added or deleted, and whether opened files are affected) before you decide.
+  **Sync to a changelist:** `g@` on any submitted changelist (Recent submitted, the Sync CL
+  row, `:P4 changes`, describe, history), `:P4 sync @12345`, or `:P4 sync @` to pick one.
+  Labels and dates work too (`:P4 sync @mylabel`, `@2026/09/01`). open buffers reload without "file changed"
   prompts, and their signs follow the new revision. Afterwards every opened file is re-checked:
   files that need attention (can't clobber, and *every* unresolved file in the workspace, not
   just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
@@ -427,7 +431,7 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 shelve [-c CL] [-d] [file…]` | Shelve a changelist (or files); `-d` deletes the shelf |
 | `:P4 unshelve CL [-c target] [file…]` | Unshelve |
 | `:P4 submit [CL\|default]` | Submit (with a confirmation) |
-| `:P4 sync [path\|%\|@CL\|#head …]` | Sync (no args: the whole workspace) |
+| `:P4 sync [path\|%\|@CL\|#head …]` | Sync the workspace (no args), a path, or to a revision; `:P4 sync @` picks a changelist |
 | `:P4 jobs` / `:P4 cancel` | Watch running syncs and submits / stop them |
 | `:P4 resolve [file…]` | Resolve (auto-merge, then your merge tool) |
 | `:P4 delete [file…]` | Open for delete |

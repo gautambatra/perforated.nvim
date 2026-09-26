@@ -557,9 +557,116 @@ function M.sync(ws, args, cb)
     )))
     or ('Get the latest revisions of %s?'):format(shown)
   local sync_like = #args == 0 or ws_rev or shown:match('[@#]')
-  if not confirm(question, sync_like and '&Sync\n&Cancel' or '&Get latest\n&Cancel') then
+  local verb = sync_like and '&Sync' or '&Get latest'
+  local function start()
+    M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
+  end
+  -- Preview on request: `p4 sync -n`, then the same question with the counts.
+  local choice = vim.fn.confirm(question, verb .. '\n&Preview\n&Cancel', 3)
+  if choice == 2 then
+    return M.preview_sync(ws, args, function(summary)
+      if summary and confirm(question .. '\n\n' .. summary, verb .. '\n&Cancel') then
+        start()
+      else
+        cb(false)
+      end
+    end)
+  elseif choice ~= 1 then
     return cb(false)
   end
+  start()
+end
+
+--- Sync the whole workspace to a changelist (with the usual confirmation / preview).
+---@param ws perforated.Workspace
+---@param change string|integer
+---@param cb fun(ok: boolean)?
+function M.sync_to_change(ws, change, cb)
+  M.sync(ws, { ('//%s/...@%s'):format(ws:client(), change) }, cb)
+end
+
+--- `:P4 sync @`: pick one of the recent submitted changelists in the client view, then sync
+--- the workspace to it.
+---@param ws perforated.Workspace
+function M.pick_sync_change(ws)
+  cls.submitted_changes(ws, { max = 100 }, function(changes, err)
+    if not changes then
+      return notify(tostring(err), vim.log.levels.ERROR)
+    end
+    require('perforated.picker').pick({
+      title = 'Sync the workspace to…',
+      items = changes,
+      format = function(c)
+        local t = tonumber(c.time)
+        return ('%-8s %s %-12s %s'):format(
+          c.change,
+          t and os.date('%Y-%m-%d', t) or '',
+          c.user or '',
+          vim.trim((c.desc or ''):match('[^\n]*') or '')
+        )
+      end,
+      on_choice = function(chosen)
+        if chosen then
+          M.sync_to_change(ws, chosen[1].change)
+        end
+      end,
+    })
+  end)
+end
+
+--- What a sync would do (`p4 sync -n`), as a short summary for the confirmation.
+---@param ws perforated.Workspace
+---@param args string[]
+---@param cb fun(summary: string?)  nil when stopped or failed
+function M.preview_sync(ws, args, cb)
+  local jobs = require('perforated.jobs')
+  local job, run_opts = jobs.start(ws, 'sync preview')
+  ws:run(vim.list_extend({ 'sync', '-n' }, args), run_opts, function(res)
+    if res.cancelled then
+      jobs.finish(job, 'stopped', true)
+      return cb(nil)
+    end
+    local counts, order = {}, {}
+    for _, r in ipairs(res.records) do
+      local a = r.action or 'changed'
+      if not counts[a] then
+        counts[a] = 0
+        order[#order + 1] = a
+      end
+      counts[a] = counts[a] + 1
+    end
+    local opened, clobber = 0, 0
+    for _, t in ipairs(messages(res)) do
+      if t:find('is opened', 1, true) then
+        opened = opened + 1
+      elseif t:find("can't clobber", 1, true) then
+        clobber = clobber + 1
+      end
+    end
+    local parts = {}
+    for _, a in ipairs(order) do
+      parts[#parts + 1] = ('%d %s'):format(counts[a], a)
+    end
+    if #res.errors > 0 and #parts == 0 and opened == 0 then
+      jobs.finish(job, 'preview failed: ' .. res.errors[1], true)
+      return cb('Preview failed: ' .. res.errors[1])
+    end
+    local summary = #parts > 0 and ('Preview: ' .. table.concat(parts, ', '))
+      or 'Preview: nothing to do (up to date)'
+    if opened > 0 then
+      summary = summary .. ('\n%d opened file(s) will not be changed'):format(opened)
+    end
+    if clobber > 0 then
+      summary = summary .. ("\n%d writable file(s) can't be overwritten"):format(clobber)
+    end
+    jobs.finish(job, (summary:gsub('\n', ' · ')))
+    cb(summary)
+  end)
+end
+
+---@param ws perforated.Workspace
+---@param args string[]
+function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
   local what = #args == 0 and 'workspace' or shown
   local jobs = require('perforated.jobs')
   local job, run_opts = jobs.start(

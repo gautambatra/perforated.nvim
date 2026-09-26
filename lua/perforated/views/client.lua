@@ -980,6 +980,15 @@ local function actions(view)
       end,
     },
     {
+      id = 'sync_to_change',
+      desc = 'Sync workspace to this CL',
+      keys = { 'g@' },
+      kinds = { submitted = true, have_cl = true },
+      run = function(items)
+        require('perforated.ops').sync_to_change(ws, items[1].change)
+      end,
+    },
+    {
       id = 'integrate',
       desc = 'Integrate (cherry-pick) into this workspace',
       keys = { 'I' },
