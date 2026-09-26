@@ -173,20 +173,25 @@ revision instantly:
 
 - `h` / `l` (or `[r` / `]r`) step back and forward, `[R` / `]R` jump to the first / last
   revision, `r` goes to `#N` or `@CL`, and `T` picks a revision by its description.
-- The winbar shows `#N/#head · CL · user · date · action · description`. Lines added in that
+- A panel below the file shows the revision's details — `Revision: <file>#<rev>`,
+  `Changelist`, `Date submitted`, `Perforce Type`, `Submitted by`, `File size`, `Action` and
+  the full description (scroll it with `<C-w>j`); `i` hides / shows it. Lines added in that
   revision are highlighted and lines it deleted are shown where they were.
 - The cursor stays on the same line of the file as you step, even when lines are added or
   removed above it.
 - `d` diffs against the previous revision, `D` describes the changelist, `K` shows it in a
   popup, `y` copies its number, `Q` lists the lines added in that revision (location list),
   `a` toggles an age gutter, `b` annotates the revision, `gL` opens the history.
-- **Slider** (P4V-style, above the file): a tick per revision, `●` for the shown revision; click
-  the track to jump. `S` switches its labels between revisions, changelists and dates, and `s`
+- **Slider** (P4V-style, above the file): a tick per revision, labelled with changelist numbers
+  (`S` switches to revision numbers) — the first, last and selected ones always, others where
+  they fit. `●` marks the selected revision (the one shown); click the track to jump; `s`
   hides it (`timelapse.slider = false` to start without it).
-- **Modes** (`m` cycles): *single* (the default), *incremental diff* — revision `◆` in a window
-  on the left, diffed against `●` — and *range* — revision `●` with every line added since `◆`
-  highlighted and tagged with the revision that added it, and every line deleted since `◆`
-  shown where it was. `H` / `L` move `◆`; `h` / `l` still move `●`.
+- **Modes** (`m` cycles): *single* (the default), *incremental diff* and *range*. The two
+  comparison modes add a second handle, `◆`: the older revision you compare against.
+  *Incremental diff* shows `◆` in a window on the left, diffed against `●`; *range* shows `●`
+  with every line added since `◆` highlighted (tagged with the revision that added it) and
+  every line deleted since `◆` shown where it was. `h` / `l` move `●`, `H` / `L` move `◆`, and
+  the info panel says which mode you're in and where `◆` is.
 
 It takes two p4 calls (`filelog` and `annotate -a`, which lists every line the file ever had
 with the revisions it lived in); every revision is then rebuilt in memory, and a step only
@@ -590,7 +595,7 @@ These are the defaults for everything that has an effect today:
     reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
-  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true }, -- larger files: use history instead
+  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true, info_height = 8 }, -- larger files: use history instead
   changes = { page_size = 50 }, -- :P4 changes page size
   history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
   annotate = {

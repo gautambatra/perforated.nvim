@@ -76,7 +76,8 @@ function M.load(ws, path, cb)
       return cb(nil, res.errors[1] or ('no history for ' .. path))
     end
     local revs, first, head, last = {}, nil, 0, nil
-    local fields = { 'rev', 'change', 'action', 'user', 'time', 'desc', 'client', 'fileSize' }
+    local fields =
+      { 'rev', 'change', 'action', 'user', 'time', 'desc', 'client', 'fileSize', 'type' }
     for _, r in ipairs(parse.indexed(rec, fields)) do
       local n = tonumber(r.rev)
       if n then

@@ -1,9 +1,10 @@
 --- P4V-style slider for the time-lapse view: a two-line window above it with a tick per
---- revision, the handles (● the shown revision, ◆ the other end in diff / range mode) and
---- labels on a revision, changelist or date scale. Click on the track to jump.
+--- revision, the handles — ● the selected revision (shown in the buffer), ◆ the comparison
+--- base in diff / range mode — and labels (changelists by default, revisions with `S`): the
+--- first, last, ● and ◆ always, others where they fit. Click on the track to jump.
 ---
 ---   ├──┼───┼──◆════════●───┼──┼─────┤
----   [diff #9 → #14]  #1          #14 · CL 4567 · alice · 2026-09-20          #30
+---   1201   1244  1250      1302       1377
 
 local M = {}
 
@@ -26,19 +27,17 @@ local function order(tl)
   return tl.order
 end
 
+--- A tick's label: the changelist (default) or the revision.
 ---@param view table  time-lapse view
 ---@param n integer
 ---@return string
 local function label(view, n)
-  local r = view.tl.revs[n] or {}
-  if view.scale == 'change' then
-    return 'CL ' .. (r.change or '?')
-  elseif view.scale == 'date' then
-    local t = tonumber(r.time)
-    return t and os.date('%Y-%m-%d', t) or '?'
+  if view.scale == 'rev' then
+    return '#' .. n
   end
-  return '#' .. n
+  return tostring((view.tl.revs[n] or {}).change or '?')
 end
+M.label = label
 
 ---@class perforated.Slider
 ---@field view table
@@ -65,6 +64,8 @@ function Slider:render()
   local width = math.max(10, vim.api.nvim_win_get_width(self.win) - 2)
   local pos = self:positions(width)
   local b, a = view.n, (view.mode ~= 'single') and view.a or nil
+
+  -- Line 1: the track.
   local cells = {}
   for c = 0, width - 1 do
     cells[c] = '─'
@@ -87,7 +88,6 @@ function Slider:render()
   if pos[b] then
     cells[pos[b]] = '●'
   end
-  -- Byte offsets for highlights (the glyphs are multi-byte).
   local parts, bytes = { ' ' }, { [0] = 1 }
   for c = 0, width - 1 do
     parts[#parts + 1] = cells[c]
@@ -95,56 +95,83 @@ function Slider:render()
   end
   local track = table.concat(parts)
 
-  local r = view.tl.revs[b] or {}
-  local t = tonumber(r.time)
-  local mode = view.mode == 'diff' and ('[diff %s → %s]'):format(label(view, a), label(view, b))
-    or view.mode == 'range' and ('[range %s..%s]'):format(label(view, a), label(view, b))
-    or '[single]'
-  local center = ('%s · CL %s · %s · %s'):format(
-    '#' .. b,
-    r.change or '?',
-    r.user or '?',
-    t and os.date('%Y-%m-%d', t) or ''
-  )
-  local o = order(view.tl)
-  local left = ' ' .. mode .. '  ' .. label(view, o[1])
-  local right = label(view, o[#o]) .. ' '
-  local total = width + 2
-  local gap = total - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right)
-  local cw = vim.fn.strdisplaywidth(center)
-  local labels
-  if gap >= cw + 2 then
-    local l = math.floor((gap - cw) / 2)
-    labels = left .. (' '):rep(l) .. center .. (' '):rep(gap - cw - l) .. right
-  else
-    labels = left .. '  ' .. center
+  -- Line 2: labels under their ticks — the selected (●), ◆, first and last always; others
+  -- spread out (by bisection) wherever they fit without crowding.
+  local line = {}
+  for c = 0, width + 1 do
+    line[c] = ' '
   end
+  local taken = {} -- occupied [s, e] cell ranges (with a one-cell gap)
+  local placed = {} -- rev → { s, e }
+  local function place(n, force)
+    if not pos[n] or placed[n] then
+      return
+    end
+    local text = label(view, n)
+    local s0 = math.max(0, math.min(width + 2 - #text, pos[n] + 1 - math.floor(#text / 2)))
+    local e0 = s0 + #text - 1
+    for _, r in ipairs(taken) do
+      if s0 <= r[2] + 1 and e0 >= r[1] - 1 then
+        if not force then
+          return
+        end
+      end
+    end
+    for i = 1, #text do
+      line[s0 + i - 1] = text:sub(i, i)
+    end
+    taken[#taken + 1] = { s0, e0 }
+    placed[n] = { s0, e0 }
+  end
+  local o = order(view.tl)
+  place(b, true)
+  if a then
+    place(a, true)
+  end
+  place(o[1])
+  place(o[#o])
+  local queue = { { 1, #o } }
+  local qi = 1
+  while queue[qi] do
+    local r = queue[qi]
+    qi = qi + 1
+    if r[2] - r[1] > 1 then
+      local mid = math.floor((r[1] + r[2]) / 2)
+      place(o[mid])
+      queue[#queue + 1] = { r[1], mid }
+      queue[#queue + 1] = { mid, r[2] }
+    end
+  end
+  local labels = table.concat(line, '', 0, width + 1)
+
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, { track, labels })
   vim.bo[self.buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(self.buf, ns, 0, -1)
   local buf = self.buf
-  local function hl(line, s, e, group)
-    local text = line == 0 and track or labels
-    vim.api.nvim_buf_set_extmark(buf, ns, line, s, {
+  local function hl(row, s, e, group)
+    local text = row == 0 and track or labels
+    vim.api.nvim_buf_set_extmark(buf, ns, row, s, {
       end_col = e < 0 and #text or math.min(e, #text),
       hl_group = group,
     })
   end
   hl(0, 0, -1, 'PerforatedSliderTrack')
+  hl(1, 0, -1, 'PerforatedDim')
   if a then
     hl(0, bytes[lo], bytes[hi + 1], 'PerforatedSliderRange')
     if pos[a] then
       hl(0, bytes[pos[a]], bytes[pos[a] + 1], 'PerforatedSliderHandleA')
     end
+    if placed[a] then
+      hl(1, placed[a][1], placed[a][2] + 1, 'PerforatedSliderHandleA')
+    end
   end
   if pos[b] then
     hl(0, bytes[pos[b]], bytes[pos[b] + 1], 'PerforatedSliderHandle')
   end
-  hl(1, 0, -1, 'PerforatedDim')
-  local s = labels:find(center, 1, true)
-  if s then
-    hl(1, s - 1, s - 1 + #center, 'PerforatedTitle')
+  if placed[b] then
+    hl(1, placed[b][1], placed[b][2] + 1, 'PerforatedSliderHandle')
   end
 end
 

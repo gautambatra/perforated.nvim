@@ -307,7 +307,8 @@ Time-lapse (:P4 timelapse)                              *perforated-timelapse*
   H [a            Move ◆ back (diff / range mode)
   L ]a            Move ◆ forward (diff / range mode)
   s               Show / hide the slider
-  S               Slider labels: revision / changelist / date
+  S               Slider labels: changelists / revisions
+  i               Show / hide the revision details
   r               Go to revision (#N) or changelist (@CL)
   T               Pick a revision by description
   d <C-d>         Diff against the previous revision
@@ -538,6 +539,7 @@ keys):
         resolve_prompt = true
       },
       timelapse = {
+        info_height = 8,
         max_bytes = 20971520,
         slider = true
       },
