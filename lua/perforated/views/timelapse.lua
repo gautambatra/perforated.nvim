@@ -45,6 +45,7 @@ local function is_deleted(tl, n)
 end
 
 function M.show(view, n)
+  local t0 = vim.uv.hrtime()
   local tl = view.tl
   local buf = view.buf
   local lnum = 1
@@ -79,6 +80,7 @@ function M.show(view, n)
   if view.slider then
     view.slider:render()
   end
+  require('perforated.core.debug').timing('time-lapse: step', (vim.uv.hrtime() - t0) / 1e6)
   if view.footer then
     view.footer:set(keys.footer(view.actions, view.tree:node_at()))
   end
@@ -595,6 +597,12 @@ function M.open(ws, path, opts)
     end,
   }
   view.actions = actions(view)
+  vim.list_extend(
+    view.actions,
+    require('perforated.p4vc').actions(ws, nil, function()
+      return view.tl and view.tl.depotFile
+    end)
+  )
   M._last = view
   engine.load(ws, path, function(tl, err)
     if not vim.api.nvim_buf_is_valid(buf) then

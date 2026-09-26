@@ -59,6 +59,12 @@ local function check_env()
   local p4diff, p4merge = env.get('P4DIFF'), env.get('P4MERGE')
   h.info('P4DIFF (external diff tool): ' .. (p4diff or 'not set in environment/P4ENVIRO'))
   h.info('P4MERGE (merge tool): ' .. (p4merge or 'not set in environment/P4ENVIRO'))
+  local p4vc = require('perforated.p4vc').bin()
+  if p4vc then
+    h.ok('p4vc: ' .. vim.fn.exepath(p4vc) .. ' (revision graph, P4V time-lapse, stream graph)')
+  else
+    h.info('p4vc not found: the revision graph / P4V time-lapse / stream graph actions are hidden')
+  end
 
   -- Targets: every active workspace (checked from its own anchor), else the workspace of
   -- Neovim's cwd. :checkhealth runs in its own buffer, so the current buffer is no guide.

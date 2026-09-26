@@ -434,7 +434,10 @@ function M.refresh(view)
         view.loading = false
         if vim.api.nvim_buf_is_valid(view.buf) then
           view.data = data
+          local t1 = vim.uv.hrtime()
           view.tree:set(build(view, data))
+          dbg.timing('client view: render', (vim.uv.hrtime() - t1) / 1e6)
+          dbg.timing('client view: refresh', (vim.uv.hrtime() - t0) / 1e6)
           M.update_footer(view)
           dbg.debug(
             'client',
@@ -1542,6 +1545,13 @@ function M.open(ws, opts)
   views[ws.key] = view
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = actions(view)
+  -- P4V tools (p4vc, when installed)
+  vim.list_extend(
+    view.actions,
+    require('perforated.p4vc').actions(ws, { opened_file = true, shelved_file = true }, function(it)
+      return it and (it.depotFile or it.clientFile)
+    end)
+  )
   view.win = show(buf, kind)
   vim.wo[view.win].cursorline = true
   vim.wo[view.win].wrap = false

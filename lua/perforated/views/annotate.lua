@@ -123,6 +123,7 @@ function M.render(view)
   if not (vim.api.nvim_buf_is_valid(view.buf) and vim.api.nvim_buf_is_valid(view.src_buf)) then
     return
   end
+  local t0 = vim.uv.hrtime()
   set_provider()
   local ann = view.ann
   local cls, meta = ann.cls, ann.meta
@@ -151,6 +152,7 @@ function M.render(view)
   end
   view.line_cl = line_cl
   row_hl[view.buf] = hls
+  require('perforated.core.debug').timing('annotate: render', (vim.uv.hrtime() - t0) / 1e6)
   vim.bo[view.buf].modifiable = true
   vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
   vim.bo[view.buf].modifiable = false
@@ -599,6 +601,12 @@ function M.open_buf(buf)
   set_bind(win, true)
   set_bind(src_win, true)
   view.actions = actions(view)
+  vim.list_extend(
+    view.actions,
+    require('perforated.p4vc').actions(ws, nil, function()
+      return view.ann and view.ann.depotFile
+    end)
+  )
   require('perforated.ui.keys').attach(abuf, view.actions, view)
   M._views[src_win] = view
 

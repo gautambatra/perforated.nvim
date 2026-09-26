@@ -33,6 +33,27 @@ for name in pairs(M.LEVELS) do
   end
 end
 
+--- UI timings for `:P4 debug timings`: per name, count / total / max / last (fixed memory).
+M._timings = {}
+
+--- Record how long something took (always on: one table update).
+---@param name string  e.g. 'client view: refresh'
+---@param ms number
+function M.timing(name, ms)
+  local t = M._timings[name]
+  if not t then
+    t = { n = 0, total = 0, max = 0, last = 0 }
+    M._timings[name] = t
+  end
+  t.n, t.total, t.last = t.n + 1, t.total + ms, ms
+  if ms > t.max then
+    t.max = ms
+  end
+  if M.enabled then
+    I().log('debug', 'timing', '%s: %.1fms', name, ms)
+  end
+end
+
 --- Is a level currently logged? (Guard for expensive messages.)
 ---@param lvl string
 function M.on(lvl)

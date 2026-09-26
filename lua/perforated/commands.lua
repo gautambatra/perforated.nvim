@@ -394,6 +394,38 @@ M.commands = {
     end,
   },
 
+  p4vc = {
+    scope = 'connection',
+    desc = 'P4V tools: :P4 p4vc {revgraph|timelapse|streamgraph} [file]  (default: the current file)',
+    complete = function()
+      return { 'revgraph', 'timelapse', 'streamgraph' }
+    end,
+    run = function(ws, _, args)
+      local cmd = args[1] or 'revgraph'
+      if cmd ~= 'revgraph' and cmd ~= 'timelapse' and cmd ~= 'streamgraph' then
+        return notify(
+          'usage: :P4 p4vc {revgraph|timelapse|streamgraph} [file]',
+          vim.log.levels.WARN
+        )
+      end
+      local path = args[2]
+      if path and not path:match('^//') then
+        path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+      end
+      if not path and cmd ~= 'streamgraph' then
+        local buf = vim.api.nvim_get_current_buf()
+        local spec = vim.b[buf].perforated_spec
+        local st = require('perforated.buffer').get(buf)
+        path = spec and spec:gsub('[#@].*$', '')
+          or (st and (st.rec and st.rec.depotFile or st.path))
+        if not path then
+          return notify('no file: open one or pass a path', vim.log.levels.WARN)
+        end
+      end
+      require('perforated.p4vc').run(ws, cmd, path)
+    end,
+  },
+
   timelapse = {
     scope = 'connection',
     desc = 'Time-lapse: step through every revision of the current file (or a depot path)',
@@ -611,9 +643,9 @@ M.commands = {
 
   debug = {
     scope = 'none',
-    desc = 'Debug log: :P4 debug [on [level]|off|open|clear|snapshot]  (no args: status)',
+    desc = 'Debug log: :P4 debug [on [level]|off|open|clear|snapshot|timings]  (no args: status)',
     complete = function()
-      return { 'on', 'off', 'open', 'clear', 'snapshot', 'trace', 'debug', 'info' }
+      return { 'on', 'off', 'open', 'clear', 'snapshot', 'timings', 'trace', 'debug', 'info' }
     end,
     run = function(_, _, args)
       local dbg = require('perforated.core.debug')
@@ -629,6 +661,8 @@ M.commands = {
       elseif sub == 'clear' then
         dbg.clear()
         notify('debug log cleared')
+      elseif sub == 'timings' then
+        require('perforated.timings').show()
       elseif sub == 'snapshot' then
         dbg.snapshot()
         notify('snapshot written to ' .. dbg.file())
@@ -638,7 +672,7 @@ M.commands = {
             or ('debug log off (would write to ' .. (dbg.file() or dbg.default_file()) .. ')')
         )
       else
-        notify('usage: :P4 debug [on [level]|off|open|clear|snapshot]', vim.log.levels.WARN)
+        notify('usage: :P4 debug [on [level]|off|open|clear|snapshot|timings]', vim.log.levels.WARN)
       end
     end,
   },

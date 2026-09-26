@@ -116,6 +116,10 @@ end
 ---@param failed boolean?
 function M.finish(job, msg, failed)
   job.done = true
+  require('perforated.core.debug').timing(
+    'job: ' .. (job.title:match('^%S+') or job.title),
+    (vim.uv.hrtime() - job.started) / 1e6
+  )
   for i, j in ipairs(jobs) do
     if j == job then
       table.remove(jobs, i)
