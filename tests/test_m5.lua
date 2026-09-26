@@ -107,7 +107,8 @@ T['timelapse']['view: winbar, stepping, highlights, the cursor stays on the same
   child.cmd('P4 timelapse')
   wait([[vim.wo.winbar:find('#30/#30', 1, true) ~= nil]])
   H.neq(child.wo.winbar:find('rev 30', 1, true), nil)
-  H.eq(child.bo.filetype, 'text')
+  -- the file's own filetype (whatever this Neovim detects for it; 0.11 has none for .txt)
+  H.eq(child.bo.filetype, child.lua_get([[vim.filetype.match({ filename = 'f.txt' }) or '']]))
   H.eq(table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n') .. '\n', contents[30])
   -- put the cursor on a line that exists in every revision from 20 to 30 and step back
   local lines30 = vim.split(contents[30], '\n')
