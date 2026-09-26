@@ -21,7 +21,6 @@ local defaults = {
   },
   signs = {
     enabled = true,
-    base = 'have',
     priority = 6,
     algorithm = 'myers', -- 'myers' | 'patience' | 'histogram' | 'minimal'
     max_lines = 2000, -- above this, diff on a worker thread (main thread only reads the lines)
@@ -33,10 +32,9 @@ local defaults = {
     delay = 150,
     format = 'CL {change} • {user} • {date} • {desc}',
   },
-  diff = { layout = 'tab', tool = 'builtin', external_terminal = 'auto' },
+  diff = { tool = 'builtin', external_terminal = 'auto' },
   client_view = {
     kind = 'tab',
-    sections = { 'pending', 'unresolved', 'reconcile', 'submitted' },
     submitted_limit = 20,
     -- Paths the reconcile section scans (relative to the client root, local or depot paths;
     -- or a function(ws) returning them). Empty = the whole client. `p` in the view overrides
@@ -58,14 +56,14 @@ local defaults = {
     history_max = 1000, -- filelog depth for descriptions (blame line) and `~` / `d` in annotate
     gradient = nil, -- { oldest, newest } hex colours; default: Comment → DiagnosticWarn
   },
-  changes = { page_size = 50, scope = 'client' },
+  changes = { page_size = 50 },
   change = { template = nil, allow_force = false },
   merge = { tool = nil },
   picker = 'auto',
   keymaps = false,
   keys = { p4v = true },
   commands = { aliases = true },
-  qf = { open = true, loclist_for_file_scoped = true },
+  qf = { open = true },
   startup_check = true,
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 },
   toast = { timeout = 8000, backend = 'float', history = 50 },
@@ -79,7 +77,6 @@ local defaults = {
   swarm = { url = nil },
   --- Experimental: Perforce actions as LSP code actions (`gra`) in Perforce buffers
   lsp = { enabled = false },
-  notify = 'minimal',
 }
 
 local user_opts = nil ---@type table?
