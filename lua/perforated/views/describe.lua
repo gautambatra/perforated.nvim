@@ -483,6 +483,24 @@ local function actions(view)
       end,
     },
     {
+      id = 'delete_change',
+      desc = 'Delete changelist',
+      keys = { '<Del>' },
+      when = function()
+        local it = view.item
+        return it.status == 'pending'
+          and it.change ~= 'default'
+          and (it.client == ws:client() or require('perforated.config').get().change.allow_force)
+      end,
+      run = function()
+        require('perforated.ops').delete_change(ws, view.item.change, function(ok)
+          if ok then
+            base.close(view)
+          end
+        end)
+      end,
+    },
+    {
       id = 'integrate',
       desc = 'Integrate (cherry-pick) into this workspace',
       keys = { 'I' },

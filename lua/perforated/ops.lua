@@ -225,6 +225,127 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
   end)
 end
 
+--- Delete a pending changelist. p4 only deletes an empty one, so after a single confirmation
+--- its opened files are moved to the default changelist (or reverted) and its shelved files are
+--- deleted first. Changelists of other clients need `change.allow_force` (`change -d -f`).
+---@param ws perforated.Workspace
+---@param change string
+---@param cb fun(ok: boolean)?
+function M.delete_change(ws, change, cb)
+  cb = cb or function() end
+  if change == 'default' then
+    notify('the default changelist cannot be deleted', vim.log.levels.WARN)
+    return cb(false)
+  end
+  cls.describe(ws, { change }, {}, function(by)
+    local d = by[change]
+    if not d or d.rec.status ~= 'pending' then
+      notify(('CL %s is not a pending changelist'):format(change), vim.log.levels.ERROR)
+      return cb(false)
+    end
+    local force = d.rec.client ~= ws:client()
+    if force and not require('perforated.config').get().change.allow_force then
+      notify(
+        ('CL %s belongs to client %s: deleting it needs change.allow_force (p4 change -d -f)'):format(
+          change,
+          d.rec.client or '?'
+        ),
+        vim.log.levels.WARN
+      )
+      return cb(false)
+    end
+    p4.fstat_opened(ws, {}, function(recs)
+      local paths = {}
+      for _, r in ipairs(recs or {}) do
+        if r.change == change and r.clientFile then
+          paths[#paths + 1] = r.clientFile
+        end
+      end
+      cls.shelved_files(ws, { change }, function(sh)
+        local nshelved = #(sh[change] or {})
+        local what = {}
+        if #paths > 0 then
+          what[#what + 1] = ('%d opened file(s)'):format(#paths)
+        end
+        if nshelved > 0 then
+          what[#what + 1] = ('%d shelved file(s), which will be deleted'):format(nshelved)
+        end
+        local title = ('Delete CL %s (%s)?'):format(
+          change,
+          vim.trim((d.rec.desc or ''):match('[^\n]*') or '')
+        )
+        local msg = #what > 0 and (title .. '\nIt has ' .. table.concat(what, ' and ') .. '.')
+          or title
+        local mode
+        if #paths > 0 then
+          local choice = vim.fn.confirm(
+            msg .. '\nIts opened files:',
+            '&Move them to the default changelist\n&Revert them (edits are lost)\n&Cancel',
+            3
+          )
+          mode = ({ 'move', 'revert' })[choice]
+        else
+          mode = confirm(msg, '&Delete\n&Cancel') and 'delete' or nil
+        end
+        if not mode then
+          return cb(false)
+        end
+        local function delete()
+          local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
+          ws:run(args, {}, function(res)
+            local ok = #res.errors == 0
+            if ok then
+              notify(('deleted CL %s'):format(change))
+              if ws.sticky_cl == change then
+                ws.sticky_cl, ws.sticky_desc = nil, nil
+              end
+            else
+              notify(
+                ('could not delete CL %s: %s'):format(change, res.errors[1]),
+                vim.log.levels.ERROR
+              )
+            end
+            co.changed(ws)
+            cb(ok)
+          end)
+        end
+        local function empty_files()
+          if #paths == 0 then
+            return delete()
+          end
+          if mode == 'revert' then
+            return co.revert(ws, paths, false, function()
+              delete()
+            end)
+          end
+          cls.reopen(ws, paths, 'default', function(res)
+            if #res.errors > 0 then
+              notify('could not move the files: ' .. res.errors[1], vim.log.levels.ERROR)
+              co.changed(ws)
+              return cb(false)
+            end
+            refresh(ws, paths)
+            delete()
+          end)
+        end
+        if nshelved == 0 then
+          return empty_files()
+        end
+        local args = force and { 'shelve', '-d', '-f', '-c', change }
+          or { 'shelve', '-d', '-c', change }
+        ws:run(args, {}, function(res)
+          if #res.errors > 0 then
+            notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
+            co.changed(ws)
+            return cb(false)
+          end
+          empty_files()
+        end)
+      end)
+    end)
+  end)
+end
+
 -- ---------------------------------------------------------------------------------------------
 -- Submit
 -- ---------------------------------------------------------------------------------------------
