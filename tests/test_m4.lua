@@ -228,6 +228,8 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   child.lua([[require('perforated.core.log').clear(); _G.r = nil]])
   child.cmd('P4 sync')
   H.eq(child.lua_get('_G.asked'), 'Sync the whole workspace?')
+  child.cmd('P4 sync @1')
+  H.eq(child.lua_get('_G.asked'), 'Sync the whole workspace to @1?')
   H.eq(H.wait(child, 'false', 500), false)
   H.eq(
     #child.lua_get(

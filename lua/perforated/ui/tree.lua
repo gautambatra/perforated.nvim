@@ -252,7 +252,7 @@ function Tree:jump_section(forward)
   local cur = vim.api.nvim_win_get_cursor(0)[1]
   local rows = {}
   for row, node in pairs(self.rows) do
-    if node.depth == 0 then
+    if node.depth == 0 and node.kind ~= 'spacer' then
       rows[#rows + 1] = row
     end
   end

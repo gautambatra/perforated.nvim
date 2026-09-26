@@ -121,6 +121,32 @@ local function build(view, data)
     },
   }
 
+  -- Sync CL: the newest changelist the workspace has
+  local have = data.have
+  if have then
+    local t = tonumber(have.time)
+    roots[#roots + 1] = {
+      id = 'have',
+      kind = 'have_cl',
+      item = have,
+      text = {
+        { 'Sync CL: ', 'PerforatedSection' },
+        { have.change, 'PerforatedChangelist' },
+        { '  ' .. first_line(have.desc), 'PerforatedPath' },
+        {
+          ('  %s %s'):format(have.user or '', t and os.date('%Y-%m-%d', t) or ''),
+          'PerforatedDim',
+        },
+      },
+    }
+  elseif data.have == false then
+    roots[#roots + 1] = {
+      id = 'have',
+      kind = 'header',
+      text = { { 'Sync CL: ', 'PerforatedSection' }, { 'nothing synced', 'PerforatedDim' } },
+    }
+  end
+
   -- Pending: group files by (client, change)
   local by_change = {}
   local order = {}
@@ -362,6 +388,15 @@ local function build(view, data)
     children = sub_children,
   }
 
+  -- A blank line before each section.
+  local spaced = {}
+  for _, n in ipairs(roots) do
+    if (n.kind == 'section' or n.kind == 'section_reconcile') and #spaced > 0 then
+      spaced[#spaced + 1] = { id = 'sp:' .. n.id, kind = 'spacer', text = { { '' } } }
+    end
+    spaced[#spaced + 1] = n
+  end
+  roots = spaced
   return roots
 end
 
@@ -380,7 +415,7 @@ function M.refresh(view)
   local ws = view.ws
   local t0 = vim.uv.hrtime()
   ws:ensure_info(function()
-    local data, left = {}, 4
+    local data, left = {}, 5
     local function done()
       left = left - 1
       if left > 0 then
@@ -422,6 +457,10 @@ function M.refresh(view)
       data.err = data.err or err
       done()
     end, view.scope)
+    cls.have_change(ws, function(c)
+      data.have = c or false
+      done()
+    end)
     require('perforated.modified').query(ws, nil, function(set)
       data.modified = set or false -- false: unknown (no markers)
       done()
@@ -953,7 +992,7 @@ local function actions(view)
       id = 'describe',
       desc = 'Describe changelist',
       keys = { 'gd' },
-      kinds = { change = true, submitted = true, shelf = true },
+      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       run = function(items)
         require('perforated.views.describe').open(ws, items[1].change)
       end,
@@ -962,7 +1001,7 @@ local function actions(view)
       id = 'swarm',
       desc = 'Open review in Swarm',
       keys = { 'gx' },
-      kinds = { change = true, submitted = true, shelf = true },
+      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       when = function(item)
         return item and item.change ~= 'default'
       end,
@@ -974,7 +1013,7 @@ local function actions(view)
       id = 'swarm_copy',
       desc = 'Copy Swarm review URL',
       keys = { 'gX' },
-      kinds = { change = true, submitted = true, shelf = true },
+      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       when = function(item)
         return item and item.change ~= 'default'
       end,
@@ -1046,7 +1085,7 @@ local function actions(view)
       id = 'view_change',
       desc = 'View changelist',
       keys = { 'K' },
-      kinds = { change = true, submitted = true, shelf = true },
+      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       footer = 12,
       run = function(items)
         require('perforated.views.change_info').open(ws, items[1])
@@ -1056,7 +1095,7 @@ local function actions(view)
       id = 'diff_all',
       desc = 'Diff all files',
       keys = { 'D' },
-      kinds = { change = true, submitted = true, shelf = true },
+      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       footer = 11,
       run = function(items)
         require('perforated.diff.tab').open_change(ws, items[1])
@@ -1155,7 +1194,7 @@ local function actions(view)
       id = 'yank',
       desc = 'Copy CL number',
       keys = { 'y' },
-      kinds = { change = true, submitted = true },
+      kinds = { change = true, submitted = true, have_cl = true },
       when = function(item)
         return item.change ~= 'default'
       end,
@@ -1195,14 +1234,14 @@ local function actions(view)
       id = 'edit_description',
       desc = 'Edit description',
       keys = { 'C' },
-      kinds = { change = true, submitted = true },
+      kinds = { change = true, submitted = true, have_cl = true },
       footer = 51,
       when = function(item)
         return item.change ~= 'default' and (item.mine ~= false)
       end,
       run = function(items, ctx)
         require('perforated.views.change_editor').edit(ws, items[1].change, {
-          submitted = ctx.node and ctx.node.kind == 'submitted',
+          submitted = ctx.node and (ctx.node.kind == 'submitted' or ctx.node.kind == 'have_cl'),
           on_done = after(view),
         })
       end,

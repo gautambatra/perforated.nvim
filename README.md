@@ -74,6 +74,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
  d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  . actions  ? help
 ```
 
+- **Sync CL:** the newest changelist your workspace has synced (`p4 changes -m1
+  //client/...#have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists with their files and shelved files, files needing attention
   (stale or unresolved), workspace reconcile, and your recent submits. Reconcile is expensive on
   large workspaces, so it only scans when you expand it (`l`), and `x` stops a running scan
