@@ -124,16 +124,14 @@ function M.toggle_info(view, on)
   vim.bo[buf].bufhidden = 'wipe'
   pcall(vim.api.nvim_buf_set_name, buf, 'perforated://timelapse-info/' .. view.tl.depotFile)
   local height = require('perforated.config').get().timelapse.info_height or 8
-  vim.api.nvim_win_call(view.win, function()
-    vim.cmd(('belowright %dsplit'):format(height))
-  end)
-  local win = vim.fn.win_getid(vim.fn.winnr('j'), vim.api.nvim_win_get_tabpage(view.win))
-  win = (win ~= 0 and win ~= view.win) and win or vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(win, buf)
+  local win =
+    vim.api.nvim_open_win(buf, false, { split = 'below', win = view.win, height = height })
   local wo = vim.wo[win]
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
   wo.winfixheight, wo.wrap, wo.linebreak, wo.cursorline, wo.list = true, true, true, false, false
-  wo.winbar = ''
+  -- A header line doubles as the separator from the file above (whatever the statusline setup).
+  wo.winbar = '%#PerforatedSliderTrack#── %#PerforatedTitle#Revision details %#PerforatedSliderTrack#'
+    .. ('─'):rep(400)
   view.iwin, view.ibuf = win, buf
   vim.keymap.set('n', 'q', function()
     vim.api.nvim_set_current_win(view.win)
@@ -297,14 +295,7 @@ function M.update_diff(view)
     vim.bo[dbuf].bufhidden = 'wipe'
     pcall(vim.api.nvim_buf_set_name, dbuf, 'perforated://timelapse-base/' .. tl.depotFile)
     vim.bo[dbuf].filetype = vim.bo[view.buf].filetype
-    vim.api.nvim_win_call(view.win, function()
-      vim.cmd('leftabove vsplit')
-    end)
-    view.dwin = vim.fn.win_getid(vim.fn.winnr('h'), vim.api.nvim_win_get_tabpage(view.win))
-    if view.dwin == 0 or view.dwin == view.win then
-      view.dwin = vim.api.nvim_get_current_win()
-    end
-    vim.api.nvim_win_set_buf(view.dwin, dbuf)
+    view.dwin = vim.api.nvim_open_win(dbuf, false, { split = 'left', win = view.win })
     view.dbuf, view.da = dbuf, nil
     require('perforated.diff.view').diffthis({ view.dwin, view.win })
     vim.api.nvim_set_current_win(view.win)
