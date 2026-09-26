@@ -77,28 +77,9 @@ local function load_page(view)
   end)
 end
 
----@param ws perforated.Workspace
----@param opts { user: string?, path: string?, max: integer? }?
-function M.open(ws, opts)
-  opts = opts or {}
-  vim.cmd('tabnew')
-  local buf = vim.api.nvim_get_current_buf()
-  vim.bo[buf].buftype = 'nofile'
-  vim.bo[buf].bufhidden = 'wipe'
-  vim.bo[buf].swapfile = false
-  pcall(
-    vim.api.nvim_buf_set_name,
-    buf,
-    ('perforated://changes/%s'):format(opts.user or opts.path or ws:client() or '')
-  )
-  vim.wo.cursorline, vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn =
-    true, false, false, 'no'
-  require('perforated.hl').setup()
-  vim.b[buf].perforated_ws = ws.key
-  vim.b[buf].perforated_ws = ws.key
-  local view = { ws = ws, buf = buf, opts = opts, changes = {}, more = true }
-  view.tree = require('perforated.ui.tree').new(buf)
-  view.actions = {
+local function actions(view)
+  local ws = view.ws
+  return {
     {
       id = 'diff_all',
       desc = 'Diff all files',
@@ -265,6 +246,30 @@ function M.open(ws, opts)
       end,
     },
   }
+end
+
+---@param ws perforated.Workspace
+---@param opts { user: string?, path: string?, max: integer? }?
+function M.open(ws, opts)
+  opts = opts or {}
+  vim.cmd('tabnew')
+  local buf = vim.api.nvim_get_current_buf()
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].swapfile = false
+  pcall(
+    vim.api.nvim_buf_set_name,
+    buf,
+    ('perforated://changes/%s'):format(opts.user or opts.path or ws:client() or '')
+  )
+  vim.wo.cursorline, vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn =
+    true, false, false, 'no'
+  require('perforated.hl').setup()
+  vim.b[buf].perforated_ws = ws.key
+  vim.b[buf].perforated_ws = ws.key
+  local view = { ws = ws, buf = buf, opts = opts, changes = {}, more = true }
+  view.tree = require('perforated.ui.tree').new(buf)
+  view.actions = actions(view)
   keys.attach(buf, view.actions, view)
   local footer = require('perforated.ui.footer').attach(vim.api.nvim_get_current_win())
   vim.api.nvim_create_autocmd('CursorMoved', {
@@ -287,5 +292,7 @@ function M.open(ws, opts)
   load_page(view)
   return view
 end
+
+M._actions = actions -- for the generated help (scripts/gen_doc.lua)
 
 return M

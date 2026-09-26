@@ -672,4 +672,6 @@ function M.open_buf(buf)
   M.open(st.ws, st.rec.depotFile, { rev = tonumber(st.rec.haveRev), line = line })
 end
 
+M._actions = actions -- for the generated help (scripts/gen_doc.lua)
+
 return M

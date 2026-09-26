@@ -11,7 +11,7 @@ else
 endif
 P4_URL := https://cdist2.perforce.com/perforce/$(P4_REL)/$(P4_PLAT)
 
-.PHONY: test bench deps lint fmt clean dev-workspace
+.PHONY: test bench deps lint fmt clean dev-workspace doc
 
 deps: $(DEPS)/mini.nvim $(DEPS)/telescope.nvim $(DEPS)/plenary.nvim $(DEPS)/p4bin/p4 $(DEPS)/p4bin/p4d
 
@@ -37,15 +37,19 @@ test: deps
 bench: deps
 	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "lua local ok, err = pcall(dofile, 'bench/run.lua'); if not ok then io.stderr:write(tostring(err) .. '\\n'); vim.cmd('cquit 2') end"
 
+# Regenerate doc/perforated.txt (:h perforated) from the code.
+doc: deps
+	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -l scripts/gen_doc.lua doc/perforated.txt
+
 STYLUA ?= $(shell command -v stylua || echo $(DEPS)/stylua)
 SELENE ?= $(shell command -v selene || echo $(DEPS)/selene)
 
 lint:
-	$(STYLUA) --check lua plugin tests bench
+	$(STYLUA) --check lua plugin tests bench scripts
 	$(SELENE) lua plugin
 
 fmt:
-	$(STYLUA) lua plugin tests bench
+	$(STYLUA) lua plugin tests bench scripts
 
 # Persistent local Perforce sandbox in .dev/ (gitignored) for trying the plugin by hand.
 dev-workspace: deps

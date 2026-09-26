@@ -44,6 +44,8 @@ local LINKS = {
   PerforatedPreviewDelete = 'DiffDelete',
 }
 
+M.LINKS = LINKS
+
 local done = false
 
 --- fg colour of a group as '#rrggbb' (nil without one).

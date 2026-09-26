@@ -1,0 +1,609 @@
+*perforated.txt*  Perforce for Neovim: fast, light, asynchronous
+
+This file is generated from the code by `make doc` (scripts/gen_doc.lua).
+The README has the feature tour: https://github.com/gautambatra/perforated.nvim
+
+==============================================================================
+CONTENTS                                                 *perforated-contents*
+
+  Introduction                            |perforated-intro|
+  Commands                                |perforated-commands|
+  Keys in plugin views                    |perforated-keys|
+  Keymaps for your files                  |perforated-keymaps|
+  Configuration                           |perforated-config|
+  Highlight groups                        |perforated-highlights|
+  Events                                  |perforated-events|
+
+==============================================================================
+INTRODUCTION                                                *perforated-intro*
+
+perforated.nvim integrates Perforce (Helix Core) into Neovim. Every p4 call is
+asynchronous; the plugin stays dormant outside Perforce workspaces (a P4CONFIG
+lookup per directory) and loads its modules only when a workspace file is
+opened or a :P4 command runs. All state is per Neovim session. No setup() call
+is required: configure with `vim.g.perforated = { ... }` or
+`require("perforated").setup({ ... })`.
+
+Check your setup with `:checkhealth perforated`. `:P4 log` lists every p4
+command the plugin ran, and `:P4 debug on` writes a diagnostic log.
+
+==============================================================================
+COMMANDS                                                 *perforated-commands*
+
+Everything is a subcommand of `:P4` (completion lists them). Each also has a
+flat alias, `:P4<sub>` (e.g. `:P4edit`), defined the first time you use it. A
+bang goes on the subcommand: `:P4 revert!`.
+
+:P4 add                                                              *:P4-add*
+    Open files for add: :P4 add [-c CL] [file…]
+
+:P4 annotate                                                    *:P4-annotate*
+    Annotate the current file (or a depot revision): :P4 annotate
+    [//depot/path#rev]
+
+:P4 blame                                                          *:P4-blame*
+    Current-line blame (virtual text): :P4 blame [on|off] (no args: toggle)
+
+:P4 cancel                                                        *:P4-cancel*
+    Stop every running p4 job (sync, submit)
+
+:P4 change                                                        *:P4-change*
+    Edit a changelist description: :P4 change[!] [N|new] (! = full spec; no N
+    = current file's CL); :P4 change -d N deletes a pending CL
+
+:P4 changes                                                      *:P4-changes*
+    Submitted changelists: :P4 changes [-u user] [-m N] [path] (default: this
+    client)
+
+:P4 debug                                                          *:P4-debug*
+    Debug log: :P4 debug [on [level]|off|open|clear|snapshot|timings] (no
+    args: status)
+
+:P4 delete                                                        *:P4-delete*
+    Open files for delete (with a confirmation): :P4 delete [file…]
+
+:P4 describe                                                    *:P4-describe*
+    Describe a changelist: :P4 describe [N|default] (no N = the current file's
+    CL)
+
+:P4 diff                                                            *:P4-diff*
+    Diff the current file: :P4 diff[!] [#rev|@CL|@=shelf|prev] (! = $P4DIFF);
+    -a = all opened
+
+:P4 dismiss                                                      *:P4-dismiss*
+    Dismiss visible notifications
+
+:P4 edit                                                            *:P4-edit*
+    Open files for edit: :P4 edit [-c CL] [file…] (default: sticky CL or
+    default)
+
+:P4 filelog                                                      *:P4-filelog*
+    File history: :P4 filelog [file|//depot/path|dir] (default: current file;
+    a directory lists its changelists)
+
+:P4 history                                                      *:P4-history*
+    Alias of :P4 filelog
+
+:P4 hunks                                                          *:P4-hunks*
+    Hunks of all opened files (quickfix), or of this file: :P4 hunks %
+    (location list)
+
+:P4 info                                                            *:P4-info*
+    Show workspace, connection and server information
+
+:P4 integrate                                                  *:P4-integrate*
+    Cherry-pick a submitted changelist: :P4 integrate [CL] (no CL: pick from a
+    source path)
+
+:P4 jobs                                                            *:P4-jobs*
+    Running p4 jobs (sync, submit), live; x in the list stops one
+
+:P4 log                                                              *:P4-log*
+    Show the log of p4 commands run by the plugin (with timings)
+
+:P4 login                                                          *:P4-login*
+    Log in to the Perforce server (password prompt)
+
+:P4 lookup                                                        *:P4-lookup*
+    Go to a changelist (number), a file or directory history (path) or a user:
+    :P4 lookup [what]
+
+:P4 move                                                            *:P4-move*
+    Move/rename the current file: :P4 move {new path}
+
+:P4 notifications                                          *:P4-notifications*
+    Show recent notifications (stale files, …)
+
+:P4 opened                                                        *:P4-opened*
+    Opened files, grouped by changelist, in the quickfix list
+
+:P4 p4vc                                                            *:P4-p4vc*
+    P4V tools: :P4 p4vc {revgraph|timelapse|streamgraph} [file] (default: the
+    current file)
+
+:P4 pick                                                            *:P4-pick*
+    Picker: :P4 pick {pending|opened|submitted|users}
+
+:P4 refresh                                                      *:P4-refresh*
+    Refresh cached state (! also forgets workspace detection and settings)
+
+:P4 reopen                                                        *:P4-reopen*
+    Move opened files to another changelist: :P4 reopen [-c CL] [file…] (no
+    -c: pick one)
+
+:P4 resolve                                                      *:P4-resolve*
+    Resolve: :P4 resolve [file…] (-am first, then $P4MERGE for conflicts; no
+    args: all files)
+
+:P4 revert                                                        *:P4-revert*
+    Revert files: :P4 revert[!] [-a] [file…] (! = no confirmation, -a = only
+    unchanged)
+
+:P4 shelve                                                        *:P4-shelve*
+    Shelve: :P4 shelve [-c CL] [file…] (default: the current file's CL, all
+    its files; -d deletes the shelf)
+
+:P4 status                                                        *:P4-status*
+    Stale and unresolved opened files in the quickfix list
+
+:P4 submit                                                        *:P4-submit*
+    Submit a changelist (with a confirmation): :P4 submit [CL|default]
+    (default: the current file's CL)
+
+:P4 sync                                                            *:P4-sync*
+    Sync the whole workspace (:P4 sync), or get the latest revision of files
+    (:P4 sync %|path …); @CL / #head for a revision
+
+:P4 timelapse                                                  *:P4-timelapse*
+    Time-lapse: step through every revision of the current file (or a depot
+    path)
+
+:P4 unshelve                                                    *:P4-unshelve*
+    Unshelve: :P4 unshelve CL [-c target] [//depot/file…]
+
+:P4 view                                                            *:P4-view*
+    Client view: :P4 view [tab|float|split] (also plain :P4)
+
+
+==============================================================================
+KEYS IN PLUGIN VIEWS                                         *perforated-keys*
+
+Plugin views have buffer-local keys from one action registry, which also
+drives the `.` action menu (right-click too), the `?` help and the key footer.
+Change any action's keys with `keys = { <id> = { "x" } }` (or `false` to
+remove them); `keys.p4v = false` removes the P4V-style keys (<C-d>, <C-r>,
+...). The ids are listed in the `?` help of each view.
+
+Client view (:P4)                                     *perforated-client-view*
+
+  l <Tab> <CR>    Expand / toggle
+  h               Collapse
+  ]]              Next section
+  [[              Previous section
+  g1 <C-1>        Go to Pending
+  g2 <C-2>        Go to Submitted
+  gr              Refresh
+  q <C-w>         Close
+  ?               Help
+  . <RightMouse>  Action menu
+  m               Mark / unmark
+  u               Clear marks
+  A               Toggle scope: this client / all my clients
+  d <C-d>         Diff against have revision
+  d <C-d>         Diff shelved vs base revision
+  s               Shelve
+  S               Unshelve
+  z               Delete shelved files
+  P <C-s>         Submit
+  R               Resolve
+  gy              Get latest revision
+  gy              Get latest file revisions
+  gy              Get latest revisions of these files
+  gY <C-S-g>      Sync workspace
+  g@              Sync workspace to this CL
+  I               Integrate (cherry-pick) into this workspace
+  gd              Describe changelist
+  gx              Open review in Swarm
+  gX              Copy Swarm review URL
+  g/ <C-g>        Go to changelist / path / user
+  L <C-t>         File history
+  t <C-S-t>       Time-lapse
+  b               Annotate
+  w               Diff shelved vs workspace file
+  K               View changelist
+  D               Diff all files
+  o               Open file
+  x <C-r>         Revert
+  X               Revert if unchanged
+  X               Revert unchanged files
+  M               Move to changelist
+  y               Copy CL number
+  c <C-n>         New changelist
+  <Del>           Delete changelist
+  C               Edit description
+  a               Open for add / edit / delete as found
+  x               Cancel scan
+  r               Reconcile: scan again
+  p               Reconcile: set the paths to scan
+  Q               Send to quickfix
+  gQ              Send to location list
+  gR <C-S-r>      Revision graph (p4vc)
+
+Describe buffer (:P4 describe)                           *perforated-describe*
+
+  l <Tab>         Expand / toggle
+  h <S-Tab>       Collapse
+  gr              Refresh
+  q <C-w>         Close
+  ?               Help
+  . <RightMouse>  Action menu
+  <CR>            Open file at this line
+  <CR>            Expand / collapse
+  d <C-d>         Diff
+  d <C-d>         Diff shelved vs base revision
+  w gw            Diff shelved vs workspace file
+  w gw            Diff every shelved file vs workspace
+  gh              Diff shelved vs head revision
+  D               Diff all files
+  o               Open file
+  L <C-t>         File history
+  t <C-S-t>       Time-lapse
+  b               Annotate
+  C               Edit description
+  y               Copy CL number
+  P <C-s>         Submit
+  <Del>           Delete changelist
+  g@              Sync workspace to this CL
+  I               Integrate (cherry-pick) into this workspace
+  Q               Files to quickfix
+  gx              Open review in Swarm
+  gX              Copy Swarm review URL
+  gR <C-S-r>      Revision graph (p4vc)
+
+File history (:P4 filelog)                                *perforated-history*
+
+  l <Tab>              Expand / toggle
+  h <S-Tab>            Collapse
+  gr                   Refresh
+  q <C-w>              Close
+  ?                    Help
+  . <RightMouse> <CR>  Action menu
+  d <C-d>              Diff against previous revision
+  w                    Diff against workspace file
+  gd                   Describe changelist
+  K                    View changelist
+  o                    Open revision (read-only)
+  t <C-S-t>            Time-lapse
+  b                    Annotate this revision
+  g@                   Sync workspace to this CL
+  y                    Copy CL number
+  gx                   Open review in Swarm
+  gR <C-S-r>           Revision graph (p4vc)
+
+Annotate (:P4 annotate)                                  *perforated-annotate*
+
+  <CR> gd         Describe changelist
+  K               View changelist
+  ~               Annotate the revision before this change
+  <BS>            Back to the newer revision
+  d <C-d>         Diff this change (the file's revision in it vs the one before)
+  t <C-S-t>       Time-lapse from this revision
+  L <C-t>         File history
+  Q               Lines from this changelist to the location list
+  y               Copy CL number
+  gx              Open review in Swarm
+  q               Close
+  ?               Help
+  . <RightMouse>  Action menu
+  gR <C-S-r>      Revision graph (p4vc)
+
+Time-lapse (:P4 timelapse)                              *perforated-timelapse*
+
+  [r h            Previous revision
+  ]r l            Next revision
+  [R              First revision
+  ]R              Last revision
+  m               Mode: single / incremental diff / range
+  H [a            Move ◆ back (diff / range mode)
+  L ]a            Move ◆ forward (diff / range mode)
+  s               Show / hide the slider
+  S               Slider labels: revision / changelist / date
+  r               Go to revision (#N) or changelist (@CL)
+  T               Pick a revision by description
+  d <C-d>         Diff against the previous revision
+  D gd            Describe changelist
+  K               View changelist
+  y               Copy CL number
+  Q               Lines added in this revision to the location list
+  a               Toggle the age gutter
+  b               Annotate this revision
+  gL <C-t>        File history
+  q               Close
+  ?               Help
+  . <RightMouse>  Action menu
+  gR <C-S-r>      Revision graph (p4vc)
+
+Submitted changelists (:P4 changes)                       *perforated-changes*
+
+  D <CR> <C-d>    Diff all files
+  C               Edit description
+  g@              Sync workspace to this CL
+  I               Integrate (cherry-pick) into this workspace
+  gd              Describe changelist
+  gx              Open review in Swarm
+  gX              Copy Swarm review URL
+  g/ <C-g>        Go to changelist / path / user
+  K               View changelist
+  y               Copy CL number
+  gn              Load more
+  gr              Refresh
+  q <C-w>         Close
+  ?               Help
+  . <RightMouse>  Action menu
+
+Diff tab (D, :P4 diff -a)                               *perforated-diff-tab*
+
+  <Tab> <S-Tab>  next / previous file (from any window of the tab)
+  q              close the tab
+
+Quickfix lists made by the plugin                          *perforated-quickfix*
+
+  d   diff the entry        x   revert        M   move to a changelist
+  R   resolve the entry     gr  refresh the list
+
+==============================================================================
+KEYMAPS FOR YOUR FILES                                    *perforated-keymaps*
+
+Nothing is mapped in your own buffers unless you ask. Every action is a <Plug>
+mapping; `keymaps = "default"` installs the preset below, in Perforce buffers
+only (your buffer-local mappings win).
+
+  <Plug>(perforated-add)
+  <Plug>(perforated-annotate)
+  <Plug>(perforated-blame-line)
+  <Plug>(perforated-describe)
+  <Plug>(perforated-diff)
+  <Plug>(perforated-diff-external)
+  <Plug>(perforated-edit)
+  <Plug>(perforated-edit-prompt)
+  <Plug>(perforated-history)
+  <Plug>(perforated-hunks)
+  <Plug>(perforated-hunks-file)
+  <Plug>(perforated-info)
+  <Plug>(perforated-log)
+  <Plug>(perforated-lookup)
+  <Plug>(perforated-next-hunk)
+  <Plug>(perforated-notifications)
+  <Plug>(perforated-opened)
+  <Plug>(perforated-prev-hunk)
+  <Plug>(perforated-preview-hunk)
+  <Plug>(perforated-reset-hunk)
+  <Plug>(perforated-resolve)
+  <Plug>(perforated-revert)
+  <Plug>(perforated-revgraph)
+  <Plug>(perforated-shelve)
+  <Plug>(perforated-status)
+  <Plug>(perforated-submit)
+  <Plug>(perforated-sync)
+  <Plug>(perforated-sync-file)
+  <Plug>(perforated-timelapse)
+
+Preset (keymaps = "default"):
+
+  <leader>pA     annotate
+  <leader>pD     diff-external
+  <leader>pG     revgraph
+  <leader>pP     submit
+  <leader>pQ     hunks-file
+  <leader>pR     resolve
+  <leader>pS     shelve
+  <leader>pY     sync
+  <leader>pa     add
+  <leader>pb     blame-line
+  <leader>pc     describe
+  <leader>pd     diff
+  <leader>pe     edit-prompt
+  <leader>pg     lookup
+  <leader>ph     history
+  <leader>pi     info
+  <leader>pl     log
+  <leader>pn     notifications
+  <leader>po     opened
+  <leader>pq     hunks
+  <leader>pr     revert
+  <leader>ps     status
+  <leader>pt     timelapse
+  <leader>pu     reset-hunk
+  <leader>pv     preview-hunk
+  <leader>py     sync-file
+  [h             prev-hunk
+  ]h             next-hunk
+
+==============================================================================
+CONFIGURATION                                              *perforated-config*
+
+The defaults (every key is optional; `:checkhealth perforated` reports unknown
+keys):
+
+>lua
+    {
+      annotate = {
+        history_max = 1000,
+        integrations = false,
+        width = 36
+      },
+      blame_line = {
+        delay = 150,
+        enabled = false,
+        format = "CL {change} • {user} • {date} • {desc}"
+      },
+      cache = {
+        content_mb = 32
+      },
+      change = {
+        allow_force = false
+      },
+      changes = {
+        page_size = 50,
+        scope = "client"
+      },
+      checkout = {
+        add_on_write = "prompt",
+        on_write = false,
+        prompt = true,
+        prompt_grace = 300,
+        sticky = true
+      },
+      client_view = {
+        kind = "tab",
+        reconcile = {
+          paths = {}
+        },
+        sections = { "pending", "unresolved", "reconcile", "submitted" },
+        submitted_limit = 20
+      },
+      commands = {
+        aliases = true
+      },
+      debug = {
+        enabled = false,
+        level = "debug",
+        max_kb = 5120
+      },
+      diff = {
+        external_terminal = "auto",
+        layout = "tab",
+        tool = "builtin"
+      },
+      history = {
+        limit = 100,
+        presenter = "float"
+      },
+      icons = {
+        glyphs = {},
+        provider = "auto",
+        style = "auto"
+      },
+      keymaps = false,
+      keys = {
+        p4v = true
+      },
+      log = {
+        size = 500
+      },
+      merge = {},
+      notify = "minimal",
+      p4 = "p4",
+      p4vc = "p4vc",
+      picker = "auto",
+      poll = {
+        bufenter_throttle = 60,
+        focus_throttle = 30,
+        interval = 300
+      },
+      qf = {
+        loclist_for_file_scoped = true,
+        open = true
+      },
+      runner = {
+        background_timeout = 5000,
+        concurrency = 4,
+        timeout = 10000
+      },
+      signs = {
+        algorithm = "myers",
+        base = "have",
+        enabled = true,
+        hard_max = 500000,
+        max_lines = 2000,
+        priority = 6,
+        text = {
+          add = "▎",
+          change = "▎",
+          delete = "▁",
+          stale = "↓"
+        }
+      },
+      startup_check = true,
+      statusline = {
+        offline = "⊘",
+        stale = "↓",
+        unresolved = "!"
+      },
+      swarm = {},
+      sync = {
+        resolve_prompt = true
+      },
+      timelapse = {
+        max_bytes = 20971520,
+        slider = true
+      },
+      toast = {
+        backend = "float",
+        history = 50,
+        timeout = 8000
+      }
+    }
+<
+
+==============================================================================
+HIGHLIGHT GROUPS                                       *perforated-highlights*
+
+All are `default` links (or derived colours), so colorschemes and your config
+can override them:
+
+  PerforatedAction             Statement
+  PerforatedAdd                Added
+  PerforatedAge1..10           annotate age gradient (annotate.gradient)
+  PerforatedAnnotateLocal      DiagnosticInfo
+  PerforatedBadge              WarningMsg
+  PerforatedBlame              Comment
+  PerforatedChange             Changed
+  PerforatedChangelist         Identifier
+  PerforatedDelete             Removed
+  PerforatedDiffAdded          Added
+  PerforatedDiffHunk           Title
+  PerforatedDiffRemoved        Removed
+  PerforatedDim                Comment
+  PerforatedFloat              NormalFloat
+  PerforatedFloatBorder        FloatBorder
+  PerforatedFooter             StatusLineNC
+  PerforatedHeader             Comment
+  PerforatedKey                Special
+  PerforatedLoading            Comment
+  PerforatedMark               Todo
+  PerforatedModified           Changed
+  PerforatedOffline            DiagnosticError
+  PerforatedPath               Normal
+  PerforatedPreviewAdd         DiffAdd
+  PerforatedPreviewDelete      DiffDelete
+  PerforatedRev                Comment
+  PerforatedSection            Title
+  PerforatedShelved            Constant
+  PerforatedShelvedFile        Special
+  PerforatedSliderHandle       Special
+  PerforatedSliderHandleA      Constant
+  PerforatedSliderRange        Visual
+  PerforatedSliderTrack        Comment
+  PerforatedStale              DiagnosticWarn
+  PerforatedTimelapseAdd       DiffAdd
+  PerforatedTimelapseDelete    DiffDelete
+  PerforatedTitle              Title
+  PerforatedToast              NormalFloat
+  PerforatedToastBorder        DiagnosticWarn
+  PerforatedUnchanged          between Normal and Comment
+  PerforatedUnresolved         DiagnosticError
+
+==============================================================================
+EVENTS                                                     *perforated-events*
+
+`User` autocmds you can hook (the event data is in `ev.data`):
+
+  PerforatedStatus        workspace / buffer state changed (statuslines)
+  PerforatedChanged       files were opened, reverted, submitted, ... { ws }
+  PerforatedWorkspaceActivated   a workspace became active { ws }
+  PerforatedWorkspaceIdle        a workspace went idle (no buffers left) { ws }
+  PerforatedDiffOpen      a diff tab opened { tab, wins, bufs, spec, path }
+  PerforatedDiffClose     it closed (same data)
+
+ vim:tw=78:ts=8:ft=help:norl:

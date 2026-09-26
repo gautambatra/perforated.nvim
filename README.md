@@ -450,6 +450,9 @@ The detailed plan is in [docs/plan.md](docs/plan.md). Agreed behaviour is in
 
 ## Commands
 
+Full reference: `:h perforated` (generated from the code, so it's always current). Coming from
+vim-vp4 or vim-perforce? See [docs/migrating.md](docs/migrating.md).
+
 Every command also has a flat alias (`:P4edit`, `:P4diff`, …), defined the first time you use
 it. A bang goes on the subcommand (`:P4 revert!`).
 
@@ -473,6 +476,7 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 jobs` / `:P4 cancel` | Watch running syncs and submits / stop them |
 | `:P4 resolve [file…]` | Resolve (auto-merge, then your merge tool) |
 | `:P4 delete [file…]` | Open for delete |
+| `:P4 reopen [-c CL] [file…]` | Move opened files to another changelist (no `-c`: pick one) |
 | `:P4 move {new}` | Move/rename the current file |
 | `:P4 integrate [CL]` | Cherry-pick a submitted changelist |
 | `:P4 edit [-c CL] [file…]` | Open for edit (sticky CL, else default) |

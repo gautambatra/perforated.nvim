@@ -68,6 +68,7 @@ local subs = {
   'p4vc',
   'pick',
   'refresh',
+  'reopen',
   'resolve',
   'revert',
   'shelve',

@@ -1648,4 +1648,6 @@ function M._get(ws_key)
   return views[ws_key]
 end
 
+M._actions = actions -- for the generated help (scripts/gen_doc.lua)
+
 return M

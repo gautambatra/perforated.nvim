@@ -478,6 +478,44 @@ M.commands = {
     end,
   },
 
+  reopen = {
+    scope = 'workspace',
+    desc = 'Move opened files to another changelist: :P4 reopen [-c CL] [file…]  (no -c: pick one)',
+    complete = complete_files,
+    run = function(ws, _, args)
+      local cl, files = parse_file_args(args)
+      if not need_files(files) then
+        return
+      end
+      local function go(target)
+        require('perforated.changelists').reopen(ws, files, target, function(res)
+          if #res.errors > 0 then
+            return notify('reopen failed: ' .. res.errors[1], vim.log.levels.ERROR)
+          end
+          notify(
+            ('moved %d file(s) to %s'):format(
+              #res.records,
+              target == 'default' and 'the default changelist' or ('CL ' .. target)
+            )
+          )
+          local co = require('perforated.checkout')
+          co.changed(ws)
+          for _, b in ipairs(co.bufs_for(ws, files)) do
+            require('perforated.buffer').refresh(b)
+          end
+        end)
+      end
+      if cl then
+        return go(cl)
+      end
+      require('perforated.checkout').pick_change(ws, function(target)
+        if target then
+          go(target)
+        end
+      end)
+    end,
+  },
+
   shelve = {
     scope = 'workspace',
     desc = "Shelve: :P4 shelve [-c CL] [file…]  (default: the current file's CL, all its files; -d deletes the shelf)",

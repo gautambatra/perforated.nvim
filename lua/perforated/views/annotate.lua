@@ -653,4 +653,6 @@ function M.open_spec(ws, spec)
   return M.open_buf(buf)
 end
 
+M._actions = actions -- for the generated help (scripts/gen_doc.lua)
+
 return M
