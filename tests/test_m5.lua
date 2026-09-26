@@ -177,6 +177,79 @@ T['timelapse']['view: winbar, stepping, highlights, the cursor stays on the same
   H.eq(names, { 'perforated:////depot/f.txt#4', 'perforated:////depot/f.txt#5' })
 end
 
+T['timelapse']['slider: handles, clicks, diff and range modes'] = function()
+  local contents = setup()
+  child.cmd('P4 timelapse')
+  wait([[vim.wo.winbar:find('#30/#30', 1, true) ~= nil]])
+  local V = [[require('perforated.views.timelapse')._last]]
+  local function slider_lines()
+    return child.lua_get(
+      V .. [[.slider and vim.api.nvim_buf_get_lines(]] .. V .. [[.slider.buf, 0, -1, false)]]
+    )
+  end
+  wait(V .. '.slider ~= nil')
+  local sl = slider_lines()
+  H.neq(sl[1]:find('●', 1, true), nil)
+  H.neq(sl[2]:find('[single]', 1, true), nil)
+  H.neq(sl[2]:find('#30 · CL 30', 1, true), nil)
+  -- a click at the left end of the track goes to the first revision
+  H.eq(child.lua_get(V .. '.slider:rev_at(2)'), 1)
+  child.lua(
+    ('local v = %s; require("perforated.views.timelapse").show(v, v.slider:rev_at(2))'):format(V)
+  )
+  H.neq(child.wo.winbar:find('#1/#30', 1, true), nil)
+  child.type_keys(']R')
+  -- m: incremental diff — ◆ (#29) on the left, ● (#30) on the right, in diff mode
+  child.type_keys('m')
+  wait(V .. '.dwin ~= nil')
+  local dbuf = child.lua_get(V .. '.dbuf')
+  H.eq(table.concat(child.api.nvim_buf_get_lines(dbuf, 0, -1, false), '\n') .. '\n', contents[29])
+  H.eq(child.lua_get('vim.wo[' .. V .. '.dwin].diff'), true)
+  H.eq(child.wo.diff, true)
+  child.type_keys('H') -- ◆ back to #28
+  H.eq(table.concat(child.api.nvim_buf_get_lines(dbuf, 0, -1, false), '\n') .. '\n', contents[28])
+  H.neq(slider_lines()[2]:find('[diff #28 → #30]', 1, true), nil)
+  H.neq(slider_lines()[1]:find('◆', 1, true), nil)
+  -- m: range — lines added after ◆ carry their revision at the end of the line
+  child.type_keys('m')
+  wait(V .. '.dwin == nil')
+  H.eq(child.wo.diff, false)
+  local marks = child.lua_get(
+    [[vim.tbl_map(function(m) return m[4] end, vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces()['perforated.timelapse'], 0, -1, { details = true }))]]
+  )
+  local tagged = false
+  for _, d in ipairs(marks) do
+    if d.virt_text and d.virt_text[1][1]:match('#%d+') then
+      tagged = true
+    end
+  end
+  H.eq(tagged or #marks > 0, true)
+  child.type_keys('m')
+  H.neq(slider_lines()[2]:find('[single]', 1, true), nil)
+  -- s hides the slider
+  child.type_keys('s')
+  H.eq(child.lua_get(V .. '.slider'), vim.NIL)
+end
+
+T['timelapse']['range: added after ◆ and deleted after ◆'] = function()
+  child = H.child()
+  local r = child.lua_get([[(function()
+    local e = require('perforated.timelapse')
+    local tl = { first = 1, last = 3, head = 3, cache = {}, revs = { {}, {}, {} },
+      entries = {
+        { text = 'a', lo = 1, hi = 3 },
+        { text = 'b2', lo = 2, hi = 3 },
+        { text = 'x', lo = 1, hi = 1 }, -- deleted in 2
+        { text = 'y', lo = 1, hi = 2 }, -- deleted in 3
+        { text = 'c3', lo = 3, hi = 3 },
+      } }
+    local added, removed = e.range(tl, 1, 3)
+    return { added = added, removed = removed }
+  end)()]])
+  H.eq(r.added, { { 2, 2 }, { 3, 3 } }) -- b2 (line 2, from #2), c3 (line 3, from #3)
+  H.eq(r.removed['3'] or r.removed[3], { { text = 'x', rev = 2 }, { text = 'y', rev = 3 } })
+end
+
 T['timelapse']['anchor: insertions above the cursor keep it on the same line'] = function()
   child = H.child()
   local lnum = child.lua_get([[(function()

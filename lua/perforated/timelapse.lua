@@ -187,6 +187,39 @@ function M.changes(tl, n)
   return added, removed
 end
 
+--- Range mode: revision `b` with everything that changed after revision `a` — its lines added
+--- after `a` (with the revision that added them) and the lines deleted after `a` (with the
+--- revision that deleted them), grouped by the line of `b` they'd sit above (0 = the end).
+---@param tl perforated.Timelapse
+---@param a integer
+---@param b integer
+---@return { [1]: integer, [2]: integer }[] added  { line, rev }
+---@return table<integer, { text: string, rev: integer }[]> removed
+function M.range(tl, a, b)
+  local added, removed, pending = {}, {}, nil
+  local entries, l = tl.entries, 0
+  for i = 1, #entries do
+    local e = entries[i]
+    if e.lo <= b and b <= e.hi then
+      l = l + 1
+      if e.lo > a then
+        added[#added + 1] = { l, e.lo }
+      end
+      if pending then
+        removed[l] = pending
+        pending = nil
+      end
+    elseif e.hi >= a and e.hi < b and e.lo <= b then
+      pending = pending or {}
+      pending[#pending + 1] = { text = e.text, rev = e.hi + 1 }
+    end
+  end
+  if pending then
+    removed[0] = pending
+  end
+  return added, removed
+end
+
 --- Everything a step from revision `from` to `to` needs, in one pass over the entries:
 --- the buffer edits (applied top-down, in order; adjacent revisions usually differ by a few
 --- lines, so this is far cheaper than replacing the buffer), where line `lnum` of `from` ends

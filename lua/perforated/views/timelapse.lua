@@ -73,6 +73,12 @@ function M.show(view, n)
     local count = vim.api.nvim_buf_line_count(buf)
     pcall(vim.api.nvim_win_set_cursor, view.win, { math.max(1, math.min(lnum, count)), 0 })
   end
+  if view.mode == 'diff' then
+    M.update_diff(view)
+  end
+  if view.slider then
+    view.slider:render()
+  end
   if view.footer then
     view.footer:set(keys.footer(view.actions, view.tree:node_at()))
   end
@@ -82,6 +88,12 @@ end
 function M.decorate(view)
   local tl, n, buf = view.tl, view.n, view.buf
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  if view.mode == 'diff' then
+    return -- the diff highlighting says it all
+  end
+  if view.mode == 'range' then
+    return M.decorate_range(view)
+  end
   local ch = view.changes
   local added, removed
   if ch and ch.n == n then
@@ -126,9 +138,137 @@ function M.decorate(view)
   end
 end
 
+--- Range mode: revision ● with everything changed since ◆ — added lines coloured by the
+--- revision that added them (with `#rev` at the end), deleted lines shown where they were.
+function M.decorate_range(view)
+  local tl, a, b, buf = view.tl, view.a, view.n, view.buf
+  require('perforated.views.annotate').define_age_groups()
+  local added, removed = engine.range(tl, a, b)
+  local span = math.max(1, b - a - 1)
+  local function step(rev)
+    return 'PerforatedAge' .. (1 + math.floor((rev - a - 1) * 9 / span))
+  end
+  for _, ad in ipairs(added) do
+    vim.api.nvim_buf_set_extmark(buf, ns, ad[1] - 1, 0, {
+      line_hl_group = 'PerforatedTimelapseAdd',
+      virt_text = { { ' #' .. ad[2], step(ad[2]) } },
+      virt_text_pos = 'eol',
+    })
+  end
+  local count = vim.api.nvim_buf_line_count(buf)
+  for l, items in pairs(removed) do
+    local virt = {}
+    for _, it in ipairs(items) do
+      virt[#virt + 1] = {
+        { it.text, 'PerforatedTimelapseDelete' },
+        { '  −#' .. it.rev, step(math.min(it.rev, b)) },
+      }
+    end
+    if l == 0 then
+      vim.api.nvim_buf_set_extmark(buf, ns, count - 1, 0, { virt_lines = virt })
+    else
+      vim.api.nvim_buf_set_extmark(
+        buf,
+        ns,
+        l - 1,
+        0,
+        { virt_lines = virt, virt_lines_above = true }
+      )
+    end
+  end
+end
+
+--- Incremental diff mode: revision ◆ in a window on the left, diffed against ● (the main view).
+function M.update_diff(view)
+  local tl = view.tl
+  if not (view.dwin and vim.api.nvim_win_is_valid(view.dwin)) then
+    local dbuf = vim.api.nvim_create_buf(false, true)
+    vim.bo[dbuf].bufhidden = 'wipe'
+    pcall(vim.api.nvim_buf_set_name, dbuf, 'perforated://timelapse-base/' .. tl.depotFile)
+    vim.bo[dbuf].filetype = vim.bo[view.buf].filetype
+    vim.api.nvim_win_call(view.win, function()
+      vim.cmd('leftabove vsplit')
+    end)
+    view.dwin = vim.fn.win_getid(vim.fn.winnr('h'), vim.api.nvim_win_get_tabpage(view.win))
+    if view.dwin == 0 or view.dwin == view.win then
+      view.dwin = vim.api.nvim_get_current_win()
+    end
+    vim.api.nvim_win_set_buf(view.dwin, dbuf)
+    view.dbuf, view.da = dbuf, nil
+    require('perforated.diff.view').diffthis({ view.dwin, view.win })
+    vim.api.nvim_set_current_win(view.win)
+  end
+  if view.da ~= view.a then
+    local lines = engine.revision(tl, view.a)
+    vim.bo[view.dbuf].modifiable = true
+    vim.api.nvim_buf_set_lines(view.dbuf, 0, -1, false, #lines > 0 and lines or { '' })
+    vim.bo[view.dbuf].modifiable = false
+    view.da = view.a
+  end
+  local r = tl.revs[view.a] or {}
+  local t = tonumber(r.time)
+  vim.wo[view.dwin].winbar = (' ◆ #%d · CL %s · %s · %s'):format(
+    view.a,
+    r.change or '?',
+    r.user or '?',
+    t and os.date('%Y-%m-%d', t) or ''
+  )
+  pcall(vim.api.nvim_win_call, view.win, function()
+    vim.cmd('diffupdate')
+  end)
+end
+
+local function leave_diff(view)
+  if view.dwin and vim.api.nvim_win_is_valid(view.dwin) then
+    pcall(vim.api.nvim_win_close, view.dwin, true)
+  end
+  view.dwin, view.dbuf, view.da = nil, nil, nil
+  if vim.api.nvim_win_is_valid(view.win) then
+    pcall(vim.api.nvim_win_call, view.win, function()
+      vim.cmd('diffoff')
+    end)
+  end
+end
+
+--- Switch mode: 'single' | 'diff' (incremental diff ◆ vs ●) | 'range' (changes since ◆).
+function M.set_mode(view, mode)
+  if view.mode == 'diff' and mode ~= 'diff' then
+    leave_diff(view)
+  end
+  view.mode = mode
+  if mode ~= 'single' and not (view.a and view.a < view.n) then
+    view.a = engine.step(view.tl, view.n, -1) or view.n
+  end
+  if mode == 'diff' then
+    M.update_diff(view)
+  end
+  M.decorate(view)
+  if view.slider then
+    view.slider:render()
+  end
+end
+
 local function go(view, n)
   if n and view.tl.revs[n] then
+    if view.mode ~= 'single' and view.a and n <= view.a then
+      view.a = engine.step(view.tl, n, -1) or n -- keep ◆ before ●
+    end
     M.show(view, n)
+  end
+end
+
+--- Move ◆ (diff / range mode), keeping it before ●.
+local function go_a(view, n)
+  if not n or not view.tl.revs[n] or n >= view.n then
+    return
+  end
+  view.a = n
+  if view.mode == 'diff' then
+    M.update_diff(view)
+  end
+  M.decorate(view)
+  if view.slider then
+    view.slider:render()
   end
 end
 
@@ -174,6 +314,63 @@ local function actions(view)
       keys = { ']R' },
       run = function()
         go(view, view.tl.head)
+      end,
+    },
+    {
+      id = 'mode',
+      desc = 'Mode: single / incremental diff / range',
+      keys = { 'm' },
+      footer = 3,
+      run = function()
+        local nxt = { single = 'diff', diff = 'range', range = 'single' }
+        M.set_mode(view, nxt[view.mode or 'single'])
+      end,
+    },
+    {
+      id = 'a_prev',
+      desc = 'Move ◆ back (diff / range mode)',
+      keys = { 'H', '[a' },
+      run = function()
+        if view.mode ~= 'single' then
+          go_a(view, engine.step(view.tl, view.a, -1))
+        end
+      end,
+    },
+    {
+      id = 'a_next',
+      desc = 'Move ◆ forward (diff / range mode)',
+      keys = { 'L', ']a' },
+      run = function()
+        if view.mode ~= 'single' then
+          go_a(view, engine.step(view.tl, view.a, 1))
+        end
+      end,
+    },
+    {
+      id = 'slider',
+      desc = 'Show / hide the slider',
+      keys = { 's' },
+      run = function()
+        if view.slider and vim.api.nvim_win_is_valid(view.slider.win) then
+          view.slider:close()
+          view.slider = nil
+        else
+          view.slider = require('perforated.views.slider').attach(view, function(n)
+            go(view, n)
+          end)
+        end
+      end,
+    },
+    {
+      id = 'scale',
+      desc = 'Slider labels: revision / changelist / date',
+      keys = { 'S' },
+      run = function()
+        local nxt = { rev = 'change', change = 'date', date = 'rev' }
+        view.scale = nxt[view.scale or 'rev']
+        if view.slider then
+          view.slider:render()
+        end
       end,
     },
     {
@@ -330,7 +527,7 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'L' },
+      keys = { 'gL' },
       p4v = { '<C-t>' },
       run = function()
         require('perforated.views.history').open(ws, view.tl.depotFile)
@@ -417,7 +614,13 @@ function M.open(ws, path, opts)
     keys.attach(buf, view.actions, view)
     view.footer = require('perforated.ui.footer').attach(win)
     local start = opts.rev and tl.revs[opts.rev] and opts.rev or tl.head
+    view.mode, view.scale = 'single', 'rev'
     M.show(view, start)
+    if require('perforated.config').get().timelapse.slider ~= false then
+      view.slider = require('perforated.views.slider').attach(view, function(rev)
+        go(view, rev)
+      end)
+    end
     vim.api.nvim_create_autocmd('BufWipeout', {
       buffer = buf,
       once = true,
@@ -425,6 +628,12 @@ function M.open(ws, path, opts)
         view.tl = nil -- free the line table
         if view.footer then
           view.footer:close()
+        end
+        if view.slider then
+          view.slider:close()
+        end
+        if view.dwin and vim.api.nvim_win_is_valid(view.dwin) then
+          pcall(vim.api.nvim_win_close, view.dwin, true)
         end
       end,
     })
