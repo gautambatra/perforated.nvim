@@ -167,7 +167,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **Submit (`P` / `<C-s>`, `:P4 submit [CL]`):** a confirmation float shows the description and
   file count, and warns about out-of-date, unresolved or shelved files. `s` submits, `e` edits
   the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
-- **Sync (`gy`, `:P4 sync [path|%|@CL|#head]`):** open buffers reload without "file changed"
+- **Sync (`gy`, `:P4 sync [path|%|@CL|#head]`):** every sync asks for confirmation first
+  (`gy` syncs the file or changelist under the cursor, otherwise the whole workspace). open buffers reload without "file changed"
   prompts, and their signs follow the new revision. Afterwards every opened file is re-checked:
   files that need attention (can't clobber, and *every* unresolved file in the workspace, not
   just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
