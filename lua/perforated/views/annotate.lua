@@ -1,5 +1,5 @@
 --- Annotate (`:P4 annotate`, `b`): a scroll- and cursor-bound split left of the file with the
---- changelist, user and date that last changed each line, coloured by age.
+--- changelist, user and date that last changed each line (on every line), coloured by age.
 ---
 --- One p4 call (`annotate -c -i -u -q`: follows branches, carries user and date), one
 --- `set_lines`. `~` and `d` fetch the file's history the first time they need it.
@@ -131,30 +131,22 @@ function M.render(view)
   local steps = age_steps(cls)
   local width = require('perforated.config').get().annotate.width
   local lines, hls, line_cl = {}, {}, {}
-  local labels = {} -- one formatted label per changelist
-  local prev = false
+  local labels, groups = {}, {} -- one formatted label and group per changelist
   for l = 1, n do
     local b = map(l)
     local cl = b and cls[b] or nil
     line_cl[l] = cl or false
-    if cl ~= prev then
-      if cl then
-        local label = labels[cl]
-        if not label then
-          local m = meta[cl] or {}
-          label = ('%-8s %-10s %s'):format(cl, (m.user or '?'):sub(1, 10), base.date(m.time))
-          labels[cl] = label
-        end
-        lines[l] = label
-        hls[l - 1] = 'PerforatedAge' .. (steps[cl] or 1)
-      else
-        lines[l] = 'Not submitted'
-        hls[l - 1] = 'PerforatedAnnotateLocal'
+    if cl then
+      local label = labels[cl]
+      if not label then
+        local m = meta[cl] or {}
+        label = ('%-8s %-10s %s'):format(cl, (m.user or '?'):sub(1, 10), base.date(m.time))
+        labels[cl], groups[cl] = label, 'PerforatedAge' .. (steps[cl] or 1)
       end
+      lines[l], hls[l - 1] = label, groups[cl]
     else
-      lines[l] = ''
+      lines[l], hls[l - 1] = 'Not submitted', 'PerforatedAnnotateLocal'
     end
-    prev = cl
   end
   view.line_cl = line_cl
   row_hl[view.buf] = hls

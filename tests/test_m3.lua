@@ -221,6 +221,7 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   H.eq(lines[1]:match('^(%d+)%s+(%S+)'), '1')
   H.eq({ lines[2]:match('^(%d+)%s+(%S+)') }, { '2', 'bob' })
   H.eq({ lines[3]:match('^(%d+)%s+(%S+)') }, { '3', 'alice' })
+  H.eq(#lines, 3)
   -- One call: `annotate -c -i -u -q` carries the user and date of every line.
   H.eq(p4_calls('annotate')[1]:match('annotate .*'), 'annotate -c -i -u -q //depot/a.txt#3')
   H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 1)
@@ -275,13 +276,12 @@ end
 
 T['m3']['annotate: local edits show "Not submitted"; q closes'] = function()
   child.lua([[vim.bo.readonly = false; vim.bo.modifiable = true]])
-  child.api.nvim_buf_set_lines(0, 0, 1, false, { 'mine' })
+  child.api.nvim_buf_set_lines(0, 0, 1, false, { 'mine', 'mine too' })
   wait([[#(require('perforated.buffer').get().hunks or {}) > 0]])
   child.cmd('P4 annotate')
-  wait(
-    [[vim.api.nvim_buf_get_lines(0, 0, -1, false)[2] ~= nil and vim.api.nvim_buf_get_lines(0, 0, -1, false)[2]:find('^2 ') ~= nil]]
-  )
-  H.eq(child.api.nvim_buf_get_lines(0, 0, 1, false)[1], 'Not submitted')
+  wait([[(vim.api.nvim_buf_get_lines(0, 2, 3, false)[1] or ''):find('^2 ') ~= nil]])
+  -- Every line is labelled, including consecutive lines from the same change.
+  H.eq(child.api.nvim_buf_get_lines(0, 0, 2, false), { 'Not submitted', 'Not submitted' })
   child.type_keys('q')
   H.eq(#child.api.nvim_tabpage_list_wins(0), 1)
   H.eq(child.wo.scrollbind, false)
