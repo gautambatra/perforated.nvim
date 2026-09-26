@@ -697,4 +697,6 @@ function M.open(ws, change)
   return view
 end
 
+M._actions = actions -- for the generated help (scripts/gen_doc.lua)
+
 return M

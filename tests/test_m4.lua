@@ -431,6 +431,20 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   H.neq(p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }), '')
 end
 
+T['m4'][':P4 reopen moves the current file to another changelist'] = function()
+  setup()
+  local cl = new_change('target')
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.cmd('P4 reopen -c ' .. cl)
+  H.eq(
+    vim.wait(10000, function()
+      return (opened()['//depot/main/a.txt'] or {}).change == cl
+    end, 100),
+    true
+  )
+end
+
 T['m4']['delete wipes the buffer; move renames the buffer and keeps it attached'] = function()
   setup()
   child.cmd('P4 move ' .. root .. '/main/renamed.txt')
