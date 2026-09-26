@@ -299,6 +299,39 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   H.eq(child.fn.maparg('<Space>', 'n'), '')
 end
 
+T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in a tab'] = function()
+  open_view()
+  goto_line('Shelved (1)')
+  child.type_keys('l')
+  goto_line('//depot/a.txt')
+  child.type_keys('w')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  local names = child.lua_get(
+    [[vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0))]]
+  )
+  table.sort(names)
+  H.eq(names, { root .. '/a.txt', 'perforated:////depot/a.txt@=2' })
+  child.cmd('tabclose')
+  wait([[vim.bo.filetype == 'perforated']])
+  goto_line('Shelved (1)')
+  child.type_keys('w') -- the whole shelf: a diff tab (panel + pair)
+  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  wait(
+    [[vim.tbl_contains(vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0)), 'perforated:////depot/a.txt@=2')]]
+  )
+  H.neq(
+    table
+      .concat(
+        child.lua_get(
+          [[vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0))]]
+        ),
+        ' '
+      )
+      :find(root .. '/a.txt', 1, true),
+    nil
+  )
+end
+
 T['client view']['depot revisions load even when opened from inside an autocmd'] = function()
   child.lua(([[
     vim.api.nvim_create_autocmd('User', { pattern = 'NestTest', callback = function()

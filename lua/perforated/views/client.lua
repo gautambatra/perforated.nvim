@@ -182,7 +182,7 @@ local function build(view, data)
         children[#children + 1] = {
           id = 'shelf:' .. key,
           kind = 'shelf',
-          item = { change = s.change },
+          item = { change = s.change, shelved = shelved },
           open = false,
           text = {
             { icons.glyph('shelved') .. ' Shelved (' .. #shelved .. ')', 'PerforatedShelved' },
@@ -971,6 +971,26 @@ local function actions(view)
         vim.cmd('tabedit ' .. vim.fn.fnameescape(items[1].clientFile))
         vim.schedule(function()
           require('perforated.views.annotate').open_buf(0)
+        end)
+      end,
+    },
+    {
+      id = 'diff_shelved_workspace',
+      desc = 'Diff shelved vs workspace file',
+      keys = { 'w' },
+      kinds = { shelved_file = true, shelf = true },
+      footer = 11,
+      run = function(items, ctx)
+        local it = items[1]
+        if ctx.node.kind == 'shelf' then
+          return require('perforated.diff.tab').open_shelf_vs_workspace(ws, it.change, it.shelved)
+        end
+        local revs = require('perforated.revs')
+        revs.where(ws, { it.depotFile }, function(map)
+          local path = map[it.depotFile]
+          local left = (path and vim.uv.fs_stat(path)) and { path = path }
+            or { empty = 'not in workspace' }
+          revs.diff(ws, left, { spec = it.depotFile .. '@=' .. it.change })
         end)
       end,
     },

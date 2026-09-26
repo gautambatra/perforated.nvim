@@ -346,7 +346,7 @@ local function actions(view)
     {
       id = 'diff_shelved_workspace',
       desc = 'Diff shelved vs workspace file',
-      keys = { 'gw' },
+      keys = { 'w', 'gw' },
       kinds = { describe_shelved = true },
       run = function(items)
         local f = items[1]
@@ -356,6 +356,22 @@ local function actions(view)
           end
           revs.diff(ws, side, { spec = f.depotFile .. '@=' .. f.change })
         end)
+      end,
+    },
+    {
+      id = 'diff_shelf_workspace',
+      desc = 'Diff every shelved file vs workspace',
+      keys = { 'w', 'gw' },
+      kinds = { section = true },
+      when = function(_, node)
+        return node.id == 'sec:shelved'
+      end,
+      run = function()
+        require('perforated.diff.tab').open_shelf_vs_workspace(
+          ws,
+          view.item.change,
+          view.data.shelved
+        )
       end,
     },
     {

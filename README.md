@@ -93,7 +93,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     description, its files and its shelved files (`D` there opens the diff tab). It works in
     `:P4 changes` too, so you can read other people's submitted changelists.
   - `d` is *Diff against have revision* on opened files and *Diff shelved vs base revision* on
-    shelved files. `y` copies the changelist number.
+    shelved files. `w` diffs a shelved file against your workspace file; on the "Shelved (N)"
+    line it opens a diff tab of every shelved file against the workspace. `y` copies the
+    changelist number.
   - `?` lists every key, and a footer always shows the keys that apply to the current line.
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
   - `m` marks files for multi-file actions (revert, move, …) and `u` clears the marks.
@@ -132,8 +134,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   side-by-side diff, `D` the diff tab of every file and `Q` sends the files to quickfix
   (workspace paths when mapped). It works for submitted and pending changelists (your pending
   files are diffed against the workspace) and for shelves: `d` compares the shelf with its base,
-  `gw` with your workspace file and `gh` with the head revision. `:P4 describe` with no
-  number uses the current file's changelist.
+  `w` with your workspace file and `gh` with the head revision (`w` on the Shelved line: every
+  shelved file against the workspace, in a diff tab). `:P4 describe` with no number uses the
+  current file's changelist.
 - **`:P4 filelog [path]` (`L` / `<C-t>`): file history.** A float lists the revisions, with
   the files a branch came from. `<CR>` opens the action menu: `d` diff against the previous
   revision, `w` against your workspace file, `gd` describe, `K` view changelist, `o` open the
