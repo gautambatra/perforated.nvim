@@ -37,23 +37,37 @@ end
 ---@param view table
 ---@param width integer
 ---@return string[] lines, integer[] label_rows  rows whose "Key:" parts get highlighted
-function M.info_lines(view, width)
+---@param stacked boolean?  one field per line (the right-hand panel) instead of two columns
+function M.info_lines(view, width, stacked)
   local tl, n = view.tl, view.n
   local r = tl.revs[n] or {}
   local t = tonumber(r.time)
-  local col = math.max(40, math.floor(width / 2))
-  local function two(l, rt)
-    return l .. (' '):rep(math.max(2, col - vim.fn.strdisplaywidth(l))) .. rt
-  end
-  local lines = {
-    two(('Revision: %s#%d'):format(tl.depotFile, n), 'Changelist: ' .. (r.change or '?')),
-    two(
-      'Date submitted: ' .. (t and os.date('%Y-%m-%d %H:%M:%S', t) or '?'),
-      'Perforce Type: ' .. (r.type or '?')
-    ),
-    two('Submitted by: ' .. (r.user or '?'), 'File size: ' .. size_text(r.fileSize)),
-    'Action: ' .. (r.action or '?'),
+  local f = {
+    revision = ('Revision: %s#%d'):format(tl.depotFile, n),
+    change = 'Changelist: ' .. (r.change or '?'),
+    date = 'Date submitted: ' .. (t and os.date('%Y-%m-%d %H:%M:%S', t) or '?'),
+    type = 'Perforce Type: ' .. (r.type or '?'),
+    user = 'Submitted by: ' .. (r.user or '?'),
+    size = 'File size: ' .. size_text(r.fileSize),
+    action = 'Action: ' .. (r.action or '?'),
   }
+  local lines = { 'Slider Revision:', '' }
+  if stacked then
+    for _, k in ipairs({ 'revision', 'change', 'date', 'type', 'user', 'size', 'action' }) do
+      lines[#lines + 1] = f[k]
+    end
+  else
+    local col = math.max(40, math.floor(width / 2))
+    local function two(l, rt)
+      return l .. (' '):rep(math.max(2, col - vim.fn.strdisplaywidth(l))) .. rt
+    end
+    vim.list_extend(lines, {
+      two(f.revision, f.change),
+      two(f.date, f.type),
+      two(f.user, f.size),
+      f.action,
+    })
+  end
   if view.mode ~= 'single' and view.a then
     local ra = tl.revs[view.a] or {}
     lines[#lines + 1] = ('Comparing: ◆ #%d (CL %s) → ● #%d (CL %s)  [%s]'):format(
@@ -76,14 +90,21 @@ function M.render_info(view)
   if not (view.iwin and vim.api.nvim_win_is_valid(view.iwin)) then
     return
   end
-  local lines = M.info_lines(view, vim.api.nvim_win_get_width(view.iwin))
+  local lines = M.info_lines(view, vim.api.nvim_win_get_width(view.iwin), view.ipos == 'right')
   local buf = view.ibuf
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, info_ns, 0, -1)
+  vim.api.nvim_buf_set_extmark(
+    buf,
+    info_ns,
+    0,
+    0,
+    { end_col = #lines[1], hl_group = 'PerforatedTitle' }
+  )
   for row, l in ipairs(lines) do
-    if not l:match('^  ') then
+    if row > 1 and not l:match('^  ') then
       -- every "Key:" on the line
       local start = 1
       while true do
@@ -123,15 +144,30 @@ function M.toggle_info(view, on)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
   pcall(vim.api.nvim_buf_set_name, buf, 'perforated://timelapse-info/' .. view.tl.depotFile)
-  local height = require('perforated.config').get().timelapse.info_height or 8
-  local win =
-    vim.api.nvim_open_win(buf, false, { split = 'below', win = view.win, height = height })
+  local cfg = require('perforated.config').get().timelapse
+  local right = cfg.info_position ~= 'bottom'
+  local win = right
+      and vim.api.nvim_open_win(
+        buf,
+        false,
+        { split = 'right', win = view.win, width = cfg.info_width or 50 }
+      )
+    or vim.api.nvim_open_win(
+      buf,
+      false,
+      { split = 'below', win = view.win, height = cfg.info_height or 12 }
+    )
+  view.ipos = right and 'right' or 'bottom'
   local wo = vim.wo[win]
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
-  wo.winfixheight, wo.wrap, wo.linebreak, wo.cursorline, wo.list = true, true, true, false, false
-  -- A header line doubles as the separator from the file above (whatever the statusline setup).
-  wo.winbar = '%#PerforatedSliderTrack#── %#PerforatedTitle#Revision details %#PerforatedSliderTrack#'
-    .. ('─'):rep(400)
+  wo.wrap, wo.linebreak, wo.cursorline, wo.list = true, true, false, false
+  if right then
+    wo.winfixwidth = true -- a vertical split always gets the separator
+  else
+    wo.winfixheight = true
+    -- A rule doubles as the separator from the file above (a statusline may not draw one).
+    wo.winbar = '%#PerforatedSliderTrack#' .. ('─'):rep(500)
+  end
   view.iwin, view.ibuf = win, buf
   vim.keymap.set('n', 'q', function()
     vim.api.nvim_set_current_win(view.win)

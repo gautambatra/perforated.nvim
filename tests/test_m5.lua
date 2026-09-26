@@ -112,7 +112,7 @@ end
 T['timelapse']['view: info panel, stepping, highlights, the cursor stays on the same line'] = function()
   local contents = setup()
   child.cmd('P4 timelapse')
-  wait(INFO .. [[:find('f.txt#30 ', 1, true) ~= nil]])
+  wait(INFO .. [[:find('f%.txt#30%f[%D]') ~= nil]])
   local text = info()
   H.neq(text:find('rev 30', 1, true), nil) -- the description
   H.neq(text:find('Changelist: 30', 1, true), nil)
@@ -147,7 +147,7 @@ T['timelapse']['view: info panel, stepping, highlights, the cursor stays on the 
   for _ = 1, 10 do
     child.type_keys('h')
   end
-  H.neq(info():find('f.txt#20 ', 1, true), nil)
+  H.neq(info():find('f%.txt#20%f[%D]'), nil)
   H.eq(table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n') .. '\n', contents[20])
   H.eq(child.api.nvim_get_current_line(), target[2])
   -- decorations: something added in #20 is highlighted, and #20 deleted something
@@ -162,11 +162,11 @@ T['timelapse']['view: info panel, stepping, highlights, the cursor stays on the 
   H.eq(hl or virt, true)
   -- l steps forward again, [R / ]R jump to the ends
   child.type_keys('l')
-  H.neq(info():find('f.txt#21 ', 1, true), nil)
+  H.neq(info():find('f%.txt#21%f[%D]'), nil)
   child.type_keys('[R')
-  H.neq(info():find('f.txt#1 ', 1, true), nil)
+  H.neq(info():find('f%.txt#1%f[%D]'), nil)
   child.type_keys(']R')
-  H.neq(info():find('f.txt#30 ', 1, true), nil)
+  H.neq(info():find('f%.txt#30%f[%D]'), nil)
   -- every step edits the buffer incrementally: walk all revisions down and up again
   for r = 29, 1, -1 do
     child.type_keys('h')
@@ -179,7 +179,7 @@ T['timelapse']['view: info panel, stepping, highlights, the cursor stays on the 
   -- r: go to a revision; d: diff it against the previous one
   child.lua([[vim.ui.input = function(_, cb) cb('#5') end]])
   child.type_keys('r')
-  H.neq(info():find('f.txt#5 ', 1, true), nil)
+  H.neq(info():find('f%.txt#5%f[%D]'), nil)
   child.type_keys('d')
   wait([[#vim.api.nvim_list_tabpages() == 3]]) -- file tab, time-lapse tab, diff tab
   local names = child.lua_get(
@@ -192,7 +192,7 @@ end
 T['timelapse']['slider: handles, clicks, diff and range modes'] = function()
   local contents = setup()
   child.cmd('P4 timelapse')
-  wait(INFO .. [[:find('f.txt#30 ', 1, true) ~= nil]])
+  wait(INFO .. [[:find('f%.txt#30%f[%D]') ~= nil]])
   local V = [[require('perforated.views.timelapse')._last]]
   local function slider_lines()
     return child.lua_get(
@@ -211,7 +211,7 @@ T['timelapse']['slider: handles, clicks, diff and range modes'] = function()
   child.lua(
     ('local v = %s; require("perforated.views.timelapse").show(v, v.slider:rev_at(2))'):format(V)
   )
-  H.neq(info():find('f.txt#1 ', 1, true), nil)
+  H.neq(info():find('f%.txt#1%f[%D]'), nil)
   child.type_keys(']R')
   -- m: incremental diff — ◆ (#29) on the left, ● (#30) on the right, in diff mode
   child.type_keys('m')
@@ -273,7 +273,7 @@ T['timelapse']['reopen works; with a global winbar the slider still shows its la
   local V = [[require('perforated.views.timelapse')._last]]
   for _ = 1, 2 do
     child.cmd('P4 timelapse')
-    wait(INFO .. [[:find('f.txt#30 ', 1, true) ~= nil]])
+    wait(INFO .. [[:find('f%.txt#30%f[%D]') ~= nil]])
     H.eq(child.lua_get('vim.v.errmsg'), '')
     local sw = child.lua_get(V .. '.slider.win')
     H.eq(child.api.nvim_win_get_height(sw), 3)
@@ -283,13 +283,34 @@ T['timelapse']['reopen works; with a global winbar the slider still shows its la
     )
     H.eq(#lines, 2) -- track + labels, both visible under the title
     H.neq(lines[2]:find('30', 1, true), nil)
-    H.neq(
-      child.lua_get(('vim.wo[%s.iwin].winbar'):format(V)):find('Revision details', 1, true),
-      nil
-    )
+    -- the details panel: on the right by default, headed "Slider Revision:", one field per line
+    local ilines = child.lua_get(('vim.api.nvim_buf_get_lines(%s.ibuf, 0, -1, false)'):format(V))
+    H.eq(ilines[1], 'Slider Revision:')
+    H.eq(ilines[3], 'Revision: //depot/f.txt#30')
+    H.eq(ilines[4], 'Changelist: 30')
+    local ipos = child.lua_get(('vim.api.nvim_win_get_position(%s.iwin)'):format(V))
+    local mpos = child.lua_get(('vim.api.nvim_win_get_position(%s.win)'):format(V))
+    H.eq(ipos[2] > mpos[2], true) -- to the right of the file
     child.type_keys('q')
     H.eq(#child.api.nvim_list_tabpages(), 1)
   end
+end
+
+T['timelapse']['info_position = bottom: below the file, two columns, a rule on top'] = function()
+  setup()
+  child.lua([[require('perforated.config').set({ timelapse = { info_position = 'bottom' } })]])
+  child.cmd('P4 timelapse')
+  wait(INFO .. [[:find('f%.txt#30%f[%D]') ~= nil]])
+  local V = [[require('perforated.views.timelapse')._last]]
+  local iwin = child.lua_get(V .. '.iwin')
+  local mwin = child.lua_get(V .. '.win')
+  H.eq(child.api.nvim_win_get_position(iwin)[1] > child.api.nvim_win_get_position(mwin)[1], true)
+  H.eq(child.api.nvim_win_get_height(iwin), 12)
+  H.neq(child.lua_get(('vim.wo[%d].winbar'):format(iwin)):find('─', 1, true), nil)
+  local ilines = child.lua_get(('vim.api.nvim_buf_get_lines(%s.ibuf, 0, -1, false)'):format(V))
+  H.eq(ilines[1], 'Slider Revision:')
+  H.neq(ilines[3]:find('Revision: //depot/f.txt#30', 1, true), nil)
+  H.neq(ilines[3]:find('Changelist: 30', 1, true), nil) -- same line: two columns
 end
 
 T['timelapse']['anchor: insertions above the cursor keep it on the same line'] = function()

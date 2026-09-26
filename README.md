@@ -173,9 +173,10 @@ revision instantly:
 
 - `h` / `l` (or `[r` / `]r`) step back and forward, `[R` / `]R` jump to the first / last
   revision, `r` goes to `#N` or `@CL`, and `T` picks a revision by its description.
-- A panel below the file shows the revision's details — `Revision: <file>#<rev>`,
-  `Changelist`, `Date submitted`, `Perforce Type`, `Submitted by`, `File size`, `Action` and
-  the full description (scroll it with `<C-w>j`); `i` hides / shows it. Lines added in that
+- A **Slider Revision** panel to the right of the file shows the revision's details —
+  `Revision: <file>#<rev>`, `Changelist`, `Date submitted`, `Perforce Type`, `Submitted by`,
+  `File size`, `Action` and the full description (scroll it with `<C-w>l`); `i` hides / shows
+  it. `timelapse.info_position = 'bottom'` puts it below the file instead (two columns). Lines added in that
   revision are highlighted and lines it deleted are shown where they were.
 - The cursor stays on the same line of the file as you step, even when lines are added or
   removed above it.
@@ -595,7 +596,13 @@ These are the defaults for everything that has an effect today:
     reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
-  timelapse = { max_bytes = 20 * 1024 * 1024, slider = true, info_height = 8 }, -- larger files: use history instead
+  timelapse = {
+    max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
+    slider = true,
+    info_position = 'right', -- the Slider Revision panel: 'right' | 'bottom'
+    info_width = 50, -- right-hand panel
+    info_height = 12, -- bottom panel
+  },
   changes = { page_size = 50 }, -- :P4 changes page size
   history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
   annotate = {

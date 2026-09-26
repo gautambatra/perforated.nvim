@@ -539,7 +539,9 @@ keys):
         resolve_prompt = true
       },
       timelapse = {
-        info_height = 8,
+        info_height = 12,
+        info_position = "right",
+        info_width = 50,
         max_bytes = 20971520,
         slider = true
       },
