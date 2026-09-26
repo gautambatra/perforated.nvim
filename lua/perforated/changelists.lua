@@ -69,6 +69,25 @@ function M.describe(ws, changes, opts, cb)
   end)
 end
 
+--- The newest changelist the workspace has synced (`changes -m1 //client/...#have`).
+---@param ws perforated.Workspace
+---@param cb fun(change: table?)  nil when nothing is synced (or on error)
+function M.have_change(ws, cb)
+  local client = ws:client()
+  if not client then
+    return vim.schedule(function()
+      cb(nil)
+    end)
+  end
+  ws:run(
+    { 'changes', '-m1', '-s', 'submitted', '-l', ('//%s/...#have'):format(client) },
+    { priority = 2 },
+    function(res)
+      cb(res.records[1])
+    end
+  )
+end
+
 --- Submitted changelists, newest first. `before` pages backwards (changes at or before it).
 ---@param ws perforated.Workspace
 ---@param opts { user: string?, path: string?, max: integer?, before: integer? }

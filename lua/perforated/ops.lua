@@ -546,15 +546,28 @@ function M.sync(ws, args, cb)
   -- Every sync is confirmed, however it was started. With paths it's "get latest revision";
   -- without, a sync of the whole workspace.
   local shown = #args == 1 and vim.fn.fnamemodify(args[1], ':~:.') or (#args .. ' files')
+  -- `//client/...@123` (from `:P4 sync @123`): the whole workspace to a revision.
+  local ws_rev = #args == 1
+    and ws:client()
+    and args[1]:match('^//' .. vim.pesc(ws:client()) .. '/%.%.%.([@#].+)$')
   local question = #args == 0 and 'Sync the whole workspace?'
-    or (#args == 1 and ('Get the latest revision of %s?'):format(shown))
+    or (ws_rev and ('Sync the whole workspace to %s?'):format(ws_rev))
+    or (#args == 1 and (shown:match('[@#]') and ('Sync %s?'):format(shown) or ('Get the latest revision of %s?'):format(
+      shown
+    )))
     or ('Get the latest revisions of %s?'):format(shown)
-  if not confirm(question, #args == 0 and '&Sync\n&Cancel' or '&Get latest\n&Cancel') then
+  local sync_like = #args == 0 or ws_rev or shown:match('[@#]')
+  if not confirm(question, sync_like and '&Sync\n&Cancel' or '&Get latest\n&Cancel') then
     return cb(false)
   end
   local what = #args == 0 and 'workspace' or shown
   local jobs = require('perforated.jobs')
-  local job, run_opts = jobs.start(ws, #args == 0 and 'sync workspace' or ('get latest ' .. what))
+  local job, run_opts = jobs.start(
+    ws,
+    #args == 0 and 'sync workspace'
+      or (ws_rev and ('sync workspace to ' .. ws_rev))
+      or ((sync_like and 'sync ' or 'get latest ') .. what)
+  )
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
     local changed_paths, counts = {}, {}
     for _, r in ipairs(res.records) do
