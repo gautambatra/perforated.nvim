@@ -70,16 +70,16 @@ M.PRESET = {
   ['<leader>pi'] = 'info',
   ['<leader>pl'] = 'log',
   ['<leader>pn'] = 'notifications',
-  ['<leader>pL'] = 'history',
-  ['<leader>pb'] = 'annotate',
-  ['<leader>pB'] = 'blame-line',
+  ['<leader>ph'] = 'history',
+  ['<leader>pA'] = 'annotate',
+  ['<leader>pb'] = 'blame-line',
   ['<leader>pc'] = 'describe',
   ['<leader>pg'] = 'lookup',
   ['<leader>py'] = 'sync-file',
   ['<leader>pY'] = 'sync',
   ['<leader>pR'] = 'resolve',
   ['<leader>pP'] = 'submit',
-  ['<leader>pz'] = 'shelve',
+  ['<leader>pS'] = 'shelve',
 }
 
 ---@param name string

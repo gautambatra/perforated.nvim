@@ -496,10 +496,10 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pq` / `<leader>pQ` | All hunks → quickfix / this file's hunks → location list |
 | `<leader>po` / `<leader>ps` | Opened files / stale & unresolved |
 | `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
-| `<leader>pL` / `<leader>pb` / `<leader>pB` | History / annotate / toggle current-line blame |
+| `<leader>ph` / `<leader>pA` / `<leader>pb` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
 | `<leader>py` / `<leader>pY` | Sync this file / the workspace |
-| `<leader>pR` / `<leader>pP` / `<leader>pz` | Resolve this file / submit its changelist / shelve its changelist |
+| `<leader>pR` / `<leader>pP` / `<leader>pS` | Resolve this file / submit its changelist / shelve its changelist |
 
 ## Configuration
 
