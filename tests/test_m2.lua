@@ -333,6 +333,49 @@ T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in 
   )
 end
 
+T['client view']['changed files get ● (and unchanged ones are dimmed); saving updates it'] = function()
+  open_view()
+  local function row(text)
+    for _, l in ipairs(lines()) do
+      if l:find(text, 1, true) then
+        return l
+      end
+    end
+  end
+  wait(([[(%s).data.modified ~= nil]]):format(view_expr(root)))
+  H.neq(row('a.txt'):find('● edit', 1, true), nil) -- a.txt differs from its base
+  H.eq(row('b.txt'):find('●', 1, true), nil) -- opened, unchanged
+  -- edit and save b.txt: its marker appears without a full refresh
+  child.cmd('tabfirst')
+  child.cmd('edit ' .. root .. '/b.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.lua([[vim.bo.readonly = false]])
+  child.api.nvim_buf_set_lines(0, 0, 1, false, { 'b changed' })
+  child.cmd('write')
+  child.cmd('tablast')
+  wait(
+    [[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do if l:find('b.txt', 1, true) then return l:find('●', 1, true) ~= nil end end end)()]]
+  )
+  -- describe buffer and :P4 opened carry the same information
+  child.cmd('P4 describe 2')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('● edit', 1, true) ~= nil]]
+  )
+  child.cmd('P4 opened')
+  wait([[#vim.fn.getqflist() >= 4]])
+  local texts = child.lua_get(
+    [[vim.tbl_map(function(e) return vim.api.nvim_buf_get_name(e.bufnr) .. '|' .. e.text end, vim.fn.getqflist())]]
+  )
+  local by = {}
+  for _, t in ipairs(texts) do
+    local name, text = t:match('^(.-)|(.*)$')
+    by[vim.fs.basename(name)] = text
+  end
+  H.eq(by['a.txt']:sub(1, #'● '), '● ')
+  H.eq(by['b.txt']:sub(1, #'● '), '● ')
+  H.eq(by['c.txt']:sub(1, #'· '), '· ')
+end
+
 T['client view']['depot revisions load even when opened from inside an autocmd'] = function()
   child.lua(([[
     vim.api.nvim_create_autocmd('User', { pattern = 'NestTest', callback = function()

@@ -50,10 +50,20 @@ local function file_node(view, rec, prefix)
     shown = rec.depotFile
   end
   local icon, icon_hl = icons.file(shown)
+  -- ● changed / dimmed unchanged (opened files of this client; see modified.lua)
+  local d, changed = view.data, nil
+  if d and d.modified ~= nil then
+    changed = require('perforated.modified').is_changed(ws, rec, d.modified, d.overlay)
+  end
+  local marker, row_hl = require('perforated.modified').marker(changed)
   local text = {
-    { ('%-10s'):format(rec.action or ''), 'PerforatedAction' },
-    { icon ~= '' and (icon .. ' ') or '', icon_hl },
-    { shown, 'PerforatedPath' },
+    marker or { '' },
+    {
+      ('%-10s'):format(rec.action or ''),
+      row_hl == 'PerforatedUnchanged' and row_hl or 'PerforatedAction',
+    },
+    { icon ~= '' and (icon .. ' ') or '', row_hl == 'PerforatedUnchanged' and row_hl or icon_hl },
+    { shown, row_hl or 'PerforatedPath' },
   }
   if rec.haveRev or rec.headRev then
     text[#text + 1] =
@@ -367,7 +377,7 @@ function M.refresh(view)
   local ws = view.ws
   local t0 = vim.uv.hrtime()
   ws:ensure_info(function()
-    local data, left = {}, 3
+    local data, left = {}, 4
     local function done()
       left = left - 1
       if left > 0 then
@@ -382,6 +392,7 @@ function M.refresh(view)
       end
       cls.shelved_files(ws, with_shelves, function(shelved)
         data.shelved = shelved
+        data.overlay = require('perforated.modified').overlay(ws)
         view.loading = false
         if vim.api.nvim_buf_is_valid(view.buf) then
           view.data = data
@@ -408,6 +419,10 @@ function M.refresh(view)
       data.err = data.err or err
       done()
     end, view.scope)
+    require('perforated.modified').query(ws, nil, function(set)
+      data.modified = set or false -- false: unknown (no markers)
+      done()
+    end)
     if view.scope == 'user' then
       -- Current client with full fstat detail, other clients from `opened -a -u`.
       local recs, others, n = nil, nil, 2
@@ -1467,6 +1482,29 @@ function M.open(ws, opts)
         pending_refresh = false
         M.refresh(view)
       end, 150)
+    end,
+  })
+  -- Saving an opened file updates its changed/unchanged marker (one `p4 diff -sa` for it).
+  vim.api.nvim_create_autocmd('BufWritePost', {
+    group = group,
+    callback = function(ev)
+      local st = require('perforated.buffer').get(ev.buf)
+      if not st or st.ws ~= ws or not (st.rec and st.rec.action) then
+        return
+      end
+      if not view.data or not view.data.modified then
+        return
+      end
+      local modified = require('perforated.modified')
+      modified.query(ws, { st.path }, function(set)
+        local d = view.data
+        if not set or not d or not d.modified or not vim.api.nvim_buf_is_valid(buf) then
+          return
+        end
+        d.modified[st.key] = set[st.key]
+        d.overlay = modified.overlay(ws)
+        view.tree:set(build(view, d))
+      end)
     end,
   })
   vim.api.nvim_create_autocmd('BufWipeout', {

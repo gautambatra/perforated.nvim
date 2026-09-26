@@ -170,6 +170,12 @@ on_qf_buf = function(buf)
     vim.keymap.set('n', lhs, fn, { buffer = buf, nowait = true, desc = desc })
   end
   map('gr', refresh_current, 'perforated: refresh list')
+  -- Opened-file lists: ● changed files stand out, unchanged ones (·) are dimmed.
+  vim.api.nvim_buf_call(buf, function()
+    local g = require('perforated.ui.icons').glyph('modified')
+    vim.cmd(('syntax match PerforatedModified /│ \\zs%s/'):format(vim.fn.escape(g, '/\\*')))
+    vim.cmd([[syntax match PerforatedUnchanged /^.*│ · .*$/]])
+  end)
   local function entry_ws()
     local it = entry_under_cursor()
     if not it or it.valid ~= 1 or it.bufnr == 0 then

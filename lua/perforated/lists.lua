@@ -21,11 +21,13 @@ end
 ---@param ws perforated.Workspace
 ---@param cb fun(items: table[])
 function M.opened_items(ws, cb)
-  local recs, changes
+  local recs, changes, modified
   local function done()
-    if not recs or not changes then
+    if not recs or not changes or modified == nil then
       return
     end
+    local mod = require('perforated.modified')
+    local overlay = mod.overlay(ws)
     local desc = { default = '' }
     for _, c in ipairs(changes) do
       desc[c.change] = first_line(c.desc)
@@ -64,9 +66,14 @@ function M.opened_items(ws, cb)
         if r.unresolved then
           flags[#flags + 1] = 'UNRESOLVED'
         end
+        -- ● changed / · unchanged (dimmed by the qf window's syntax, see ui/qf.lua)
+        local changed = mod.is_changed(ws, r, modified or nil, overlay)
+        local mark = changed == true and (require('perforated.ui.icons').glyph('modified') .. ' ')
+          or changed == false and '· '
+          or ''
         items[#items + 1] = qf.item(
           r.clientFile,
-          ('%-10s %s %s'):format(r.action, revs(r), table.concat(flags, ' ')),
+          ('%s%-10s %s %s'):format(mark, r.action, revs(r), table.concat(flags, ' ')),
           { depotFile = r.depotFile, change = cl, action = r.action, kind = 'opened' }
         )
       end
@@ -79,6 +86,10 @@ function M.opened_items(ws, cb)
   end)
   p4.pending_changes(ws, function(c)
     changes = c or {}
+    done()
+  end)
+  require('perforated.modified').query(ws, nil, function(set)
+    modified = set or false
     done()
   end)
 end
