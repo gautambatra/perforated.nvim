@@ -143,4 +143,21 @@ T['p4set'] = function()
   H.eq(s.P4PORT.value, 'rsh:/bin/p4d -r /tmp/root -i')
 end
 
+T['annotate records'] = function()
+  local history = require('perforated.history')
+  local head, n, cls, meta = history._annotate_lines({
+    { depotFile = '//depot/a.c', rev = '3' },
+    { data = 'one\n', lower = '1', upper = '3', user = 'alice', time = '2026/01/01 10:00:00' },
+    { data = 'a very long line, part one ', lower = '2', upper = '3', user = 'bob' },
+    { data = 'and part two\n', lower = '2', upper = '3', user = 'bob' },
+    { data = 'windows\r\n', lower = '3', upper = '3', user = 'alice' },
+    { data = 'no final newline', lower = '3', upper = '3', user = 'alice' },
+  })
+  H.eq(head.depotFile, '//depot/a.c')
+  H.eq(n, 4)
+  H.eq(cls, { 1, 2, 3, 3 })
+  H.eq(meta[2].user, 'bob')
+  H.eq(meta[1].time, '2026/01/01 10:00:00')
+end
+
 return T
