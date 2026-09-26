@@ -69,14 +69,17 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
      S Shelved (1)
     CL 123488  WIP refactor  (0)
  Needs attention  (1)
- Recent submitted  (20)
  Workspace reconcile  (not scanned)
+ Recent submitted  (20)
  d diff  D diff all files  o open file  x revert  M move to changelist  c new changelist  . actions  ? help
 ```
 
 - **Sections:** pending changelists with their files and shelved files, files needing attention
-  (stale or unresolved), your recent submits, and workspace reconcile. Reconcile is expensive on
-  large workspaces, so it only scans when you expand it (`l`), and `x` cancels a running scan.
+  (stale or unresolved), workspace reconcile, and your recent submits. Reconcile is expensive on
+  large workspaces, so it only scans when you expand it (`l`), and `x` stops a running scan
+  (so do `:P4 jobs` and `:P4 cancel`). To scan only the parts you care about, set
+  `client_view.reconcile.paths` (e.g. `{ 'src/myteam' }`, relative to the client root; local
+  or depot paths work too), or press `p` on the section to change the paths for the session.
 - **Always fresh:** the view re-queries every time it opens or refreshes, drawing a skeleton
   instantly while the data loads. It also updates after check-outs and reverts made anywhere
   in Neovim.
@@ -161,8 +164,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   file count, and warns about out-of-date, unresolved or shelved files. `s` submits, `e` edits
   the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
 - **Sync (`gy`, `:P4 sync [path|%|@CL|#head]`):** open buffers reload without "file changed"
-  prompts, and their signs follow the new revision. Files that need attention (can't clobber,
-  must resolve) go to quickfix.
+  prompts, and their signs follow the new revision. Afterwards every opened file is re-checked:
+  files that need attention (can't clobber, and *every* unresolved file in the workspace, not
+  just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
+  now (`sync.resolve_prompt = false` turns the offer off).
 - **Watch or stop long operations:** a sync or submit shows a live progress message (files so
   far, last file, elapsed time). `:P4 jobs` lists running jobs in a float that updates live,
   where `x` stops one; `:P4 cancel` stops them all. p4 is sent SIGTERM, then SIGKILL after 2 s.
@@ -500,7 +505,12 @@ These are the defaults for everything that has an effect today:
   change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
   merge = { tool = nil }, -- merge tool command (default: $P4MERGE), run as `tool base theirs yours merged`
   picker = 'auto', -- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'
-  client_view = { kind = 'tab', submitted_limit = 20 }, -- kind: 'tab' | 'float' | 'split'
+  client_view = {
+    kind = 'tab', -- 'tab' | 'float' | 'split'
+    submitted_limit = 20,
+    reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
+  },
+  sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
   changes = { page_size = 50 }, -- :P4 changes page size
   history = { presenter = 'float', limit = 100 }, -- presenter: 'float' | 'picker' | 'quickfix'; limit = page size
   annotate = {

@@ -27,7 +27,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 ## Client view ("p4v inside nvim")
 - **Hybrid**: Magit-style foldable status buffer as the core; drilling into a CL/file opens a diffview-style tab (file panel + side-by-side diff).
 - Opens in a **new tab** by default (configurable: float/split).
-- Sections: Pending CLs (+shelved files), Unresolved/stale, My recent submitted, Workspace reconcile (lazy — only queried when expanded).
+- Sections: Pending CLs (+shelved files), Unresolved/stale, Workspace reconcile (lazy — only queried when expanded; scope configurable), My recent submitted.
 - Pending scope: current client, key toggles to all my clients.
 - On-demand (not default sections): lookup CL by number, submitted CLs of another user.
 - Actions: **direct single keys** + `?` floating help; **always-visible footer** with the most common keys for the item under cursor.

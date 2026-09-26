@@ -127,6 +127,7 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(has_line('Recent submitted'), true)
   H.eq(has_line('initial import'), true)
   H.eq(has_line('Workspace reconcile'), true)
+  H.eq(goto_line('Workspace reconcile') < goto_line('Recent submitted'), true)
   -- The footer float shows the keys for the cursor's node.
   goto_line('b.txt')
   local footer = child.lua_get([[(function()

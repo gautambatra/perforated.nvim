@@ -234,6 +234,73 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   H.eq(child.lua_get([[#require('perforated.jobs').list()]]), 0)
 end
 
+T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = function()
+  setup()
+  -- b.txt: already unresolved before this sync (synced outside the plugin)
+  p4({ 'edit', root .. '/main/b.txt' })
+  bob_submits('main/b.txt', 'bob b\n')
+  p4({ 'sync', root .. '/main/b.txt' })
+  -- a.txt: opened here, bob changes another line → this sync reports "must resolve"
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  bob_submits('main/a.txt', 'l1\nl2\nl3\nl4\nbob5\n')
+  child.lua_notify(
+    [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
+  )
+  vim.uv.sleep(3000) -- the "Resolve now?" menu waits for a key (no RPC meanwhile)
+  child.type_keys('l') -- later
+  wait('_G.r == true')
+  local qf = child.lua_get(
+    [[vim.tbl_map(function(e) return vim.api.nvim_buf_get_name(e.bufnr) end, vim.fn.getqflist())]]
+  )
+  table.sort(qf)
+  H.eq(qf, { root .. '/main/a.txt', root .. '/main/b.txt' })
+  -- R on an entry resolves it (clean merge for a.txt)
+  child.cmd('copen')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+  child.type_keys('R')
+  H.eq(
+    vim.wait(10000, function()
+      return p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }) == ''
+    end, 100),
+    true
+  )
+end
+
+T['m4']['reconcile scans only the configured paths; p changes them'] = function()
+  setup({ client_view = { reconcile = { paths = { 'team' } } } })
+  H.write(root .. '/team/new.txt', 'x\n')
+  H.write(root .. '/other/noise.txt', 'y\n')
+  child.cmd('P4')
+  wait(
+    [[require('perforated.views.client')._get(require('perforated').workspace().key).data ~= nil]]
+  )
+  local function goto_line(text)
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find(text, 1, true) then
+        child.api.nvim_win_set_cursor(0, { i, 0 })
+        return l
+      end
+    end
+  end
+  H.neq(goto_line('Workspace reconcile'):find('team', 1, true), nil)
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('new.txt', 1, true) ~= nil]]
+  )
+  H.eq(
+    table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('noise.txt', 1, true),
+    nil
+  )
+  -- p with an empty answer: the whole client
+  child.lua([[vim.ui.input = function(_, cb) cb('') end]])
+  goto_line('Workspace reconcile')
+  child.type_keys('p')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('noise.txt', 1, true) ~= nil]]
+  )
+end
+
 T['m4']['resolve: -am takes clean merges; conflicts go to the merge tool'] = function()
   setup()
   child.cmd('P4 edit')

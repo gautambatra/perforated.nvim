@@ -576,18 +576,78 @@ function M.sync(ws, args, cb)
       failed or res.cancelled
     )
     M.reload(ws, changed_paths)
-    if #attention > 0 then
-      require('perforated.ui.qf').set({
-        title = 'P4 sync · needs attention',
-        kind = 'sync_attention',
-        items = attention,
-      })
-    end
     co.changed(ws)
     refresh(ws)
-    require('perforated.poll').refresh(ws, {}, function() end)
-    cb(not failed and not res.cancelled)
+    -- Fresh state of every opened file: the list covers *all* unresolved files, not just the
+    -- ones this sync reported.
+    require('perforated.poll').refresh(ws, {}, function()
+      M.after_sync(ws, texts, attention)
+      cb(not failed and not res.cancelled)
+    end)
   end)
+end
+
+--- After a sync: quickfix of files that need attention (can't clobber + every unresolved file
+--- in the workspace), and an offer to resolve now (`sync.resolve_prompt`).
+---@param ws perforated.Workspace
+---@param texts string[]  the sync's messages
+---@param reported table[]  quickfix items from those messages
+function M.after_sync(ws, texts, reported)
+  local qf = require('perforated.ui.qf')
+  local items = file_items(ws, texts, "can't clobber", 'sync_attention')
+  local unresolved = {}
+  if ws.opened then
+    for _, r in pairs(ws.opened) do
+      if r.unresolved and r.clientFile then
+        unresolved[#unresolved + 1] = r
+      end
+    end
+    table.sort(unresolved, function(a, b)
+      return a.clientFile < b.clientFile
+    end)
+    for _, r in ipairs(unresolved) do
+      items[#items + 1] = qf.item(
+        r.clientFile,
+        ('must resolve (#%s, head #%s)'):format(r.haveRev or '?', r.headRev or '?'),
+        { depotFile = r.depotFile, change = r.change, action = r.action, kind = 'unresolved' }
+      )
+    end
+  else
+    items = reported -- no fresh state: what the sync itself reported
+  end
+  if #items == 0 then
+    return
+  end
+  qf.set({
+    title = ('P4 sync · %d file(s) need attention (R resolves)'):format(#items),
+    kind = 'sync_attention',
+    items = items,
+  })
+  if #unresolved == 0 or require('perforated.config').get().sync.resolve_prompt == false then
+    return
+  end
+  local float = require('perforated.ui.float')
+  local choice, replay = float.menu({
+    title = 'Sync',
+    header = { ('%d file(s) need resolving'):format(#unresolved) },
+    items = {
+      { key = 'r', label = 'Resolve now (auto-merge, then your merge tool)', value = 'resolve' },
+      { key = 'l', label = 'Later (R in the quickfix list)', value = 'later' },
+    },
+    relative = 'editor',
+    grace = require('perforated.config').get().checkout.prompt_grace,
+  })
+  if replay ~= '' then
+    float.replay(replay)
+  end
+  if choice and choice.value == 'resolve' then
+    require('perforated.resolve').run(
+      ws,
+      vim.tbl_map(function(r)
+        return r.clientFile
+      end, unresolved)
+    )
+  end
 end
 
 -- ---------------------------------------------------------------------------------------------
