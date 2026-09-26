@@ -272,6 +272,7 @@ do
       meta[c] = { change = c, user = 'user' .. c, time = tostring(1.7e9 + c * 1000), desc = 'd' }
     end
     local src = vim.api.nvim_get_current_buf()
+    local src_win = vim.api.nvim_get_current_win()
     local lines = {}
     for i = 1, n do lines[i] = 'line ' .. i end
     vim.api.nvim_buf_set_lines(src, 0, -1, false, lines)
@@ -279,7 +280,7 @@ do
     local a = require('perforated.views.annotate')
     a.define_age_groups()
     local view = { buf = vim.api.nvim_get_current_buf(), win = vim.api.nvim_get_current_win(),
-      src_buf = src, local_file = false, ann = { cls = cls, meta = meta, depotFile = '//depot/big.c' } }
+      src_buf = src, src_win = src_win, local_file = false, ann = { cls = cls, meta = meta, depotFile = '//depot/big.c' } }
     local best_render = math.huge
     for _ = 1, 5 do
       local t0 = vim.uv.hrtime()

@@ -165,7 +165,7 @@ function M.render(view)
     -- Line up with the source window. On the first render, restore where the source was
     -- when annotate opened: until now the column was empty, and cursorbind may have pulled
     -- the source's cursor to its line 1.
-    if vim.api.nvim_win_is_valid(view.src_win) then
+    if view.src_win and vim.api.nvim_win_is_valid(view.src_win) then
       local src = view.start_view or vim.api.nvim_win_call(view.src_win, vim.fn.winsaveview)
       if view.start_view then
         view.start_view = nil
