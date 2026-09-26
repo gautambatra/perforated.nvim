@@ -31,6 +31,10 @@ local function workspace_buf(path)
   return b
 end
 
+local open_tab
+
+--- Open the diff tab, unless every file is identical (then just say so). Only files that
+--- differ get a diff; identical ones are listed under "Identical:" at the end of the panel.
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
@@ -38,6 +42,36 @@ function M.open(ws, title, entries)
   if #entries == 0 then
     return notify(title .. ': no files')
   end
+  require('perforated.same').check(ws, entries, function(same)
+    local n = 0
+    for i = 1, #entries do
+      if same[i] then
+        n = n + 1
+      end
+    end
+    if n == #entries then
+      return notify(
+        #entries == 1 and (title .. ': the file is identical')
+          or ('%s: all %d files are identical'):format(title, #entries)
+      )
+    end
+    local differ, identical = {}, {}
+    for i, e in ipairs(entries) do
+      if same[i] then
+        identical[#identical + 1] = e
+      else
+        differ[#differ + 1] = e
+      end
+    end
+    open_tab(ws, title, differ, identical)
+  end)
+end
+
+---@param ws perforated.Workspace
+---@param title string
+---@param entries perforated.DiffEntry[]
+---@param identical perforated.DiffEntry[]  listed, not diffed
+open_tab = function(ws, title, entries, identical)
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
   local panel_buf = vim.api.nvim_get_current_buf()
@@ -69,6 +103,27 @@ function M.open(ws, title, entries)
       1,
       { end_col = 10, hl_group = 'PerforatedAction' }
     )
+  end
+  if #identical > 0 then
+    local first = #lines
+    lines[#lines + 1] = ''
+    lines[#lines + 1] = (' Identical (%d):'):format(#identical)
+    for _, e in ipairs(identical) do
+      lines[#lines + 1] = (' %-9s %s'):format(e.action or '', e.label)
+    end
+    vim.bo[panel_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(panel_buf, first, -1, false, vim.list_slice(lines, first + 1))
+    vim.bo[panel_buf].modifiable = false
+    vim.api.nvim_buf_set_extmark(
+      panel_buf,
+      ns,
+      first + 1,
+      0,
+      { line_hl_group = 'PerforatedSection' }
+    )
+    for row = first + 2, #lines - 1 do
+      vim.api.nvim_buf_set_extmark(panel_buf, ns, row, 0, { line_hl_group = 'PerforatedDim' })
+    end
   end
 
   vim.cmd('rightbelow vnew')

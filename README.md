@@ -260,6 +260,14 @@ Saving a new file inside the workspace offers to `p4 add` it, using the same men
 
 ### ✅ Diffs
 
+- **Identical files don't open a diff.** Every diff (`:P4 diff`, `d`, `w`, history, describe,
+  annotate) first checks whether the two sides are identical and just says so if they are. For
+  a set of files (`D` on a changelist, a shelf, `:P4 diff -a`), identical files are listed
+  under "Identical" at the end of the file panel and only the rest are diffed; if every file
+  is identical, the diff tab doesn't open. The check is cheap: digests for depot revisions and
+  `p4 diff -sr` for opened files (one call each), contents only for unsaved buffers and
+  revision-vs-workspace diffs.
+
 - `:P4 diff` opens the current file against its depot revision, side by side in a new tab, using
   Neovim's diff mode (`]c`, `do`, `dp` all work). `q` closes the tab.
 - Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
