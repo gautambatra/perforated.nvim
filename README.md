@@ -434,6 +434,14 @@ time-lapse**, and `:P4 p4vc {revgraph|timelapse|streamgraph} [file]` runs them d
 current file by default). `:checkhealth perforated` shows whether it was found; set
 `p4vc = '/path/to/p4vc'` if it isn't on your `PATH`.
 
+### 🧪 Code actions (experimental)
+
+`lsp = { enabled = true }` attaches a small in-process language server to Perforce buffers
+(no external process), so your code-action menu (`gra`, or your picker's) offers what
+applies to the file and line: check out, get latest, resolve, diff, preview / undo the change
+under the cursor, move to another changelist, revert (if unchanged), describe the file's
+changelist or the one that last changed the line, history, annotate, time-lapse.
+
 ### ✅ Icons
 
 - File-type icons come from mini.icons or nvim-web-devicons, when installed.
@@ -593,6 +601,7 @@ These are the defaults for everything that has an effect today:
   },
   blame_line = { enabled = false, delay = 150, format = 'CL {change} • {user} • {date} • {desc}' }, -- also {client}
   swarm = { url = nil }, -- default: the server's P4.Swarm.URL property
+  lsp = { enabled = false }, -- experimental: Perforce actions as LSP code actions
   keys = { p4v = true }, -- plus per-action overrides (see Keymaps)
   keymaps = false, -- 'default' = <leader>p preset in Perforce buffers
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
