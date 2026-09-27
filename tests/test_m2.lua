@@ -180,6 +180,18 @@ T['client view']['W keeps the client and shows p4 message when the switch fails'
   H.eq(has_line('Fix parser'), true)
 end
 
+T['client view']['Recent submitted lists my submits from outside this client view'] = function()
+  -- alice_ws no longer maps //depot/elsewhere/...; alice submits there from another client.
+  local spec = server:p4({ 'client', '-o', 'alice_ws' }).stdout
+  spec = spec .. '\t-//depot/elsewhere/... //alice_ws/elsewhere/...\n'
+  server:p4({ 'client', '-i' }, { stdin = spec })
+  local root2 = server.dir .. '/ws2'
+  server:client('alice_other', root2)
+  server:submit_files('alice_other', root2, { ['elsewhere/x.txt'] = 'x\n' }, 'Outside my view')
+  open_view()
+  H.eq(has_line('Outside my view'), true)
+end
+
 T['client view']['a slow Sync CL query does not hold back the other sections'] = function()
   -- Wrap p4 so the Sync CL query (`changes -m1 #have`) takes 3 s.
   local wrapper = server.dir .. '/slow-p4'
