@@ -34,8 +34,8 @@ end
 ---@param path string
 ---@return string[]
 local function yours(path)
-  local b = vim.fn.bufnr(path)
-  if b > 0 and vim.api.nvim_buf_is_loaded(b) then
+  local b = require('perforated.buffer').find(path)
+  if b and vim.api.nvim_buf_is_loaded(b) then
     return vim.api.nvim_buf_get_lines(b, 0, -1, false)
   end
   local ok, lines = pcall(vim.fn.readfile, path)
@@ -46,8 +46,8 @@ end
 ---@param path string
 ---@param lines string[]
 local function write_result(path, lines)
-  local b = vim.fn.bufnr(path)
-  if b > 0 and vim.api.nvim_buf_is_loaded(b) then
+  local b = require('perforated.buffer').find(path)
+  if b and vim.api.nvim_buf_is_loaded(b) then
     vim.bo[b].modifiable = true
     vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
     vim.api.nvim_buf_call(b, function()
@@ -104,7 +104,7 @@ local function merge_one(ws, rec, tool, cb)
         return cb(false, 'merge result unchanged (merge cancelled?)')
       end
       write_result(path, result)
-      ws:run({ 'resolve', '-ay', path }, {}, function(res)
+      ws:run({ 'resolve', '-ay', p4.escape(path) }, {}, function(res)
         if #res.errors > 0 then
           return cb(false, res.errors[1])
         end
@@ -133,7 +133,9 @@ end
 ---@param cb fun(resolved: integer, left: integer)?
 function M.run(ws, paths, cb)
   cb = cb or function() end
-  local opts = paths and { globals = { '-x', '-' }, stdin = paths } or {}
+  local opts = paths
+      and { globals = { '-x', '-' }, stdin = require('perforated.p4').escape_all(paths) }
+    or {}
   local co = require('perforated.checkout')
   ws:run({ 'resolve', '-am' }, opts, function(res)
     local attempted = {}
@@ -150,55 +152,47 @@ function M.run(ws, paths, cb)
         end
       end
       local auto = vim.tbl_count(attempted) - #conflicts
-      if #conflicts == 0 then
+      local left = {} ---@type { path: string, reason: string, rec: table }[]
+      local merged = 0
+      local function finish()
+        if auto + merged > 0 then
+          notify(
+            ('resolved %d file(s)%s'):format(
+              auto + merged,
+              merged > 0 and (' (%d with the merge tool)'):format(merged) or ''
+            )
+          )
+        elseif #left == 0 then
+          notify('nothing to resolve')
+        end
+        if #left > 0 then
+          local qf = require('perforated.ui.qf')
+          local items = {}
+          for _, l in ipairs(left) do
+            items[#items + 1] = qf.item(l.path, 'unresolved: ' .. l.reason, {
+              depotFile = l.rec.fromFile,
+              kind = 'unresolved',
+            })
+          end
+          qf.set({
+            title = ('P4 resolve · %d file(s) left unresolved (R resumes)'):format(#left),
+            kind = 'unresolved',
+            items = items,
+          })
+        end
+        co.changed(ws)
+        -- p4 wrote merged content into the files: reload their (unmodified) buffers.
         require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
         for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
           require('perforated.buffer').refresh(b)
         end
-        if auto > 0 then
-          notify(('resolved %d file(s) (clean merges)'):format(auto))
-        else
-          notify('nothing to resolve')
-        end
-        co.changed(ws)
-        return cb(auto, 0)
+        cb(auto + merged, #left)
+      end
+      if #conflicts == 0 then
+        return finish()
       end
       require('perforated.tools').merge_tool(ws, function(tool)
-        local left = {} ---@type { path: string, reason: string, rec: table }[]
-        local merged = 0
         local i = 0
-        local function finish()
-          if auto + merged > 0 then
-            notify(
-              ('resolved %d file(s)%s'):format(
-                auto + merged,
-                merged > 0 and (' (%d with the merge tool)'):format(merged) or ''
-              )
-            )
-          end
-          if #left > 0 then
-            local qf = require('perforated.ui.qf')
-            local items = {}
-            for _, l in ipairs(left) do
-              items[#items + 1] = qf.item(l.path, 'unresolved: ' .. l.reason, {
-                depotFile = l.rec.fromFile,
-                kind = 'unresolved',
-              })
-            end
-            qf.set({
-              title = ('P4 resolve · %d file(s) left unresolved (R resumes)'):format(#left),
-              kind = 'unresolved',
-              items = items,
-            })
-          end
-          co.changed(ws)
-          -- p4 wrote merged content into the files: reload their (unmodified) buffers.
-          require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
-          for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
-            require('perforated.buffer').refresh(b)
-          end
-          cb(auto + merged, #left)
-        end
         local function step()
           i = i + 1
           local rec = conflicts[i]

@@ -127,8 +127,12 @@ backends.fzf_lua = function(spec)
       end,
     },
     winopts = {
+      -- fzf-lua closes its window before running the action: report a cancel only once the
+      -- action had its chance (finish() keeps the first result).
       on_close = function()
-        finish(nil)
+        vim.schedule(function()
+          finish(nil)
+        end)
       end,
     },
   })
@@ -153,10 +157,11 @@ backends.snacks = function(spec)
     preview = spec.preview and 'preview' or 'none',
     confirm = function(picker, item)
       local sel = spec.multi and picker:selected({ fallback = true }) or { item }
-      picker:close()
+      -- Before close: its on_close would report a cancel first otherwise.
       finish(vim.tbl_map(function(i)
         return i.value
       end, sel))
+      picker:close()
     end,
     on_close = function()
       finish(nil)

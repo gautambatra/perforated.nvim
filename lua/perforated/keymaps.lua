@@ -100,14 +100,22 @@ function M.attach(buf)
   if require('perforated.config').get().keymaps ~= 'default' then
     return
   end
-  for lhs, name in pairs(M.PRESET) do
-    if vim.fn.maparg(lhs, 'n', false, true).buffer ~= 1 then
-      vim.keymap.set('n', lhs, '<Plug>(perforated-' .. name .. ')', {
-        buffer = buf,
-        remap = true,
-        desc = 'perforated: ' .. name,
-      })
+  -- maparg() looks at the current buffer, and buffers are also attached in the background.
+  local function install()
+    for lhs, name in pairs(M.PRESET) do
+      if vim.fn.maparg(lhs, 'n', false, true).buffer ~= 1 then
+        vim.keymap.set('n', lhs, '<Plug>(perforated-' .. name .. ')', {
+          buffer = buf,
+          remap = true,
+          desc = 'perforated: ' .. name,
+        })
+      end
     end
+  end
+  if buf == 0 or buf == vim.api.nvim_get_current_buf() then
+    install()
+  else
+    vim.api.nvim_buf_call(buf, install)
   end
 end
 

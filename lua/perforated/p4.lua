@@ -58,7 +58,7 @@ end
 ---@param opts perforated.RunOpts?
 ---@param cb fun(r: perforated.FstatResult)
 function M.fstat(ws, paths, opts, cb)
-  opts = vim.tbl_extend('force', { stdin = paths }, opts or {})
+  opts = vim.tbl_extend('force', { stdin = M.escape_all(paths) }, opts or {})
   opts.globals = { '-x', '-' }
   ws:run({ 'fstat', '-T', M.FSTAT_FIELDS }, opts, function(res)
     local out = { files = {}, missing = {}, res = res }
@@ -70,7 +70,7 @@ function M.fstat(ws, paths, opts, cb)
     for _, text in ipairs(vim.list_extend(vim.list_extend({}, res.warnings), res.errors)) do
       local p, kind = M.parse_file_message(text)
       if p then
-        out.missing[key(ws, p)] = kind
+        out.missing[key(ws, M.unescape(p))] = kind
       end
     end
     -- p4 answers `-x -` arguments in order (one record or one message each), which lets us
@@ -161,7 +161,7 @@ function M.print(ws, spec, opts, cb)
     -- Untagged: "no such file" is a warning on stderr with exit 0, so check stderr too.
     local err = vim.trim(res.stderr or '')
     if not res.ok or (err ~= '' and (res.stdout or '') == '') then
-      return cb(nil, err ~= '' and err or 'p4 print failed')
+      return cb(nil, err ~= '' and err or res.errors[1] or 'p4 print failed')
     end
     local lines = M.split_lines(res.stdout or '')
     if immutable then
@@ -259,7 +259,7 @@ function M.new_change(ws, desc, cb)
       if cl then
         return cb(cl)
       end
-      cb(nil, vim.trim((res.stdout or '') .. res.stderr))
+      cb(nil, res.errors[1] or vim.trim((res.stdout or '') .. res.stderr))
     end
   )
 end
@@ -278,8 +278,10 @@ end
 ---@param cmd string[]  e.g. { 'edit', '-c', '12' }
 ---@param paths string[]
 ---@param cb fun(res: perforated.RunResult)
-local function file_cmd(ws, cmd, paths, cb)
-  ws:run(cmd, { globals = { '-x', '-' }, stdin = paths }, cb)
+-- `escape = false` for `add`, which takes file names literally.
+local function file_cmd(ws, cmd, paths, cb, escape)
+  local stdin = escape == false and paths or M.escape_all(paths)
+  ws:run(cmd, { globals = { '-x', '-' }, stdin = stdin }, cb)
 end
 
 function M.edit(ws, paths, change, cb)
@@ -287,7 +289,14 @@ function M.edit(ws, paths, change, cb)
 end
 
 function M.add(ws, paths, change, cb)
-  file_cmd(ws, vim.list_extend({ 'add' }, change_args(change)), paths, cb)
+  local cmd = { 'add' }
+  for _, p in ipairs(paths) do
+    if p:find('[@#%%*]') then
+      cmd[#cmd + 1] = '-f' -- names with p4 wildcards are only accepted literally with -f
+      break
+    end
+  end
+  file_cmd(ws, vim.list_extend(cmd, change_args(change)), paths, cb, false)
 end
 
 ---@param opts { unchanged: boolean? }?
@@ -324,6 +333,35 @@ function M.latest_changes(ws, depot_files, cb)
     end
     cb(res.ok and max or nil, by)
   end)
+end
+
+--- Escape p4's wildcard characters in a local file path (`@` `#` `%` `*`), so a file such as
+--- `icon@2x.png` isn't read as a revision specifier. Depot paths (`//…`) are returned as they
+--- are: p4 reports them already escaped. Not for `add` (it takes literal names with `-f`) or
+--- for paths that carry a revision the user typed.
+---@param path string
+---@return string
+function M.escape(path)
+  if path:sub(1, 2) == '//' then
+    return path
+  end
+  return (path:gsub('%%', '%%25'):gsub('@', '%%40'):gsub('#', '%%23'):gsub('%*', '%%2A'))
+end
+
+--- Undo `escape` (p4 echoes escaped paths in its messages).
+---@param path string
+---@return string
+function M.unescape(path)
+  return (path:gsub('%%(%x%x)', function(h)
+    return string.char(tonumber(h, 16))
+  end))
+end
+
+--- `escape` over a list.
+---@param paths string[]
+---@return string[]
+function M.escape_all(paths)
+  return vim.tbl_map(M.escape, paths)
 end
 
 return M

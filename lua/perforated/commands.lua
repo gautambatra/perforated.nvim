@@ -27,6 +27,28 @@ local function echo_lines(chunks_list)
   vim.api.nvim_echo(chunks_list, true, {})
 end
 
+--- Absolute paths a file argument names: `%`, `~` and globs expanded (a glob gives one path per
+--- match, not one string of newline-separated paths).
+---@param a string
+---@return string[]
+local function expand_paths(a)
+  local out = {}
+  for _, e in ipairs(vim.fn.expand(a, false, true)) do
+    out[#out + 1] = vim.fn.fnamemodify(e, ':p')
+  end
+  if #out == 0 then
+    out[1] = vim.fn.fnamemodify(a, ':p')
+  end
+  return out
+end
+
+--- The one absolute path a file argument names (the first match of a glob).
+---@param a string
+---@return string
+local function expand_path(a)
+  return expand_paths(a)[1]
+end
+
 --- Split `-c CL` and file arguments; files default to the current buffer's file.
 ---@param args string[]
 ---@return string? cl, string[] files, table flags
@@ -41,7 +63,7 @@ local function parse_file_args(args)
     elseif a:match('^%-%a$') then
       flags[a] = true
     else
-      files[#files + 1] = vim.fn.fnamemodify(vim.fn.expand(a), ':p')
+      vim.list_extend(files, expand_paths(a))
     end
     i = i + 1
   end
@@ -379,7 +401,7 @@ M.commands = {
       end
       local path = args[1]
       if not path:match('^//') then
-        path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+        path = expand_path(path)
       end
       h.open(ws, path)
     end,
@@ -410,7 +432,7 @@ M.commands = {
       end
       local path = args[2]
       if path and not path:match('^//') then
-        path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+        path = expand_path(path)
       end
       if not path and cmd ~= 'streamgraph' then
         local buf = vim.api.nvim_get_current_buf()
@@ -434,7 +456,7 @@ M.commands = {
       if args[1] then
         local path = args[1]
         if not path:match('^//') then
-          path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+          path = expand_path(path)
         end
         return tl.open(ws, path)
       end
@@ -593,9 +615,15 @@ M.commands = {
         elseif a:match('^//') then
           out[#out + 1] = a
         else
+          -- `file#head` / `file@CL`, unless the whole argument names a file (`a#b.c`).
           local path, rev = a:match('^(.-)([#@].*)$')
-          path = path or a
-          out[#out + 1] = vim.fn.fnamemodify(vim.fn.expand(path), ':p') .. (rev or '')
+          if not path or path == '' or vim.uv.fs_stat(expand_path(a)) then
+            path, rev = a, nil
+          end
+          for _, p in ipairs(expand_paths(path)) do
+            -- (a plain path is escaped by ops.sync, which also shows it in the confirmation)
+            out[#out + 1] = rev and (require('perforated.p4').escape(p) .. rev) or p
+          end
         end
       end
       require('perforated.ops').sync(ws, out)
@@ -609,7 +637,7 @@ M.commands = {
     run = function(ws, _, args)
       local files = {}
       for _, a in ipairs(args) do
-        files[#files + 1] = vim.fn.fnamemodify(vim.fn.expand(a), ':p')
+        vim.list_extend(files, expand_paths(a))
       end
       require('perforated.resolve').run(ws, #files > 0 and files or nil)
     end,
