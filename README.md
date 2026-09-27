@@ -19,9 +19,8 @@
 
 ## Why perforated?
 
-Most Perforce plugins for Vim wrap `p4` in `system()`: every command freezes the editor until
-the server answers, and anything beyond edit / revert / diff means switching to P4V.
-perforated.nvim is built the other way round:
+perforated.nvim brings the day-to-day Perforce workflow into Neovim, and is built to stay out
+of your way:
 
 - ⚡ **It never blocks.** Every `p4` call is asynchronous, with timeouts, cancellation and an
   offline mode. Typing never waits on the server — not even `:w` on a file you just checked out.
@@ -31,21 +30,18 @@ perforated.nvim is built the other way round:
   file, and gutter diffs are computed inside Neovim, so they never call `p4 diff`.
 - 🧩 **It has zero dependencies.** Pure Lua plus the `p4` command-line client. Telescope,
   fzf-lua, snacks, mini.pick, lualine and icon plugins are used when you have them.
-- 🖥️ **It covers the P4V workflow.** Pending changelists, shelves, submit, sync, resolve with
-  your merge tool, integrate, history, annotate and time-lapse are all in Neovim.
 
-### Compared with other Vim plugins
+### What you won't find in other Perforce plugins
 
-| | perforated.nvim | [vim-vp4](https://github.com/ngemily/vim-vp4) | [vim-perforce](https://github.com/nfvs/vim-perforce) |
-|---|:-:|:-:|:-:|
-| Asynchronous (never freezes the editor) | ✅ | ❌ | ❌ |
-| Check-out on first change / on save | ✅ | ✅ | ✅ |
-| Gutter signs, hunk navigation / preview / reset | ✅ | ❌ | ❌ |
-| P4V-style client view (pending, shelved, stale, reconcile) | ✅ | ❌ | ❌ |
-| Side-by-side diffs, whole-changelist diff tab | ✅ | single file | ❌ |
-| Annotate, current-line blame, time-lapse | ✅ | annotate | ❌ |
-| Shelve / submit / sync / resolve / integrate | ✅ | shelve | ❌ |
-| Stale-file notifications, statusline | ✅ | ❌ | ❌ |
+- **A P4V-style client view** (`:P4`): pending changelists, shelves, stale and unresolved files,
+  workspace reconcile and your recent submits, with single-key actions.
+- **Gutter signs and hunks** against your have revision: navigate, preview and reset hunks.
+- **Whole-changelist diff tabs** for pending, shelved and submitted changelists.
+- **Time-lapse**, stepping through every revision of a file P4V-style, and current-line blame.
+- **Submit, sync, resolve (with your merge tool) and integrate**, as watchable, stoppable
+  jobs.
+- **Stale-file notifications** when someone submits a newer revision of a file you have open,
+  and a statusline component.
 
 Switching? [docs/migrating.md](docs/migrating.md) maps every command and setting.
 
