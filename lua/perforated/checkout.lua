@@ -25,7 +25,7 @@ local session = { never = false, auto = false } -- per Neovim session
 local group = vim.api.nvim_create_augroup('perforated.checkout', { clear = true })
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 ---@param buf integer

@@ -349,7 +349,7 @@ T['ops'][':P4 diff survives a user OptionSet autocmd that throws'] = function()
   local wins = child.api.nvim_tabpage_list_wins(0)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[1] }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[2] }), true)
-  H.expect.no_equality(child.cmd_capture('messages'):find('E492', 1, true), nil)
+  H.eq(H.wait_message(child, 'E492'), true)
 end
 
 T['ops']['lualine component renders the statusline'] = function()
@@ -479,13 +479,10 @@ T['modes']["external diff runs p4 diff with the user's own P4DIFF"] = function()
   })
   edit('a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
-  -- unchanged: no diff (tool not launched), just a message
-  child.lua(
-    [[_G.msgs = {}; local n = vim.notify; vim.notify = function(m, ...) table.insert(_G.msgs, m); n(m, ...) end]]
-  )
+  -- unchanged: no diff (tool not launched), just a pop-up
   child.cmd('P4 diff!')
   wait(
-    [[vim.tbl_contains(vim.tbl_map(function(m) return m:match('identical') ~= nil end, _G.msgs), true)]]
+    [[vim.tbl_contains(vim.tbl_map(function(t) return (t.title .. ' ' .. table.concat(t.lines, ' ')):find('identical', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
   )
   H.eq(vim.uv.fs_stat(tool_log), nil)
   H.eq(#child.api.nvim_list_tabpages(), 1)

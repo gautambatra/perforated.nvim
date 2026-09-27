@@ -134,6 +134,20 @@ function M.nav(view, title, opts)
   }
 end
 
+--- Normal (non-floating) windows of a tab page, or of every tab page. Footers and message
+--- pop-ups are floats: a window isn't "the last one" just because a float is open next to it.
+---@param tab integer?
+---@return integer
+function M.normal_wins(tab)
+  local n = 0
+  for _, w in ipairs(tab and vim.api.nvim_tabpage_list_wins(tab) or vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(w).relative == '' then
+      n = n + 1
+    end
+  end
+  return n
+end
+
 --- Close a view's window (its tab when it has one of its own).
 ---@param view table
 function M.close(view)
@@ -144,7 +158,7 @@ function M.close(view)
     return vim.api.nvim_win_close(view.win, true)
   end
   local tab = vim.api.nvim_win_get_tabpage(view.win)
-  if #vim.api.nvim_tabpage_list_wins(tab) == 1 then
+  if M.normal_wins(tab) == 1 then
     if #vim.api.nvim_list_tabpages() > 1 then
       return vim.cmd('tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
     end

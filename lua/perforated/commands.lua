@@ -20,7 +20,7 @@ local function notify(msg, level)
   if dbg and (level or 0) >= vim.log.levels.WARN then
     dbg.log(level >= vim.log.levels.ERROR and 'error' or 'warn', 'commands', '%s', msg)
   end
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 local function echo_lines(chunks_list)

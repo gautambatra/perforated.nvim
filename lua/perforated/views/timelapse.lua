@@ -12,7 +12,7 @@ local M = {}
 local ns = vim.api.nvim_create_namespace('perforated.timelapse')
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 local first_line = require('perforated.views.base').first_line

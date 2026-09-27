@@ -94,7 +94,9 @@ end, function(buf, line)
     or (st.rec.depotFile .. '#' .. (st.rec.haveRev or 'head'))
   local b = require('perforated.views.base').base_line(st.hunks or {}, line)
   if not b then
-    return vim.notify('[perforated] this line was changed locally (not submitted)')
+    return require('perforated.ui.toast').notify(
+      '[perforated] this line was changed locally (not submitted)'
+    )
   end
   require('perforated.history').annotate(st.ws, spec, {}, function(ann)
     local cl = ann and ann.cls[b]

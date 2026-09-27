@@ -407,7 +407,17 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 </details>
 
 <details>
-<summary><b>🔔 Stale files, quickfix lists, statusline</b></summary>
+<summary><b>🔔 Messages, stale files, quickfix lists, statusline</b></summary>
+
+#### Messages
+
+Everything the plugin tells you (results such as "created CL 123", p4 errors, "identical,
+nothing to diff", "nothing to resolve", …) appears as a small pop-up in the bottom-right
+corner instead of the command line. It never takes focus, never triggers a "Press ENTER"
+prompt, and its dismissal countdown (`toast.timeout`, 8 s) starts only once you press a key.
+Errors have a red border. `:P4 notifications` shows the history and `:P4 dismiss` closes them.
+Prefer the command line or your own notifier (nvim-notify, snacks, fidget, …)? Set
+`toast = { backend = 'notify' }` and every message goes to `vim.notify` instead.
 
 #### Stale-file detection
 
@@ -741,7 +751,7 @@ opts = {
   qf = { open = true }, -- open the quickfix window when a list has results
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
-  toast = { timeout = 8000, backend = 'float', history = 50 }, -- timeout 0 = sticky; backend 'notify' = vim.notify
+  toast = { timeout = 8000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
   statusline = {
     format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)
     stale = '↓',

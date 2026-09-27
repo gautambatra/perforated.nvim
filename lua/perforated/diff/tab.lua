@@ -21,7 +21,7 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 ---@field right perforated.DiffSide|{ path: string }
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 --- Right side for a workspace file: its (loaded) buffer.
@@ -50,10 +50,10 @@ function M.open(ws, title, entries)
       end
     end
     if n == #entries then
-      return notify(
+      return require('perforated.ui.toast').show('Perforce: identical, nothing to diff', {
         #entries == 1 and (title .. ': the file is identical')
-          or ('%s: all %d files are identical'):format(title, #entries)
-      )
+          or ('%s: all %d files are identical'):format(title, #entries),
+      }, vim.log.levels.INFO)
     end
     local differ, identical = {}, {}
     for i, e in ipairs(entries) do

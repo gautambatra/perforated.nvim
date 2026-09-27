@@ -236,7 +236,10 @@ function Conn:login(cb)
       else
         local msg = res.errors[1] or vim.trim(res.stderr)
         self:_set('offline_auth', msg)
-        vim.notify('[perforated] login failed: ' .. msg, vim.log.levels.ERROR)
+        require('perforated.ui.toast').notify(
+          '[perforated] login failed: ' .. msg,
+          vim.log.levels.ERROR
+        )
         cb(false)
       end
     end

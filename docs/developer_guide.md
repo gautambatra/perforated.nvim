@@ -1034,9 +1034,13 @@ aligns columns; perforated lists get buffer-local keys in the qf window (`d` dif
 `gm` move, `R` resolve, `gr` re-run the producer) plus syntax for the changed-file markers.
 
 #### `ui/toast.lua`
-Corner notifications for stale files: bottom-right, non-focusable, stacking; the dismissal
-countdown starts at the user's first keypress (so a toast can't vanish unseen), toasts raised
-while unfocused wait for `FocusGained`; history for `:P4 notifications`.
+Corner notifications: bottom-right, non-focusable, stacking; the dismissal countdown starts at
+the user's first keypress (so a toast can't vanish unseen), toasts raised while unfocused wait
+for `FocusGained`; history for `:P4 notifications`. `notify(msg, level)` is how every module
+tells the user something (never `vim.notify` directly): a toast titled by level (errors get
+`PerforatedToastErrorBorder`, info `PerforatedToastInfoBorder`), long lines wrapped, or
+`vim.notify` when `toast.backend = 'notify'`. Safe from fast (luv) callbacks. `show(title,
+lines, level, { detail })` is the lower-level call (stale-file toasts: a dimmed details line).
 
 #### `ui/icons.lua`
 File icons from mini.icons or nvim-web-devicons (detected via runtime files, without loading
@@ -1190,7 +1194,9 @@ describing its role; keep it current.
 required inside functions when they aren't needed on the activation path. The memory benchmark
 ("Lua memory: active workspace") catches accidental eager loading.
 
-**User messages.** `vim.notify('[perforated] …')`, short, plain language; errors at
+**User messages.** `require('perforated.ui.toast').notify(msg, level)` (a pop-up, or
+`vim.notify` with `toast.backend = 'notify'`), never `vim.notify` directly; short, plain
+language; errors at
 `vim.log.levels.ERROR` include p4's own message. Anything that concerns several files goes to
 quickfix with p4's reason as the entry text.
 

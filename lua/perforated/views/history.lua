@@ -12,7 +12,7 @@ local revs = require('perforated.revs')
 local M = {}
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 local previous = history.previous

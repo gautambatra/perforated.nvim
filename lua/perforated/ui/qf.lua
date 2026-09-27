@@ -56,7 +56,7 @@ function M.set(spec)
     end
   end
   if n == 0 then
-    vim.notify(('[perforated] %s: nothing to show'):format(spec.title))
+    require('perforated.ui.toast').notify(('[perforated] %s: nothing to show'):format(spec.title))
   elseif open then
     if spec.loclist and spec.win and spec.win ~= 0 and vim.api.nvim_win_is_valid(spec.win) then
       vim.api.nvim_set_current_win(spec.win) -- :lopen opens the current window's list
@@ -65,7 +65,7 @@ function M.set(spec)
     -- FileType doesn't fire again when the window was already open: install keys directly.
     on_qf_buf(vim.api.nvim_get_current_buf())
   else
-    vim.notify(
+    require('perforated.ui.toast').notify(
       ('[perforated] %s: %d entries in %s'):format(
         spec.title,
         n,
@@ -140,7 +140,7 @@ local function refresher(quiet)
     local producer = producers[cur.id]
     if not producer then
       if not quiet then
-        vim.notify('[perforated] this list cannot be refreshed')
+        require('perforated.ui.toast').notify('[perforated] this list cannot be refreshed')
       end
       return
     end
@@ -205,7 +205,7 @@ on_qf_buf = function(buf)
   map('x', function()
     local ws, path = entry_ws()
     if not ws then
-      return vim.notify('[perforated] no workspace file under cursor')
+      return require('perforated.ui.toast').notify('[perforated] no workspace file under cursor')
     end
     if
       vim.fn.confirm(('Revert %s?'):format(vim.fn.fnamemodify(path, ':~:.')), '&Revert\n&Cancel', 2)
@@ -217,7 +217,7 @@ on_qf_buf = function(buf)
   map('gm', function()
     local ws, path = entry_ws()
     if not ws then
-      return vim.notify('[perforated] no workspace file under cursor')
+      return require('perforated.ui.toast').notify('[perforated] no workspace file under cursor')
     end
     local refresh = refresher(true)
     require('perforated.checkout').pick_change(ws, function(cl)
@@ -231,7 +231,7 @@ on_qf_buf = function(buf)
   map('R', function()
     local ws, path = entry_ws()
     if not ws then
-      return vim.notify('[perforated] no workspace file under cursor')
+      return require('perforated.ui.toast').notify('[perforated] no workspace file under cursor')
     end
     local refresh = refresher(true)
     require('perforated.resolve').run(ws, { path }, function()

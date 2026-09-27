@@ -132,6 +132,31 @@ function H.wait(child, expr, timeout)
   )
 end
 
+--- Everything the plugin told the user in the child: toast titles and lines (plugin messages
+--- are toasts by default), plus :messages.
+---@return string
+function H.messages(child)
+  return child.lua([[
+    local out = { vim.api.nvim_exec2('messages', { output = true }).output }
+    local toast = package.loaded['perforated.ui.toast']
+    for _, t in ipairs(toast and toast.history() or {}) do
+      out[#out + 1] = t.title .. '\n' .. table.concat(t.lines, '\n')
+    end
+    return table.concat(out, '\n')
+  ]])
+end
+
+--- Wait until the plugin has said something containing `text`.
+function H.wait_message(child, text, timeout)
+  return child.lua(([[return vim.wait(%d, function()
+      local toast = package.loaded['perforated.ui.toast']
+      for _, t in ipairs(toast and toast.history() or {}) do
+        if (t.title .. '\n' .. table.concat(t.lines, '\n')):find(%q, 1, true) then return true end
+      end
+      return vim.api.nvim_exec2('messages', { output = true }).output:find(%q, 1, true) ~= nil
+    end, 10)]]):format(timeout or 5000, text, text))
+end
+
 --- perforated modules currently loaded in the child.
 function H.loaded_modules(child)
   return child.lua([[

@@ -28,7 +28,10 @@ end
 function M.pending(ws)
   p4.pending_changes(ws, function(changes, err)
     if not changes then
-      return vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
+      return require('perforated.ui.toast').notify(
+        '[perforated] ' .. tostring(err),
+        vim.log.levels.ERROR
+      )
     end
     p4.fstat_opened(ws, {}, function(recs)
       local files = {}
@@ -109,7 +112,10 @@ function M.submitted(ws, opts)
     { user = opts.user, path = opts.path, max = 200 },
     function(changes, err)
       if not changes then
-        return vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
+        return require('perforated.ui.toast').notify(
+          '[perforated] ' .. tostring(err),
+          vim.log.levels.ERROR
+        )
       end
       picker.pick({
         title = 'Submitted changelists' .. (opts.user and (' · ' .. opts.user) or ''),

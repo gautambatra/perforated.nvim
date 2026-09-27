@@ -82,7 +82,7 @@ function M.dispatch(a, view)
   if #nodes == 0 then
     if not M.applies(a, node) then
       local keys = M.keys_of(a)
-      return vim.notify(
+      return require('perforated.ui.toast').notify(
         ('[perforated] %s (%s) does not apply here'):format(a.desc, keys[1] or a.id),
         vim.log.levels.INFO
       )
@@ -158,7 +158,10 @@ function M.menu(actions, view)
   local node = view.tree:node_at()
   local valid = M.valid(actions, node)
   if #valid == 0 then
-    return vim.notify('[perforated] no actions here', vim.log.levels.INFO)
+    return require('perforated.ui.toast').notify(
+      '[perforated] no actions here',
+      vim.log.levels.INFO
+    )
   end
   local items = {}
   for _, a in ipairs(valid) do
