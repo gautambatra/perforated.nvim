@@ -192,6 +192,22 @@ T['client view']['Recent submitted lists my submits from outside this client vie
   H.eq(has_line('Outside my view'), true)
 end
 
+T['client view']['a non-zero opened-file count uses PerforatedCount'] = function()
+  open_view()
+  local row = goto_line('Fix parser')
+  -- Highlights are drawn by a decoration provider: read the tree's per-row spans.
+  local groups = child.lua_get(([[(function()
+    local v = require('perforated.views.client')._get(vim.b.perforated_ws)
+    local hls, line = v.tree.row_hls[%d], vim.api.nvim_buf_get_lines(0, %d, %d + 1, false)[1]
+    local out = {}
+    for i = 1, #hls, 3 do
+      out[line:sub(hls[i] + 1, hls[i + 1])] = hls[i + 2]
+    end
+    return out
+  end)()]]):format(row - 1, row - 1, row - 1))
+  H.eq(groups['  (1)'], 'PerforatedCount')
+end
+
 T['client view']['a slow Sync CL query does not hold back the other sections'] = function()
   -- Wrap p4 so the Sync CL query (`changes -m1 #have`) takes 3 s.
   local wrapper = server.dir .. '/slow-p4'
