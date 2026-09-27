@@ -73,6 +73,18 @@ T['line_splitter'] = function()
   feed('f\n\ng')
   feed(nil)
   H.eq(lines, { 'abc', 'def', '', 'g' })
+
+  -- A line spread over many chunks, chunks ending on a newline, empty chunks.
+  lines = {}
+  feed = parse.line_splitter(function(l)
+    lines[#lines + 1] = l
+  end)
+  for _, c in ipairs({ 'x', 'y', '', 'z', '\n', '1\n', '\n2', '3', '' }) do
+    feed(c)
+  end
+  feed(nil)
+  feed(nil)
+  H.eq(lines, { 'xyz', '1', '', '23' })
 end
 
 T['ztag text fallback'] = function()

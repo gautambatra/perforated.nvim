@@ -165,7 +165,7 @@ end
 ---@param cb fun(ws: perforated.Workspace?)
 function M.resolve(dir, cb)
   local ws = M.for_dir(dir)
-  if ws or gate().lookup(dir) or not require('perforated.core.env').has_env_client() then
+  if ws or not require('perforated.core.env').has_env_client() then
     return cb(ws)
   end
   if env.state == 'ready' or env.state == 'none' then

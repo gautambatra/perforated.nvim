@@ -187,6 +187,11 @@ end
 --- meanwhile so nothing else hits the server unauthenticated.
 ---@param retry fun(ok: boolean)
 function Conn:need_auth(retry)
+  -- The login was already cancelled or failed: fail fast rather than prompt again for jobs
+  -- that were queued while the prompt was up (`:P4 login` is the way back).
+  if self.state == 'offline_auth' and not self.login_pending then
+    return retry(false)
+  end
   self.auth_waiters[#self.auth_waiters + 1] = retry
   -- One login at a time. The state alone isn't enough: another call can succeed while the
   -- prompt is up (e.g. `p4 info` needs no login) and set it back to 'online'.

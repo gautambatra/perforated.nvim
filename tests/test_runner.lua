@@ -40,6 +40,11 @@ T['runner'] = MiniTest.new_set({
               },
             },
             { match = '^changes', hang = true },
+            {
+              match = '^describe',
+              records = { { change = '1' } },
+              kill = 'sigkill',
+            },
             { match = '^set', stdout = 'P4PORT=1666\n' },
           },
         },
@@ -52,6 +57,12 @@ T['runner'] = MiniTest.new_set({
     end,
   },
 })
+
+T['runner']['a process killed by a signal is not ok'] = function()
+  local r = run({ args = { 'describe', '1' }, cwd = child.cwd })
+  H.eq(r.ok, false)
+  H.eq(r.code, 128 + 9)
+end
 
 T['runner']['parses JSON records and warnings'] = function()
   local r = run({ args = { 'fstat', 'a', 'b' }, cwd = child.cwd })
