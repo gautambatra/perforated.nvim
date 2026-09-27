@@ -47,6 +47,32 @@ local function file_items(ws, texts, pattern, kind)
 end
 M._file_items = file_items
 
+--- Local paths from p4's "Can't clobber writable file <path>" messages (sync, unshelve). They
+--- have no " - " separator, so `file_items` doesn't see them.
+---@param texts string[]
+---@return string[]
+local function clobbered(texts)
+  local out = {}
+  for _, t in ipairs(texts) do
+    local path = t:match("^[Cc]an't clobber writable file (.+)$")
+    if path then
+      out[#out + 1] = vim.trim(path)
+    end
+  end
+  return out
+end
+
+--- Quickfix items for the files a sync couldn't overwrite.
+---@param texts string[]
+---@return table[]
+local function clobber_items(texts)
+  local qf = require('perforated.ui.qf')
+  return vim.tbl_map(function(path)
+    return qf.item(path, "can't clobber writable file (not opened)", { kind = 'sync_attention' })
+  end, clobbered(texts))
+end
+M._clobbered = clobbered
+
 --- Refresh the state of workspace buffers (all of them, or the files given).
 ---@param ws perforated.Workspace
 ---@param paths string[]?
@@ -108,7 +134,7 @@ function M.shelve(ws, change, paths, cb)
     local args = { 'shelve', '-f', '-c', change }
     local opts = {}
     if paths then
-      opts = { globals = { '-x', '-' }, stdin = paths }
+      opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
     end
     ws:run(args, opts, function(res)
       co.report('shelve', res, #res.records)
@@ -159,13 +185,7 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
     vim.list_extend(args, depot_files or {})
     ws:run(args, {}, function(res)
       local texts = messages(res)
-      local clobber = false
-      for _, t in ipairs(res.errors) do
-        if t:find("can't clobber", 1, true) then
-          clobber = true
-        end
-      end
-      if clobber and not force then
+      if #clobbered(res.errors) > 0 and not force then
         if
           confirm(
             'Some workspace files are writable but not opened. Overwrite them with the shelved versions?',
@@ -254,13 +274,39 @@ function M.delete_change(ws, change, cb)
       )
       return cb(false)
     end
-    p4.fstat_opened(ws, {}, function(recs)
-      local paths = {}
-      for _, r in ipairs(recs or {}) do
-        if r.change == change and r.clientFile then
-          paths[#paths + 1] = r.clientFile
-        end
+    if force and #d.files > 0 then
+      -- Their opened files belong to the other client: they can't be moved or reverted from
+      -- here, and p4 refuses to delete a changelist that still has them.
+      notify(
+        ('CL %s has %d file(s) opened in client %s: revert or move them there first'):format(
+          change,
+          #d.files,
+          d.rec.client or '?'
+        ),
+        vim.log.levels.WARN
+      )
+      return cb(false)
+    end
+    -- The changelist's opened files, as workspace paths (none: no need to ask the server).
+    local function opened(k)
+      if #d.files == 0 then
+        return k({})
       end
+      ws:run(
+        { 'fstat', '-Ro', '-e', change, '-T', p4.FSTAT_FIELDS, ('//%s/...'):format(ws:client()) },
+        {},
+        function(res)
+          local paths = {}
+          for _, r in ipairs(res.records) do
+            if r.change == change and r.clientFile then
+              paths[#paths + 1] = r.clientFile
+            end
+          end
+          k(paths)
+        end
+      )
+    end
+    opened(function(paths)
       cls.shelved_files(ws, { change }, function(sh)
         local nshelved = #(sh[change] or {})
         local what = {}
@@ -293,7 +339,11 @@ function M.delete_change(ws, change, cb)
         local function delete()
           local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
           ws:run(args, {}, function(res)
-            local ok = #res.errors == 0
+            -- "Change N has … open file(s) … and can't be deleted." is not an error message.
+            local refusal = vim.iter(res.warnings):find(function(t)
+              return t:find("can't be deleted", 1, true) ~= nil
+            end)
+            local ok = #res.errors == 0 and not refusal
             if ok then
               notify(('deleted CL %s'):format(change))
               if ws.sticky_cl == change then
@@ -301,7 +351,7 @@ function M.delete_change(ws, change, cb)
               end
             else
               notify(
-                ('could not delete CL %s: %s'):format(change, res.errors[1]),
+                ('could not delete CL %s: %s'):format(change, vim.trim(res.errors[1] or refusal)),
                 vim.log.levels.ERROR
               )
             end
@@ -355,11 +405,12 @@ end
 ---@param change string
 ---@param desc string?  required for the default changelist
 ---@param cb fun(ok: boolean, submitted: string?)
-function M.run_submit(ws, change, desc, cb)
+---@param files table[]?  its opened files' fstat records, when already fetched
+function M.run_submit(ws, change, desc, cb, files)
   local args = change == 'default' and { 'submit', '-d', desc or '' } or { 'submit', '-c', change }
   local label = change == 'default' and 'the default changelist' or ('CL ' .. change)
   local jobs = require('perforated.jobs')
-  p4.fstat_opened(ws, {}, function(before)
+  local function go(before)
     local paths = {}
     for _, r in ipairs(before or {}) do
       if (r.change or 'default') == change and r.clientFile then
@@ -401,7 +452,12 @@ function M.run_submit(ws, change, desc, cb)
       refresh(ws, paths)
       cb(submitted ~= nil, submitted)
     end)
-  end)
+  end
+  -- The files (to refresh afterwards) are known when the confirmation already fetched them.
+  if files then
+    return go(files)
+  end
+  p4.fstat_opened(ws, {}, go)
 end
 
 --- `P` / `:P4 submit [CL]`: a confirmation float (files, description, warnings about stale,
@@ -474,6 +530,8 @@ function M.submit(ws, change, cb)
         on_done = function(saved)
           if saved ~= nil then
             M.submit(ws, change, cb)
+          else
+            cb(false)
           end
         end,
       })
@@ -485,10 +543,10 @@ function M.submit(ws, change, cb)
         if not input or vim.trim(input) == '' then
           return cb(false)
         end
-        M.run_submit(ws, change, input, cb)
+        M.run_submit(ws, change, input, cb, files)
       end)
     end
-    M.run_submit(ws, change, nil, cb)
+    M.run_submit(ws, change, nil, cb, files)
   end
   -- Fresh state for the warnings: `fstat -Ro` of opened files (stale / unresolved).
   p4.fstat_opened(ws, {}, function(recs)
@@ -542,21 +600,26 @@ end
 ---@param cb fun(ok: boolean)?
 function M.sync(ws, args, cb)
   cb = cb or function() end
-  args = args or {}
   -- Every sync is confirmed, however it was started. With paths it's "get latest revision";
   -- without, a sync of the whole workspace.
-  local shown = #args == 1 and vim.fn.fnamemodify(args[1], ':~:.') or (#args .. ' files')
+  local shown = args and #args == 1 and vim.fn.fnamemodify(args[1], ':~:.')
+    or (#(args or {}) .. ' files')
+  -- Workspace files (`icon@2x.png`) need p4's wildcards escaped; arguments that carry a
+  -- revision were escaped by the caller.
+  args = vim.tbl_map(function(a)
+    return vim.uv.fs_stat(a) and p4.escape(a) or a
+  end, args or {})
   -- `//client/...@123` (from `:P4 sync @123`): the whole workspace to a revision.
   local ws_rev = #args == 1
     and ws:client()
     and args[1]:match('^//' .. vim.pesc(ws:client()) .. '/%.%.%.([@#].+)$')
   local question = #args == 0 and 'Sync the whole workspace?'
     or (ws_rev and ('Sync the whole workspace to %s?'):format(ws_rev))
-    or (#args == 1 and (shown:match('[@#]') and ('Sync %s?'):format(shown) or ('Get the latest revision of %s?'):format(
+    or (#args == 1 and (args[1]:match('[@#]') and ('Sync %s?'):format(shown) or ('Get the latest revision of %s?'):format(
       shown
     )))
     or ('Get the latest revisions of %s?'):format(shown)
-  local sync_like = #args == 0 or ws_rev or shown:match('[@#]')
+  local sync_like = #args == 0 or ws_rev or (#args == 1 and args[1]:match('[@#]'))
   local verb = sync_like and '&Sync' or '&Get latest'
   local function start()
     M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
@@ -639,10 +702,9 @@ function M.preview_sync(ws, args, cb)
     for _, t in ipairs(messages(res)) do
       if t:find('is opened', 1, true) then
         opened = opened + 1
-      elseif t:find("can't clobber", 1, true) then
-        clobber = clobber + 1
       end
     end
+    clobber = #clobbered(messages(res))
     local parts = {}
     for _, a in ipairs(order) do
       parts[#parts + 1] = ('%d %s'):format(counts[a], a)
@@ -676,15 +738,20 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
       or ((sync_like and 'sync ' or 'get latest ') .. what)
   )
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
+    local texts = messages(res)
+    -- p4 still reports a record ("updated") for a file it couldn't clobber: it didn't change.
+    local skipped = {}
+    for _, path in ipairs(clobbered(texts)) do
+      skipped[vim.fs.normalize(path)] = true
+    end
     local changed_paths, counts = {}, {}
     for _, r in ipairs(res.records) do
-      if r.clientFile then
+      if r.clientFile and not skipped[vim.fs.normalize(r.clientFile)] then
         changed_paths[#changed_paths + 1] = r.clientFile
         counts[r.action or '?'] = (counts[r.action or '?'] or 0) + 1
       end
     end
-    local texts = messages(res)
-    local attention = file_items(ws, texts, "can't clobber", 'sync_attention')
+    local attention = clobber_items(texts)
     vim.list_extend(attention, file_items(ws, texts, 'must resolve', 'unresolved'))
     local parts = {}
     for action, n in pairs(counts) do
@@ -723,7 +790,7 @@ end
 ---@param reported table[]  quickfix items from those messages
 function M.after_sync(ws, texts, reported)
   local qf = require('perforated.ui.qf')
-  local items = file_items(ws, texts, "can't clobber", 'sync_attention')
+  local items = clobber_items(texts)
   local unresolved = {}
   if ws.opened then
     for _, r in pairs(ws.opened) do
@@ -800,7 +867,7 @@ function M.delete(ws, paths, cb)
     return cb(false)
   end
   local bufs = co.bufs_for(ws, paths)
-  ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = paths }, function(res)
+  ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }, function(res)
     local deleted = {}
     for _, r in ipairs(res.records) do
       if r.clientFile and r.action == 'delete' then
@@ -857,13 +924,9 @@ function M.move(buf, new, cb)
     return cb(false)
   end
   local function move()
-    ws:run({ 'move', old, new }, {}, function(res)
-      local ok = false
-      for _, r in ipairs(res.records) do
-        if r.action == 'move/add' then
-          ok = true
-        end
-      end
+    ws:run({ 'move', p4.escape(old), p4.escape(new) }, {}, function(res)
+      -- A file opened for add comes back as action "add", not "move/add".
+      local ok = #res.errors == 0 and #res.records > 0
       if not ok then
         notify('move failed: ' .. (res.errors[1] or res.warnings[1] or '?'), vim.log.levels.ERROR)
         return cb(false)
@@ -876,8 +939,8 @@ function M.move(buf, new, cb)
       vim.api.nvim_buf_call(buf, function()
         vim.cmd('silent! write!')
       end)
-      local alt = vim.fn.bufnr(oldbuf_name)
-      if alt > 0 and alt ~= buf and not vim.api.nvim_buf_is_loaded(alt) then
+      local alt = buffer.find(oldbuf_name)
+      if alt and alt ~= buf and not vim.api.nvim_buf_is_loaded(alt) then
         pcall(vim.api.nvim_buf_delete, alt, { force = true })
       end
       require('perforated.core.activation').attach(

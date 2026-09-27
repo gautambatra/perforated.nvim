@@ -19,11 +19,11 @@ function M.run(ws, what)
     return require('perforated.views.describe').open(ws, cl)
   end
   -- A bare word is a user unless it names a file here (`foo.c`); anything with a slash is a path.
-  local stat = vim.uv.fs_stat(vim.fn.expand(what))
+  local stat = vim.uv.fs_stat(vim.fn.expand(what, false, true)[1] or what)
   if what:match('^//') or what:find('/', 1, true) or (stat and stat.type == 'file') then
     local path = what
     if not path:match('^//') then
-      path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+      path = vim.fn.fnamemodify(vim.fn.expand(path, false, true)[1] or path, ':p')
     end
     return require('perforated.views.history').open(ws, path)
   end

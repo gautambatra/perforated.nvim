@@ -460,6 +460,109 @@ T['m4']['delete wipes the buffer; move renames the buffer and keeps it attached'
   H.eq(opened()['//depot/main/b.txt'].action, 'delete')
 end
 
+T['m4']["sync: a writable file p4 can't clobber goes to quickfix, not the synced count"] = function()
+  setup()
+  bob_submits('main/b.txt', 'bob b\n')
+  vim.uv.fs_chmod(root .. '/main/b.txt', tonumber('644', 8))
+  child.lua(
+    [[_G.r = nil
+    require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r ~= nil')
+  local qf = child.lua_get(
+    [[vim.tbl_map(function(e) return vim.api.nvim_buf_get_name(e.bufnr) .. ' ' .. e.text end, vim.fn.getqflist())]]
+  )
+  H.eq(#qf, 1)
+  H.neq(qf[1]:find(root .. '/main/b.txt', 1, true), nil)
+  H.neq(qf[1]:find("can't clobber", 1, true), nil)
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b1')
+end
+
+T['m4']['file arguments: globs expand to every match; p4 wildcards in names are escaped'] = function()
+  setup()
+  H.eq(
+    child.lua_get([[require('perforated.p4').escape('/w/i@2x#1%*.png')]]),
+    '/w/i%402x%231%25%2A.png'
+  )
+  H.eq(
+    child.lua_get([[require('perforated.p4').escape('//depot/i%402x.png')]]),
+    '//depot/i%402x.png'
+  )
+  child.cmd('P4 edit ' .. root .. '/main/*.txt')
+  H.eq(
+    vim.wait(10000, function()
+      local o = opened()
+      return o['//depot/main/a.txt'] ~= nil and o['//depot/main/b.txt'] ~= nil
+    end, 100),
+    true
+  )
+  -- a file opened for add: move reports success (p4 answers with action "add")
+  H.write(root .. '/main/n.txt', 'new\n')
+  p4({ 'add', root .. '/main/n.txt' })
+  child.cmd('edit ' .. root .. '/main/n.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.lua([[_G.r = nil]])
+  child.lua(
+    ([[require('perforated.ops').move(0, %q, function(ok) _G.r = ok end)]]):format(
+      root .. '/main/m.txt'
+    )
+  )
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), true)
+  H.eq(opened()['//depot/main/m.txt'].action, 'add')
+  H.eq(child.api.nvim_buf_get_name(0), root .. '/main/m.txt')
+end
+
+T['m4']['a file with p4 wildcards in its name: add, attach, check out, revert'] = function()
+  setup()
+  local path = root .. '/main/icon@2x.txt'
+  H.write(path, 'px\n')
+  child.cmd('edit ' .. vim.fn.fnameescape(path))
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.lua(
+    [[require('perforated.checkout').add(require('perforated').workspace(), { vim.api.nvim_buf_get_name(0) })]]
+  )
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  p4({ 'submit', '-d', 'icon' })
+  child.lua([[require('perforated.buffer').refresh(vim.api.nvim_get_current_buf())]])
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua(
+    [[require('perforated.checkout').edit(require('perforated').workspace(), { vim.api.nvim_buf_get_name(0) })]]
+  )
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(opened()['//depot/main/icon%402x.txt'].action, 'edit')
+  child.lua(
+    [[require('perforated.checkout').revert(require('perforated').workspace(), { vim.api.nvim_buf_get_name(0) })]]
+  )
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+end
+
+T['m4']["delete changelist: another client's CL with opened files is refused, its shelf kept"] = function()
+  setup({ change = { allow_force = true } })
+  server:p4({ 'sync' }, { client = 'bob_ws', user = 'bob', cwd = bob })
+  local out = server:p4({ 'change', '-i' }, {
+    client = 'bob_ws',
+    user = 'bob',
+    cwd = bob,
+    stdin = 'Change: new\nDescription:\n\tbob work\n',
+  }).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4(
+    { 'edit', '-c', cl, bob .. '/main/b.txt' },
+    { client = 'bob_ws', user = 'bob', cwd = bob }
+  )
+  server:p4({ 'shelve', '-c', cl }, { client = 'bob_ws', user = 'bob', cwd = bob })
+  child.lua(
+    ([[_G.r = nil
+    require('perforated.ops').delete_change(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), false)
+  H.neq(p4({ 'describe', '-S', '-s', cl }):find('//depot/main/b.txt', 1, true), nil)
+end
+
 T['m4']['integrate: preview, confirm, integrate into a branch, resolve'] = function()
   setup()
   -- branch main → rel, then a fix on main to cherry-pick
