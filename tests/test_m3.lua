@@ -206,6 +206,32 @@ T['m3']['history: float, d diffs vs previous, gd describes, paging, Q loclist'] 
   )
 end
 
+T['m3']['history of a local path pages too'] = function()
+  child.lua([[require('perforated.config').set({ history = { limit = 2 } })]])
+  child.lua(
+    ([[require('perforated.views.history').open(require('perforated').workspace(), %q)]]):format(
+      root .. '/a.txt'
+    )
+  )
+  wait_text('#3')
+  H.neq(text():find('more (gn)', 1, true), nil)
+  child.type_keys('gn')
+  wait_text('initial import')
+end
+
+T['m3']['previous revision: a re-add has no previous content of its own'] = function()
+  local got = child.lua_get([[(function()
+    local h = require('perforated.history')
+    return {
+      h.previous({ depotFile = '//d/f', rev = '4', action = 'edit' }),
+      h.previous({ depotFile = '//d/f', rev = '4', action = 'add' }),
+      h.previous({ depotFile = '//d/f', rev = '1', action = 'branch',
+        from = { how = 'branch from', file = '//d/g', erev = '#7' } }),
+    }
+  end)()]])
+  H.eq(got, { { spec = '//d/f#3' }, { empty = 'added' }, { spec = '//d/g#7' } })
+end
+
 T['m3']['history presenter = quickfix'] = function()
   child.lua([[require('perforated.config').set({ history = { presenter = 'quickfix' } })]])
   child.cmd('P4 filelog')

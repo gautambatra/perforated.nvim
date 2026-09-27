@@ -25,7 +25,7 @@ local function sides(f)
     or f.action == 'branch'
     or f.action == 'move/add'
     or f.action == 'import'
-  local del = f.action == 'delete' or f.action == 'move/delete' or f.action == 'purge'
+  local del = require('perforated.history').deleted(f.action)
   if f.shelved then
     local r = tonumber(f.rev)
     local left = (add or not r or r < 1) and { empty = 'added' }
@@ -226,6 +226,7 @@ end
 --- changelists, the opened files' fstat records for workspace paths and bases).
 local function load(view, cb)
   local ws, change = view.ws, view.change
+  view.error = nil
   local function finish(rec, files, shelved, modified)
     for _, f in ipairs(files) do
       f.change, f.status = rec.change, rec.status
@@ -498,7 +499,11 @@ local function actions(view)
       run = function()
         require('perforated.views.change_editor').edit(ws, view.item.change, {
           submitted = view.item.status == 'submitted',
-          on_done = view.refresh,
+          on_done = function(saved)
+            if saved then
+              view.refresh()
+            end
+          end,
         })
       end,
     },
@@ -526,7 +531,11 @@ local function actions(view)
           and #view.data.files > 0
       end,
       run = function()
-        require('perforated.ops').submit(ws, view.item.change, function()
+        require('perforated.ops').submit(ws, view.item.change, function(ok, submitted)
+          -- The server may renumber the changelist on submit: follow it.
+          if ok and submitted then
+            view.change = tostring(submitted)
+          end
           view.refresh()
         end)
       end,

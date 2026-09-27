@@ -4,14 +4,13 @@
 --- next page (`path@<oldest-1>`), so no query is unbounded. Actions: D diff all files, C edit
 --- description (own CLs), K view changelist, y copy CL number, Q quickfix of the CL's files is left to the diff tab.
 
+local base = require('perforated.views.base')
 local cls = require('perforated.changelists')
 local keys = require('perforated.ui.keys')
 
 local M = {}
 
-local function first_line(s)
-  return vim.trim((s or ''):match('[^\n]*') or '')
-end
+local first_line = base.first_line
 
 local function node_for(c)
   local t = tonumber(c.time)
@@ -53,6 +52,8 @@ local function load_page(view)
     return
   end
   view.loading = true
+  view.gen = (view.gen or 0) + 1
+  local gen = view.gen
   if vim.api.nvim_buf_is_valid(view.buf) then
     render(view) -- show "loading…" while the page is in flight
   end
@@ -64,6 +65,9 @@ local function load_page(view)
     max = page,
     before = oldest and (tonumber(oldest.change) - 1) or nil,
   }, function(changes, err)
+    if gen ~= view.gen then
+      return -- a refresh started over while this page was loading
+    end
     view.loading = false
     if not changes then
       vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
@@ -75,6 +79,13 @@ local function load_page(view)
       render(view)
     end
   end)
+end
+
+--- Start over from the newest changelist (drops a page still in flight).
+local function reload(view)
+  view.changes, view.more, view.loading = {}, true, false
+  view.gen = (view.gen or 0) + 1
+  load_page(view)
 end
 
 local function actions(view)
@@ -103,9 +114,10 @@ local function actions(view)
       run = function(items)
         require('perforated.views.change_editor').edit(ws, items[1].change, {
           submitted = true,
-          on_done = function()
-            view.changes, view.more = {}, true
-            load_page(view)
+          on_done = function(saved)
+            if saved then
+              reload(view)
+            end
           end,
         })
       end,
@@ -213,8 +225,7 @@ local function actions(view)
       keys = { 'gr' },
       nomenu = true,
       run = function()
-        view.changes, view.more = {}, true
-        load_page(view)
+        reload(view)
       end,
     },
     {
@@ -224,7 +235,7 @@ local function actions(view)
       p4v = { '<C-w>' },
       nomenu = true,
       run = function()
-        vim.cmd('tabclose')
+        base.close(view)
       end,
     },
     {
@@ -252,26 +263,15 @@ end
 ---@param opts { user: string?, path: string?, max: integer? }?
 function M.open(ws, opts)
   opts = opts or {}
-  vim.cmd('tabnew')
-  local buf = vim.api.nvim_get_current_buf()
-  vim.bo[buf].buftype = 'nofile'
-  vim.bo[buf].bufhidden = 'wipe'
-  vim.bo[buf].swapfile = false
-  pcall(
-    vim.api.nvim_buf_set_name,
-    buf,
-    ('perforated://changes/%s'):format(opts.user or opts.path or ws:client() or '')
-  )
-  vim.wo.cursorline, vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn =
-    true, false, false, 'no'
+  local buf, win =
+    base.tab(('perforated://changes/%s'):format(opts.user or opts.path or ws:client() or ''))
   require('perforated.hl').setup()
   vim.b[buf].perforated_ws = ws.key
-  vim.b[buf].perforated_ws = ws.key
-  local view = { ws = ws, buf = buf, opts = opts, changes = {}, more = true }
+  local view = { ws = ws, buf = buf, win = win, opts = opts, changes = {}, more = true }
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = actions(view)
   keys.attach(buf, view.actions, view)
-  local footer = require('perforated.ui.footer').attach(vim.api.nvim_get_current_win())
+  local footer = require('perforated.ui.footer').attach(win)
   vim.api.nvim_create_autocmd('CursorMoved', {
     buffer = buf,
     callback = function()

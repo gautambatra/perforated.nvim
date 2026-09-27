@@ -200,9 +200,20 @@ function M.edit(ws, change, opts)
     local status = spec:match('\nStatus:%s*(%S+)') or (opts.submitted and 'submitted' or 'pending')
     local user = spec:match('\nUser:%s*(%S+)') or '?'
     local desc = cls.spec_get_description(spec)
+    -- on_done fires once: true after a save, nil when the float is dismissed.
+    local finished = false
+    local function done(saved)
+      if not finished and opts.on_done then
+        finished = true
+        opts.on_done(saved)
+      end
+    end
     open_float({
       title = ('CL %s · %s · %s'):format(change, status, user),
       lines = vim.split(desc, '\n', { plain = true }),
+      on_cancel = function()
+        done(nil)
+      end,
       on_full = function()
         M.full(ws, change, opts)
       end,
@@ -214,9 +225,7 @@ function M.edit(ws, change, opts)
             close()
             notify(('CL %s description saved'):format(change))
             remember(ws, change, new_desc)
-            if opts.on_done then
-              opts.on_done(true)
-            end
+            done(true)
             return
           end
           if submitted and config.get().change.allow_force then
@@ -231,9 +240,7 @@ function M.edit(ws, change, opts)
                   close()
                   notify(('CL %s description saved (forced)'):format(change))
                   remember(ws, change, new_desc)
-                  if opts.on_done then
-                    opts.on_done(true)
-                  end
+                  done(true)
                 else
                   notify('forced save failed: ' .. msg2, vim.log.levels.ERROR)
                 end
@@ -256,28 +263,41 @@ function M.new(ws, opts)
   if type(template) == 'function' then
     template = template(ws)
   end
-  local done = false
+  -- on_done runs once: a save in flight when the float is closed still decides the outcome.
+  local done, saving, cancelled = false, false, false
+  local function finish(cl, desc)
+    if not done then
+      done = true
+      if opts.on_done then
+        opts.on_done(cl, desc)
+      end
+    end
+  end
   open_float({
     title = 'New changelist',
     lines = template and vim.split(template, '\n', { plain = true }) or { '' },
     insert = true,
     on_save = function(desc, close)
+      saving = true
       p4.new_change(ws, desc, function(cl, err)
+        saving = false
         if not cl then
-          return notify('could not create changelist: ' .. tostring(err), vim.log.levels.ERROR)
+          notify('could not create changelist: ' .. tostring(err), vim.log.levels.ERROR)
+          if cancelled then
+            finish(nil)
+          end
+          return
         end
-        done = true
         close()
         notify('created CL ' .. cl)
         remember(ws, cl, desc)
-        if opts.on_done then
-          opts.on_done(cl, desc)
-        end
+        finish(cl, desc)
       end)
     end,
     on_cancel = function()
-      if not done and opts.on_done then
-        opts.on_done(nil)
+      cancelled = true
+      if not saving then
+        finish(nil)
       end
     end,
   })

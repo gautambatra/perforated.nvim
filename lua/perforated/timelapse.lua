@@ -36,10 +36,18 @@ function M.parse(records)
     local r = records[i]
     local d = r.data
     if d then
+      local lo, hi = tonumber(r.lower) or 0, tonumber(r.upper) or 0
+      -- A revision's last line without a newline is a whole entry too: the next record's
+      -- different range shows it isn't continued (a long line's chunks share one range).
+      if open and (lo ~= open.lo or hi ~= open.hi) then
+        n = n + 1
+        entries[n] = open
+        open = nil
+      end
       if open then
         open.text = open.text .. d
       else
-        open = { text = d, lo = tonumber(r.lower) or 0, hi = tonumber(r.upper) or 0 }
+        open = { text = d, lo = lo, hi = hi }
       end
       if d:byte(-1) == 10 then
         local t = open.text:sub(1, -2)
@@ -60,9 +68,7 @@ function M.parse(records)
   return entries
 end
 
-local function deleted(action)
-  return action == 'delete' or action == 'move/delete' or action == 'purge'
-end
+local deleted = require('perforated.history').deleted
 
 --- Load a file's time-lapse: `filelog -l` (revision metadata), then `annotate -a` of the newest
 --- revision with content.

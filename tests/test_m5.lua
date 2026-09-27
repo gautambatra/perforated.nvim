@@ -333,4 +333,49 @@ T['timelapse']['anchor: insertions above the cursor keep it on the same line'] =
   H.eq(lnum, { 3, 3, 1 })
 end
 
+T['timelapse']['parse: a line without a newline is its own entry, long lines still join'] = function()
+  child = H.child()
+  local got = child.lua_get([[(function()
+    local out = {}
+    for _, e in ipairs(require('perforated.timelapse').parse({
+      { data = 'a\n', lower = '1', upper = '2' },
+      { data = 'foo', lower = '1', upper = '1' },
+      { data = 'foo\n', lower = '2', upper = '2' },
+      { data = 'long ', lower = '2', upper = '2' },
+      { data = 'line\n', lower = '2', upper = '2' },
+    })) do
+      out[#out + 1] = ('%s %d-%d'):format(e.text, e.lo, e.hi)
+    end
+    return out
+  end)()]])
+  H.eq(got, { 'a 1-2', 'foo 1-1', 'foo 2-2', 'long line 2-2' })
+end
+
+T['timelapse']['a revision without a final newline rebuilds correctly (real p4d)'] = function()
+  server = P.new()
+  root = server.dir .. '/ws'
+  server:client('alice_ws', root)
+  server:submit_files('alice_ws', root, { ['g.txt'] = 'a\nfoo' }, 'rev 1')
+  server:p4({ 'edit', root .. '/g.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/g.txt', 'a\nfoo\nbar\n')
+  server:p4({ 'submit', '-d', 'rev 2' }, { client = 'alice_ws', cwd = root })
+  server:p4config(root, 'alice_ws')
+  child = H.child({
+    env = { P4CONFIG = '.p4config' },
+    config = { p4 = P.p4, poll = { interval = 0 }, startup_check = false },
+  })
+  child.cmd('edit ' .. root .. '/g.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua(([[
+    _G.tl = nil
+    require('perforated.timelapse').load(require('perforated').workspace(), %q, function(tl, err)
+      _G.tl, _G.err = tl or false, err
+    end)
+  ]]):format(root .. '/g.txt'))
+  wait('_G.tl ~= nil')
+  local rev = 'require("perforated.timelapse").revision(_G.tl, %d)'
+  H.eq(child.lua_get(rev:format(1)), { 'a', 'foo' })
+  H.eq(child.lua_get(rev:format(2)), { 'a', 'foo', 'bar' })
+end
+
 return T
