@@ -179,7 +179,8 @@ local function build(view, data)
     if x.change == 'default' ~= (y.change == 'default') then
       return x.change == 'default'
     end
-    return (tonumber(x.change) or 0) < (tonumber(y.change) or 0)
+    -- Default first, then the newest changelists.
+    return (tonumber(x.change) or 0) > (tonumber(y.change) or 0)
   end)
 
   local is_stale = require('perforated.status').is_stale

@@ -192,10 +192,10 @@ other layouts):
 
 - **Sync CL:** the newest changelist your workspace has synced (`p4 -c <client> changes -m1
   #have`), above the sections; `gd`, `K` and `y` work on it.
-- **Sections:** pending changelists with their files and shelved files, files needing attention
-  (stale or unresolved), workspace reconcile, and your recent submits (from any client,
-  anywhere in the depot). Reconcile is expensive on large workspaces, so it only scans when
-  you expand it (`l`), and `x` stops a running scan
+- **Sections:** pending changelists (the default changelist first, then the newest) with their
+  files and shelved files, files needing attention (stale or unresolved), workspace reconcile,
+  and your recent submits (from any client, anywhere in the depot). Reconcile is expensive on
+  large workspaces, so it only scans when you expand it (`l`), and `x` stops a running scan
   (so do `:P4 jobs` and `:P4 cancel`). To scan only the parts you care about, set
   `client_view.reconcile.paths` (e.g. `{ 'src/myteam' }`, relative to the client root; local
   or depot paths work too), or press `p` on the section to change the paths for the session.

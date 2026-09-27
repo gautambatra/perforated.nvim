@@ -208,6 +208,18 @@ T['client view']['a non-zero opened-file count uses PerforatedCount'] = function
   H.eq(groups['  (1)'], 'PerforatedCount')
 end
 
+T['client view']['Pending: default first, then the newest changelists'] = function()
+  server:p4({ 'change', '-i' }, {
+    client = 'alice_ws',
+    cwd = root,
+    stdin = 'Change: new\nDescription:\n\tNewer work\n',
+  })
+  open_view()
+  local default, newer, older =
+    goto_line('default'), goto_line('Newer work'), goto_line('Fix parser')
+  H.eq(default < newer and newer < older, true)
+end
+
 T['client view']['a slow Sync CL query does not hold back the other sections'] = function()
   -- Wrap p4 so the Sync CL query (`changes -m1 #have`) takes 3 s.
   local wrapper = server.dir .. '/slow-p4'
