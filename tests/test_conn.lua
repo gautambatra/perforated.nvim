@@ -160,4 +160,19 @@ T['auth']['cancelled prompt → offline_auth, calls fail fast with a hint'] = fu
   H.expect.no_equality(r.errors[1]:find(':P4 login', 1, true), nil)
 end
 
+T['auth']['calls queued behind a cancelled prompt do not prompt again'] = function()
+  setup({ { match = '^opened', records = AUTH_ERR } })
+  child.lua([[
+    _G.prompts = 0
+    vim.fn.inputsecret = function() _G.prompts = _G.prompts + 1; return '' end
+    _G.done = 0
+    for _ = 1, 6 do -- more than the concurrency cap: some are still queued at the prompt
+      _G.ws:run({ 'opened' }, {}, function() _G.done = _G.done + 1 end)
+    end
+  ]])
+  H.eq(H.wait(child, '_G.done == 6', 10000), true)
+  H.eq(child.lua_get('_G.prompts'), 1)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'offline_auth')
+end
+
 return T

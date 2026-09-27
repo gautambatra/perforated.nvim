@@ -78,7 +78,11 @@ local function ensure_autocmds()
     group = augroup,
     callback = function()
       for _, ws in pairs(registry) do
-        ws:_maybe_idle()
+        if ws.idle and ws:_cwd_inside() then
+          ws:_wake()
+        else
+          ws:_maybe_idle()
+        end
       end
     end,
   })
@@ -160,6 +164,7 @@ end
 ---@field probe boolean?         bypass the offline fail-fast gate
 ---@field force boolean?         bypass a paused queue group (login)
 ---@field no_auth_retry boolean?
+---@field no_observe boolean?    a local command (`p4 set`): says nothing about the connection
 ---@field cwd string?           override the working directory (connection context only)
 ---@field on_record fun(rec: table)?  streamed records (fast context; see runner)
 ---@field on_spawn fun(ctl: { cancel: fun() })?  the running process's control
@@ -207,6 +212,9 @@ function Workspace:run(args, opts, cb)
       }, done)
     end,
     cb = function(res)
+      if opts.no_observe then
+        return cb(res)
+      end
       local kind = self.conn:observe(res)
       if kind == 'auth' and not opts.no_auth_retry and epoch ~= self.conn.epoch then
         -- Started before a login that has since succeeded: the error is stale. Retry quietly
@@ -249,8 +257,15 @@ function Workspace:ensure_info(cb, priority)
   else
     -- `p4 set` is local and launches nothing, so it runs with the user's real environment
     -- (the internal environment would report our neutralised P4DIFF/P4MERGE values).
-    local opts =
-      { tagged = false, key = 'set', probe = true, priority = priority, env_mode = 'user' }
+    -- It also says nothing about the server, so its result doesn't feed the connection state.
+    local opts = {
+      tagged = false,
+      key = 'set',
+      probe = true,
+      priority = priority,
+      env_mode = 'user',
+      no_observe = true,
+    }
     self:run({ 'set', '-q' }, opts, function(res)
       if res.ok and res.stdout then
         local s = {}
@@ -336,22 +351,42 @@ end
 ---@param buf integer
 function Workspace:attach(buf)
   self.buffers[buf] = true
-  self.idle = false
+  if self.idle then
+    self:_wake()
+  end
   buf_ws[buf] = self.key
   vim.b[buf].perforated_ws = self.key
+end
+
+--- Leave the idle state. Going idle stopped the offline probe timer: restart probing, or
+--- every call would be refused as offline until `:P4 refresh`.
+function Workspace:_wake()
+  self.idle = false
+  dbg.info('workspace', '%s active again', self.key)
+  if self.conn.state == 'offline' and not self.conn.timer then
+    vim.schedule(function()
+      self.conn:probe() -- reschedules itself while the server stays unreachable
+    end)
+  end
+end
+
+--- Is Neovim's cwd inside the workspace (its anchor or client root)?
+---@return boolean
+function Workspace:_cwd_inside()
+  local cwd = normalize(vim.uv.cwd() or '/')
+  for _, root in ipairs({ self.anchor, self.root }) do
+    if root and M.is_under(root, cwd, self.icase) then
+      return true
+    end
+  end
+  return false
 end
 
 --- Free heavy state when no buffer uses the workspace and cwd is outside it. The object
 --- (and cheap state such as the sticky CL) stays registered and reactivates on demand.
 function Workspace:_maybe_idle()
-  if self.mode == 'connection' or self.idle or next(self.buffers) then
+  if self.mode == 'connection' or self.idle or next(self.buffers) or self:_cwd_inside() then
     return
-  end
-  local cwd = normalize(vim.uv.cwd() or '/')
-  for _, root in ipairs({ self.anchor, self.root }) do
-    if root and M.is_under(root, cwd, self.icase) then
-      return
-    end
   end
   self.idle = true
   dbg.info('workspace', '%s idle (no buffers, cwd outside)', self.key)

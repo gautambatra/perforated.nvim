@@ -92,8 +92,14 @@ function M.run(spec, cb)
       kill_timer:close()
       kill_timer = nil
     end
+    -- A process killed by a signal exits with code 0 (libuv reports the signal separately):
+    -- never mistake a crashed or externally killed p4 (truncated output) for a success.
+    local code = obj.code
+    if code == 0 and (obj.signal or 0) ~= 0 then
+      code = 128 + obj.signal
+    end
     local res = {
-      code = obj.code,
+      code = code,
       signal = obj.signal,
       stderr = obj.stderr or '',
       ms = (vim.uv.hrtime() - t0) / 1e6,

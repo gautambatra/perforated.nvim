@@ -157,7 +157,11 @@ function Gate.on_buf(ev)
   )
   if hit or Gate.env_client() then
     if has_p4 == nil then
-      has_p4 = vim.fn.executable(vim.tbl_get(vim.g, 'perforated', 'p4') or 'p4') == 1
+      -- setup() has loaded the config module: its options count too. Otherwise read vim.g,
+      -- so a dormant session loads nothing but the gate.
+      local config = package.loaded['perforated.config']
+      local bin = config and config.get().p4 or vim.tbl_get(vim.g, 'perforated', 'p4') or 'p4'
+      has_p4 = vim.fn.executable(bin) == 1
     end
     if not has_p4 then
       gate_log('dormant: p4 executable not found')

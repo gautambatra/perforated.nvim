@@ -51,26 +51,34 @@ end
 ---@param on_line fun(line: string)
 ---@return fun(chunk: string?) feed  call with nil at EOF to flush the remainder
 function M.line_splitter(on_line)
-  local rest = ''
+  -- Pieces of the unfinished line. Only the new chunk is searched, and a line is joined once,
+  -- so a multi-MB line (one JSON record) streamed in 64 KB reads costs linear time.
+  local parts = {}
   return function(chunk)
     if chunk == nil then
+      local rest = table.concat(parts)
+      parts = {}
       if rest ~= '' then
         on_line(rest)
-        rest = ''
       end
       return
     end
-    local data = rest .. chunk
     local start = 1
-    while true do
-      local nl = data:find('\n', start, true)
-      if not nl then
-        break
+    local nl = chunk:find('\n', 1, true)
+    while nl do
+      if parts[1] then
+        parts[#parts + 1] = chunk:sub(start, nl - 1)
+        on_line(table.concat(parts))
+        parts = {}
+      else
+        on_line(chunk:sub(start, nl - 1))
       end
-      on_line(data:sub(start, nl - 1))
       start = nl + 1
+      nl = chunk:find('\n', start, true)
     end
-    rest = data:sub(start)
+    if start <= #chunk then
+      parts[#parts + 1] = chunk:sub(start)
+    end
   end
 end
 
