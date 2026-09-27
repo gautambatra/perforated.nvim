@@ -125,26 +125,36 @@ function M.textfunc(info)
   return out
 end
 
---- Refresh the list shown in the current quickfix/location window.
-local function refresh_current()
-  local wininfo = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+--- A function refreshing the list shown in the current quickfix/location window. The list is
+--- captured now, so it still targets that list when called later (after an async op), even if
+--- focus has moved. `quiet`: lists without a producer are left alone silently.
+---@param quiet boolean?
+---@return fun()
+local function refresher(quiet)
+  local win = vim.api.nvim_get_current_win()
+  local wininfo = vim.fn.getwininfo(win)[1]
   local is_loc = wininfo and wininfo.loclist == 1
-  local get = is_loc and function(w)
-    return vim.fn.getloclist(0, w)
-  end or vim.fn.getqflist
-  local cur = get({ id = 0, title = 1 })
-  local producer = producers[cur.id]
-  if not producer then
-    return vim.notify('[perforated] this list cannot be refreshed')
-  end
-  producer(function(items)
-    local w = { id = cur.id, items = items, title = cur.title }
-    if is_loc then
-      vim.fn.setloclist(0, {}, 'r', w)
-    else
-      vim.fn.setqflist({}, 'r', w)
+  local cur = is_loc and vim.fn.getloclist(win, { id = 0, title = 1 })
+    or vim.fn.getqflist({ id = 0, title = 1 })
+  return function()
+    local producer = producers[cur.id]
+    if not producer then
+      if not quiet then
+        vim.notify('[perforated] this list cannot be refreshed')
+      end
+      return
     end
-  end)
+    producer(function(items)
+      local w = { id = cur.id, items = items, title = cur.title }
+      if is_loc then
+        if vim.api.nvim_win_is_valid(win) then
+          vim.fn.setloclist(win, {}, 'r', w)
+        end
+      else
+        vim.fn.setqflist({}, 'r', w)
+      end
+    end)
+  end
 end
 
 local function entry_under_cursor()
@@ -169,7 +179,9 @@ on_qf_buf = function(buf)
   local function map(lhs, fn, desc)
     vim.keymap.set('n', lhs, fn, { buffer = buf, nowait = true, desc = desc })
   end
-  map('gr', refresh_current, 'perforated: refresh list')
+  map('gr', function()
+    refresher()()
+  end, 'perforated: refresh list')
   -- Opened-file lists: ● changed files stand out, unchanged ones (·) are dimmed.
   vim.api.nvim_buf_call(buf, function()
     local g = require('perforated.ui.icons').glyph('modified')
@@ -199,7 +211,7 @@ on_qf_buf = function(buf)
       vim.fn.confirm(('Revert %s?'):format(vim.fn.fnamemodify(path, ':~:.')), '&Revert\n&Cancel', 2)
       == 1
     then
-      require('perforated.checkout').revert(ws, { path }, false, refresh_current)
+      require('perforated.checkout').revert(ws, { path }, false, refresher(true))
     end
   end, 'perforated: revert entry')
   map('M', function()
@@ -207,10 +219,11 @@ on_qf_buf = function(buf)
     if not ws then
       return vim.notify('[perforated] no workspace file under cursor')
     end
+    local refresh = refresher(true)
     require('perforated.checkout').pick_change(ws, function(cl)
       if cl then
         require('perforated.changelists').reopen(ws, { path }, cl, function()
-          refresh_current()
+          refresh()
         end)
       end
     end)
@@ -220,8 +233,9 @@ on_qf_buf = function(buf)
     if not ws then
       return vim.notify('[perforated] no workspace file under cursor')
     end
+    local refresh = refresher(true)
     require('perforated.resolve').run(ws, { path }, function()
-      refresh_current()
+      refresh()
     end)
   end, 'perforated: resolve entry')
   map('d', function()

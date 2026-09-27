@@ -193,6 +193,54 @@ T['client view']['M moves marked files to another changelist'] = function()
   H.eq(o['//depot/c.txt'], '2')
 end
 
+T['client view']['marks inside a collapsed changelist still apply'] = function()
+  open_view()
+  child.lua([[vim.ui.select = function(items, _, cb)
+    for _, it in ipairs(items) do if it.change == '2' then return cb(it) end end
+  end]])
+  goto_line('b.txt')
+  child.type_keys('m', 'h') -- mark, then collapse the default CL (the cursor lands on it)
+  H.eq(has_line('b.txt'), false)
+  -- M (a file action) runs on the hidden marked file, not on the changelist under the cursor.
+  child.type_keys('M')
+  H.eq(H.wait(child, 'false', 1500), false)
+  local o = opened()
+  H.eq(o['//depot/b.txt'], '2')
+  H.eq(o['//depot/c.txt'], 'default')
+end
+
+T['client view'][':P4 from another tab reuses the view; changes made there refresh it'] = function()
+  open_view()
+  child.cmd('tabprev')
+  child.cmd('P4')
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+  H.eq(child.api.nvim_get_current_buf(), child.lua_get(view_expr(root) .. '.buf'))
+  child.cmd('tabprev')
+  child.lua(
+    ("require('perforated.checkout').revert(require('perforated').workspace(), { %q })"):format(
+      root .. '/b.txt'
+    )
+  )
+  wait(
+    ('not table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("b.txt", 1, true)'):format(
+      view_expr(root)
+    )
+  )
+end
+
+T['client view']['the footer follows the view buffer, not its window'] = function()
+  open_view()
+  local floats = [[#vim.tbl_filter(function(w)
+    return vim.api.nvim_win_get_config(w).relative ~= ''
+  end, vim.api.nvim_tabpage_list_wins(0))]]
+  H.eq(child.lua_get(floats), 1)
+  child.cmd('buffer ' .. root .. '/d.txt')
+  H.eq(child.lua_get(floats), 0)
+  child.cmd('doautocmd VimResized') -- used to fail: the footer outlived its buffer
+  child.cmd('P4')
+  wait(floats .. ' == 1')
+end
+
 T['client view']['c creates a changelist from the description editor'] = function()
   open_view()
   child.type_keys('c')

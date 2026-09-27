@@ -137,7 +137,7 @@ local function hunk_items(path, hunks, base, cur, bufnr)
       sample = '+ ' .. vim.trim(cur[h.b_start] or '')
     end
     items[#items + 1] = {
-      filename = bufnr and nil or path,
+      filename = not bufnr and path or nil,
       bufnr = bufnr,
       lnum = top,
       col = 1,

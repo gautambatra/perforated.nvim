@@ -30,8 +30,7 @@ function M.attach(win)
     group = group,
     pattern = tostring(win),
     callback = function()
-      self:close()
-      pcall(vim.api.nvim_del_augroup_by_id, group)
+      self:detach()
     end,
   })
   -- Hide while another tab is shown; floats belong to one tab anyway, but re-place on return.
@@ -46,8 +45,8 @@ function M.attach(win)
 end
 
 function Footer:place()
-  if not vim.api.nvim_win_is_valid(self.win) then
-    return self:close()
+  if not self:alive() then
+    return self:detach()
   end
   local width = vim.api.nvim_win_get_width(self.win)
   local height = vim.api.nvim_win_get_height(self.win)
@@ -79,19 +78,38 @@ function Footer:set(chunks)
     return
   end
   local text, marks, col = {}, {}, 0
+  local sig = {} -- text and highlights: unchanged content is not redrawn (cursor moves)
   for _, c in ipairs(chunks) do
     text[#text + 1] = c[1]
+    sig[#sig + 1] = c[1] .. '\0' .. (c[2] or '')
     if c[2] then
       marks[#marks + 1] = { col, col + #c[1], c[2] }
     end
     col = col + #c[1]
   end
+  local key = table.concat(sig, '\1')
+  if key == self.last and self.fwin and vim.api.nvim_win_is_valid(self.fwin) then
+    return
+  end
+  self.last = key
   vim.api.nvim_buf_set_lines(self.fbuf, 0, -1, false, { table.concat(text) })
   vim.api.nvim_buf_clear_namespace(self.fbuf, ns, 0, -1)
   for _, m in ipairs(marks) do
     vim.api.nvim_buf_set_extmark(self.fbuf, ns, 0, m[1], { end_col = m[2], hl_group = m[3] })
   end
   self:place()
+end
+
+--- Is the footer still usable (its window and buffer exist)?
+---@return boolean
+function Footer:alive()
+  return vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_buf_is_valid(self.fbuf)
+end
+
+--- Close the float and stop following the window (for good).
+function Footer:detach()
+  self:close()
+  pcall(vim.api.nvim_del_augroup_by_id, self.group)
 end
 
 function Footer:close()

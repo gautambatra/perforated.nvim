@@ -178,6 +178,7 @@ local function build(view, data)
     return (tonumber(x.change) or 0) < (tonumber(y.change) or 0)
   end)
 
+  local is_stale = require('perforated.status').is_stale
   local pending_children = {}
   local attention = {}
   for _, key in ipairs(order) do
@@ -191,14 +192,15 @@ local function build(view, data)
       local nstale, nunres = 0, 0
       for _, f in ipairs(s.files) do
         children[#children + 1] = file_node(view, f, 'f:' .. key .. ':')
-        if require('perforated.status').is_stale(f) then
+        local stale = is_stale(f)
+        if stale then
           nstale = nstale + 1
         end
         if f.unresolved then
           nunres = nunres + 1
         end
         if f.client == nil or f.client == mine then
-          if require('perforated.status').is_stale(f) or f.unresolved then
+          if stale or f.unresolved then
             attention[#attention + 1] = f
           end
         end
@@ -269,12 +271,21 @@ local function build(view, data)
       }
     end
   end
+  local npending = #pending_children
+  if data.err and data.err ~= '' then
+    -- A failed query must not look like an empty workspace.
+    table.insert(pending_children, 1, {
+      id = 'err',
+      kind = 'loading',
+      text = { { 'refresh failed: ' .. data.err, 'ErrorMsg' } },
+    })
+  end
   roots[#roots + 1] = {
     id = 'sec:pending',
     kind = 'section',
     text = {
       { 'Pending', 'PerforatedSection' },
-      { ('  (%d)'):format(#pending_children), 'PerforatedDim' },
+      { ('  (%d)'):format(npending), 'PerforatedDim' },
     },
     children = pending_children,
   }
@@ -297,6 +308,7 @@ local function build(view, data)
   end
 
   -- Workspace reconcile (lazy)
+  local scope = M.reconcile_scope(view.ws)
   local rec_children
   local label
   if view.reconcile.state == 'done' then
@@ -333,7 +345,7 @@ local function build(view, data)
         text = {
           {
             'expand to scan '
-              .. (#M.reconcile_scope(view.ws) > 0 and 'these paths' or 'the whole client')
+              .. (#scope > 0 and 'these paths' or 'the whole client')
               .. ' · p sets the paths',
             'PerforatedDim',
           },
@@ -348,12 +360,7 @@ local function build(view, data)
     open = false,
     text = {
       { 'Workspace reconcile', 'PerforatedSection' },
-      {
-        #M.reconcile_scope(view.ws) > 0
-            and ('  · ' .. table.concat(M.reconcile_scope(view.ws), ' '))
-          or '',
-        'PerforatedHeader',
-      },
+      { #scope > 0 and ('  · ' .. table.concat(scope, ' ')) or '', 'PerforatedHeader' },
       { label, 'PerforatedDim' },
     },
     children = rec_children,
@@ -407,6 +414,9 @@ end
 --- Re-query everything (coalesced: one refresh in flight, at most one queued).
 ---@param view table
 function M.refresh(view)
+  if not vim.api.nvim_buf_is_valid(view.buf) then
+    return
+  end
   if view.loading then
     view.again = true
     return
@@ -460,6 +470,9 @@ function M.refresh(view)
       data.err = data.err or err
       done()
     end, view.scope)
+    local function failed(res)
+      data.err = data.err or res.errors[1] or vim.trim(res.stderr or '')
+    end
     cls.have_change(ws, function(c)
       data.have = c or false
       done()
@@ -484,8 +497,11 @@ function M.refresh(view)
         end
         done()
       end
-      p4.fstat_opened(ws, {}, function(r)
+      p4.fstat_opened(ws, {}, function(r, res)
         recs = r
+        if not r then
+          failed(res)
+        end
         merged()
       end)
       cls.opened_by_user(ws, function(r)
@@ -493,16 +509,20 @@ function M.refresh(view)
         merged()
       end)
     else
-      p4.fstat_opened(ws, {}, function(recs)
+      p4.fstat_opened(ws, {}, function(recs, res)
         data.opened = recs or {}
+        if not recs then
+          failed(res)
+        end
         done()
       end)
     end
     cls.submitted_changes(ws, {
       user = ws:user(),
       max = require('perforated.config').get().client_view.submitted_limit,
-    }, function(changes)
+    }, function(changes, err)
       data.submitted = changes or {}
+      data.err = data.err or err
       done()
     end)
   end)
@@ -615,10 +635,22 @@ local function files_of(items)
   return out
 end
 
-local function after(view)
-  return function()
-    M.refresh(view)
+--- Shelf / shelved-file nodes grouped by changelist: change → depot files, or false for the
+--- whole shelf.
+---@param nodes perforated.TreeNode[]
+---@return table<string, string[]|false>
+local function shelved_by_change(nodes)
+  local out = {}
+  for _, n in ipairs(nodes) do
+    local change = n.item.change
+    if n.kind == 'shelf' then
+      out[change] = false
+    elseif out[change] ~= false then
+      out[change] = out[change] or {}
+      table.insert(out[change], n.item.depotFile)
+    end
   end
+  return out
 end
 
 --- Open a workspace file for diffing: load its buffer, then :P4 diff.
@@ -835,7 +867,7 @@ local function actions(view)
       end,
       run = function(items, ctx)
         local ops = require('perforated.ops')
-        if ctx.node.kind == 'change' and #ctx.nodes == 1 then
+        if ctx.nodes[1].kind == 'change' and #ctx.nodes == 1 then
           return ops.shelve(ws, items[1].change, nil)
         end
         local by_cl = {}
@@ -857,15 +889,11 @@ local function actions(view)
       kinds = { shelf = true, shelved_file = true },
       multi = true,
       footer = 41,
-      run = function(items, ctx)
-        local change = items[1].change
-        local files = nil
-        if ctx.node.kind == 'shelved_file' then
-          files = vim.tbl_map(function(it)
-            return it.depotFile
-          end, items)
+      run = function(_, ctx)
+        local ops = require('perforated.ops')
+        for change, files in pairs(shelved_by_change(ctx.nodes)) do
+          ops.unshelve(ws, change, files or nil, nil)
         end
-        require('perforated.ops').unshelve(ws, change, files, nil)
         view.tree.marks = {}
       end,
     },
@@ -875,14 +903,11 @@ local function actions(view)
       keys = { 'z' },
       kinds = { shelf = true, shelved_file = true },
       multi = true,
-      run = function(items, ctx)
-        local files = nil
-        if ctx.node.kind == 'shelved_file' then
-          files = vim.tbl_map(function(it)
-            return it.depotFile
-          end, items)
+      run = function(_, ctx)
+        local ops = require('perforated.ops')
+        for change, files in pairs(shelved_by_change(ctx.nodes)) do
+          ops.delete_shelved(ws, change, files or nil)
         end
-        require('perforated.ops').delete_shelved(ws, items[1].change, files)
         view.tree.marks = {}
       end,
     },
@@ -922,7 +947,7 @@ local function actions(view)
       end,
       run = function(items, ctx)
         local paths
-        if ctx.node.kind ~= 'section' then
+        if ctx.nodes[1].kind ~= 'section' then
           paths = paths_of(vim.tbl_filter(function(f)
             return f.unresolved ~= nil
           end, files_of(items)))
@@ -1160,7 +1185,7 @@ local function actions(view)
         then
           return
         end
-        require('perforated.checkout').revert(ws, paths_of(files), false, after(view))
+        require('perforated.checkout').revert(ws, paths_of(files), false)
         view.tree.marks = {}
       end,
     },
@@ -1171,7 +1196,7 @@ local function actions(view)
       kinds = { opened_file = true },
       multi = true,
       run = function(items)
-        require('perforated.checkout').revert(ws, paths_of(files_of(items)), true, after(view))
+        require('perforated.checkout').revert(ws, paths_of(files_of(items)), true)
         view.tree.marks = {}
       end,
     },
@@ -1182,7 +1207,7 @@ local function actions(view)
       kinds = { change = true },
       multi = true,
       run = function(items)
-        require('perforated.checkout').revert(ws, paths_of(files_of(items)), true, after(view))
+        require('perforated.checkout').revert(ws, paths_of(files_of(items)), true)
         view.tree.marks = {}
       end,
     },
@@ -1239,7 +1264,7 @@ local function actions(view)
       p4v = { '<C-n>' },
       footer = 50,
       run = function()
-        require('perforated.views.change_editor').new(ws, { on_done = after(view) })
+        require('perforated.views.change_editor').new(ws)
       end,
     },
     {
@@ -1267,7 +1292,6 @@ local function actions(view)
       run = function(items, ctx)
         require('perforated.views.change_editor').edit(ws, items[1].change, {
           submitted = ctx.node and (ctx.node.kind == 'submitted' or ctx.node.kind == 'have_cl'),
-          on_done = after(view),
         })
       end,
     },
@@ -1285,17 +1309,28 @@ local function actions(view)
         for _, it in ipairs(items) do
           table.insert(by[it.action] or by.edit, it.clientFile)
         end
+        -- Each op announces PerforatedChanged, which refreshes the view (once, coalesced).
         local co = require('perforated.checkout')
         if #by.add > 0 then
-          co.add(ws, by.add, ws.sticky_cl, after(view))
+          co.add(ws, by.add, ws.sticky_cl)
         end
         if #by.edit > 0 then
-          co.edit(ws, by.edit, ws.sticky_cl, after(view))
+          co.edit(ws, by.edit, ws.sticky_cl)
         end
         if #by.delete > 0 then
-          ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = by.delete }, after(view))
+          ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = by.delete }, function()
+            co.changed(ws)
+          end)
         end
-        view.reconcile = { state = 'idle' }
+        -- The applied files leave the section; the rest of the scan stays.
+        local applied = {}
+        for _, it in ipairs(items) do
+          applied[it.clientFile] = true
+        end
+        view.reconcile.recs = vim.tbl_filter(function(r)
+          return not applied[r.clientFile]
+        end, view.reconcile.recs or {})
+        view.tree.marks = {}
       end,
     },
     {
@@ -1323,12 +1358,8 @@ local function actions(view)
           and view.reconcile.state ~= 'running'
       end,
       run = function()
+        view.tree.folds['sec:reconcile'] = true
         M.scan_reconcile(view)
-        local sec = view.tree.by_id['sec:reconcile']
-        if sec then
-          view.tree.folds[sec.id] = true
-          view.tree:render()
-        end
       end,
     },
     {
@@ -1350,12 +1381,8 @@ local function actions(view)
             return
           end
           ws.reconcile_scope = vim.split(vim.trim(input), '%s+', { trimempty = true })
+          view.tree.folds['sec:reconcile'] = true
           M.scan_reconcile(view)
-          local sec = view.tree.by_id['sec:reconcile']
-          if sec then
-            view.tree.folds[sec.id] = true
-            view.tree:render()
-          end
         end)
       end,
     },
@@ -1386,10 +1413,11 @@ end
 --- Send nodes (files, CLs, sections) to the quickfix / location list.
 function M.to_qf(view, _, ctx, loclist)
   local qf = require('perforated.ui.qf')
-  local recs = {}
+  local recs, shelved = {}, {}
   local function add(node)
     if node.item and (node.item.clientFile or node.item.depotFile) and not node.children then
       recs[#recs + 1] = node.item
+      shelved[node.item] = node.kind == 'shelved_file' or nil
     end
     for _, ch in ipairs(node.children or {}) do
       add(ch)
@@ -1400,7 +1428,8 @@ function M.to_qf(view, _, ctx, loclist)
   end
   local qitems = {}
   for _, r in ipairs(recs) do
-    if r.clientFile and r.clientFile:match('^/') then
+    -- Local path; other clients' files (`//client/path`) and shelved files open from the depot.
+    if r.clientFile and r.clientFile:match('^/[^/]') then
       qitems[#qitems + 1] = qf.item(
         r.clientFile,
         ('%-10s %s'):format(r.action or '', r.change and ('CL ' .. r.change) or ''),
@@ -1410,6 +1439,13 @@ function M.to_qf(view, _, ctx, loclist)
           action = r.action,
           kind = 'client_view',
         }
+      )
+    elseif not shelved[r] then
+      local spec = r.haveRev and (r.depotFile .. '#' .. r.haveRev) or r.depotFile
+      qitems[#qitems + 1] = qf.item(
+        'perforated://' .. spec,
+        ('%-10s %s'):format(r.action or '', r.change and ('CL ' .. r.change) or ''),
+        { depotFile = r.depotFile, change = r.change, action = r.action, kind = 'depot' }
       )
     else
       local spec = r.change and (r.depotFile .. '@=' .. r.change) or r.depotFile
@@ -1437,10 +1473,42 @@ end
 -- Window management
 -- -------------------------------------------------------------------------------------------
 
+--- The window showing the view: the current one if it does, else the one it was opened in,
+--- else any (in any tab).
+---@return integer?
+local function view_win(view)
+  local cur = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(cur) == view.buf then
+    return cur
+  end
+  if
+    view.win
+    and vim.api.nvim_win_is_valid(view.win)
+    and vim.api.nvim_win_get_buf(view.win) == view.buf
+  then
+    return view.win
+  end
+  return vim.fn.win_findbuf(view.buf)[1]
+end
+
 function M.update_footer(view)
   if view.footer then
-    view.footer:set(keys.footer(view.actions, view.tree:node_at()))
+    -- The view's own cursor: a refresh may finish while another window is current.
+    local win = view_win(view)
+    local row = win and vim.api.nvim_win_get_cursor(win)[1]
+    view.footer:set(keys.footer(view.actions, row and view.tree:node_at(row)))
   end
+end
+
+--- (Re)attach the key footer to the view's window.
+local function attach_footer(view, win)
+  if view.footer then
+    if view.footer.win == win and view.footer:alive() then
+      return
+    end
+    view.footer:detach()
+  end
+  view.footer = require('perforated.ui.footer').attach(win)
 end
 
 --- Open a file from the view: in the window the user came from (previous tab when the view
@@ -1460,13 +1528,14 @@ end
 
 function M.close(view)
   if view.footer then
-    view.footer:close()
+    view.footer:detach()
+    view.footer = nil
   end
-  local win = vim.fn.bufwinid(view.buf)
-  if view.kind == 'tab' and win ~= -1 and #vim.api.nvim_list_tabpages() > 1 then
+  local win = view_win(view)
+  if view.kind == 'tab' and win and #vim.api.nvim_list_tabpages() > 1 then
     local tab = vim.api.nvim_win_get_tabpage(win)
     pcall(vim.cmd, 'tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
-  elseif win ~= -1 and #vim.api.nvim_list_wins() > 1 then
+  elseif win and #vim.api.nvim_list_wins() > 1 then
     pcall(vim.api.nvim_win_close, win, true)
   else
     vim.cmd('enew')
@@ -1514,15 +1583,19 @@ function M.open(ws, opts)
   local origin = vim.api.nvim_get_current_win()
   local view = views[ws.key]
   if view and vim.api.nvim_buf_is_valid(view.buf) then
-    local win = vim.fn.bufwinid(view.buf)
-    if win ~= -1 then
+    local win = view_win(view)
+    if win then
       vim.api.nvim_set_current_win(win)
+      view.win = win
     else
       view.kind = kind
       view.win = show(view.buf, kind)
-      view.footer = require('perforated.ui.footer').attach(view.win)
     end
-    view.origin_win = origin
+    attach_footer(view, view.win)
+    -- `:P4` typed inside the view keeps the window files were opened from.
+    if vim.api.nvim_win_get_buf(origin) ~= view.buf then
+      view.origin_win = origin
+    end
     M.refresh(view)
     return view
   end
@@ -1559,7 +1632,7 @@ function M.open(ws, opts)
   vim.wo[view.win].relativenumber = false
   vim.wo[view.win].signcolumn = 'no'
   vim.wo[view.win].foldcolumn = '0'
-  view.footer = require('perforated.ui.footer').attach(view.win)
+  attach_footer(view, view.win)
   keys.attach(buf, view.actions, view)
 
   -- Skeleton first (instant), then data.
@@ -1587,7 +1660,8 @@ function M.open(ws, opts)
     group = group,
     pattern = 'PerforatedChanged',
     callback = function(ev)
-      if (ev.data or {}).ws ~= ws.key or vim.fn.bufwinid(buf) == -1 or pending_refresh then
+      -- Visible in any tab (the default kind gives the view its own tab).
+      if (ev.data or {}).ws ~= ws.key or #vim.fn.win_findbuf(buf) == 0 or pending_refresh then
         return
       end
       pending_refresh = true
@@ -1626,9 +1700,33 @@ function M.open(ws, opts)
     callback = function()
       views[ws.key] = nil
       if view.footer then
-        view.footer:close()
+        view.footer:detach()
+      end
+      if view.reconcile.state == 'running' then
+        require('perforated.jobs').cancel(view.reconcile.job)
       end
       pcall(vim.api.nvim_del_augroup_by_id, group)
+    end,
+  })
+  -- The footer belongs to the view, not the window: drop it when another buffer takes the
+  -- window, restore it when the view comes back.
+  vim.api.nvim_create_autocmd('BufWinLeave', {
+    group = group,
+    buffer = buf,
+    callback = function()
+      if view.footer then
+        view.footer:detach()
+        view.footer = nil
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd('BufWinEnter', {
+    group = group,
+    buffer = buf,
+    callback = function()
+      view.win = vim.api.nvim_get_current_win()
+      attach_footer(view, view.win)
+      M.update_footer(view)
     end,
   })
   M.refresh(view)

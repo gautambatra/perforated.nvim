@@ -100,6 +100,49 @@ function Tree:set(roots)
   self:render()
 end
 
+--- A function building one row's text and highlights (prefixes are cached per call).
+---@return fun(node: perforated.TreeNode, open: boolean): string, integer[]
+function Tree:_liner()
+  local g = glyphs()
+  -- Only a handful of distinct prefixes exist (depth × fold state × mark): build each once.
+  local prefixes = {}
+  local function prefix_for(depth, state, marked)
+    local k = depth * 8 + state * 2 + (marked and 1 or 0)
+    local p = prefixes[k]
+    if not p then
+      local glyph = state == 0 and g.leaf or (state == 1 and g.open or g.closed)
+      p = ('  '):rep(depth) .. glyph .. (marked and g.mark or '')
+      prefixes[k] = p
+    end
+    return p
+  end
+  local parts = {} -- scratch, reused for every row
+  return function(node, open)
+    local marked = self.marks[node.id]
+    local state = node.children ~= nil and (open and 1 or 2) or 0
+    local prefix = prefix_for(node.depth, state, marked)
+    local np, col = 1, #prefix
+    parts[1] = prefix
+    local hls, nh = {}, 0
+    if marked then
+      hls[1], hls[2], hls[3] = #prefix - #g.mark, #prefix, 'PerforatedMark'
+      nh = 3
+    end
+    for _, chunk in ipairs(node.text) do
+      local t = chunk[1] or ''
+      np = np + 1
+      parts[np] = t
+      local len = #t
+      if chunk[2] and len > 0 then
+        hls[nh + 1], hls[nh + 2], hls[nh + 3] = col, col + len, chunk[2]
+        nh = nh + 3
+      end
+      col = col + len
+    end
+    return table.concat(parts, '', 1, np), hls
+  end
+end
+
 --- Render visible nodes into the buffer.
 function Tree:render()
   local buf = self.buf
@@ -114,57 +157,33 @@ function Tree:render()
     keep[win] = { id = node and node.id, row = row }
   end
 
-  local g = glyphs()
-  -- Only a handful of distinct prefixes exist (depth × fold state × mark): build each once.
-  local prefixes = {}
-  local function prefix_for(depth, state, marked)
-    local k = depth * 8 + state * 2 + (marked and 1 or 0)
-    local p = prefixes[k]
-    if not p then
-      local glyph = state == 0 and g.leaf or (state == 1 and g.open or g.closed)
-      p = ('  '):rep(depth) .. glyph .. (marked and g.mark or '')
-      prefixes[k] = p
-    end
-    return p
-  end
   local lines, row_hls, rows, by_id, row_by_id = {}, {}, {}, {}, {}
-  local parts = {} -- scratch, reused for every row
-  local function walk(nodes, depth, parent)
+  -- Index every node, not only the visible ones: marks inside collapsed nodes still count.
+  local function index(nodes, depth, parent)
     for _, node in ipairs(nodes) do
       node.depth, node.parent = depth, parent
       by_id[node.id] = node
-      local has_children = node.children ~= nil
-      local open = has_children and self:is_open(node)
-      local marked = self.marks[node.id]
-      local prefix = prefix_for(depth, has_children and (open and 1 or 2) or 0, marked)
-      local np, col = 1, #prefix
-      parts[1] = prefix
-      local hls, nh = {}, 0
-      if marked then
-        hls[1], hls[2], hls[3] = #prefix - #g.mark, #prefix, 'PerforatedMark'
-        nh = 3
-      end
-      for _, chunk in ipairs(node.text) do
-        local t = chunk[1] or ''
-        np = np + 1
-        parts[np] = t
-        local len = #t
-        if chunk[2] and len > 0 then
-          hls[nh + 1], hls[nh + 2], hls[nh + 3] = col, col + len, chunk[2]
-          nh = nh + 3
-        end
-        col = col + len
-      end
-      row_hls[#lines] = hls -- 0-based row of the line about to be added
-      lines[#lines + 1] = table.concat(parts, '', 1, np)
-      rows[#lines] = node
-      row_by_id[node.id] = #lines
-      if open then
-        walk(node.children, depth + 1, node)
+      if node.children then
+        index(node.children, depth + 1, node)
       end
     end
   end
-  walk(self.roots, 0, nil)
+  index(self.roots, 0, nil)
+  local line_of = self:_liner()
+  local function walk(nodes)
+    for _, node in ipairs(nodes) do
+      local open = node.children ~= nil and self:is_open(node)
+      local line, hls = line_of(node, open)
+      row_hls[#lines] = hls -- 0-based row of the line about to be added
+      lines[#lines + 1] = line
+      rows[#lines] = node
+      row_by_id[node.id] = #lines
+      if open then
+        walk(node.children)
+      end
+    end
+  end
+  walk(self.roots)
   if #lines == 0 then
     lines = { '' }
   end
@@ -202,9 +221,8 @@ function Tree:open(node)
   if not node.children then
     return
   end
-  local first = self.folds[node.id] == nil and node.open == false
   self.folds[node.id] = true
-  if node.on_open and (first or not node.loaded) then
+  if node.on_open and not node.loaded then
     node.loaded = true
     node.on_open(node)
   end
@@ -289,7 +307,15 @@ function Tree:mark(on)
     on = not self.marks[node.id]
   end
   self.marks[node.id] = on or nil
-  self:render()
+  -- Only the mark glyph changes: rewrite that row alone rather than the whole buffer.
+  local row = self:row_of(node.id)
+  local line, hls = self:_liner()(node, node.children ~= nil and self:is_open(node))
+  self.row_hls[row - 1] = hls
+  local buf = self.buf
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, row - 1, row, false, { line })
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].modified = false
 end
 
 --- Marked nodes that are still present.
