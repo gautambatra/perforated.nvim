@@ -262,8 +262,10 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   -- g@ on a submitted changelist in the client view: the workspace goes back to CL 1
   child.lua([[vim.fn.confirm = function() return 1 end]])
   child.cmd('P4')
+  -- Sections draw as their queries answer: wait for the Sync CL and Recent submitted.
   wait(
-    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Sync CL: 2', 1, true) ~= nil]]
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Sync CL: 2', 1, true) ~= nil
+      and table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('\n +CL 1 ') ~= nil]]
   )
   local row
   for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do

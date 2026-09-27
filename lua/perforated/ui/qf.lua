@@ -214,7 +214,7 @@ on_qf_buf = function(buf)
       require('perforated.checkout').revert(ws, { path }, false, refresher(true))
     end
   end, 'perforated: revert entry')
-  map('M', function()
+  map('gm', function()
     local ws, path = entry_ws()
     if not ws then
       return vim.notify('[perforated] no workspace file under cursor')

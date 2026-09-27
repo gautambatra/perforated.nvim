@@ -73,6 +73,7 @@ function M.open(ws, side, lnum)
   else
     return
   end
+  require('perforated.views.base').code_win(vim.api.nvim_get_current_win())
   if lnum then
     pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
   end

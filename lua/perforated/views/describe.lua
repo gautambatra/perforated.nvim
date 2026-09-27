@@ -447,7 +447,7 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'L' },
+      keys = { 'gL' },
       p4v = { '<C-t>' },
       kinds = FILE,
       footer = 13,
@@ -482,6 +482,7 @@ local function actions(view)
           require('perforated.views.annotate').open_spec(ws, right.spec)
         elseif right and right.path then
           vim.cmd('tabedit ' .. vim.fn.fnameescape(right.path))
+          require('perforated.views.base').code_win(vim.api.nvim_get_current_win())
           require('perforated.views.annotate').open_buf(0)
         end
       end,

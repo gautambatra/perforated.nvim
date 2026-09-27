@@ -212,6 +212,7 @@ function M.pair(ws, left, right, info)
   vim.cmd('tabnew')
   local scratch = vim.api.nvim_get_current_buf()
   local rwin = vim.api.nvim_get_current_win()
+  require('perforated.views.base').code_win(rwin) -- the left side (vnew) copies it
   vim.api.nvim_win_set_buf(rwin, rbuf)
   if vim.api.nvim_buf_is_valid(scratch) and scratch ~= rbuf then
     pcall(vim.api.nvim_buf_delete, scratch, { force = true })

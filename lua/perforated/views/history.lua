@@ -1,4 +1,4 @@
---- File history (`:P4 filelog`, `L`, `<C-t>`): one `filelog -l -i -m N` call per page.
+--- File history (`:P4 filelog`, `gL`, `<C-t>`): one `filelog -l -i -m N` call per page.
 ---
 --- Presenters (`history.presenter`): 'float' (default), 'picker' or 'quickfix' (location list of
 --- `perforated://file#rev` entries). `<CR>` on a revision opens its action menu: diff vs the

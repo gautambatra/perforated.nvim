@@ -220,7 +220,7 @@ T['timelapse']['slider: handles, clicks, diff and range modes'] = function()
   H.eq(table.concat(child.api.nvim_buf_get_lines(dbuf, 0, -1, false), '\n') .. '\n', contents[29])
   H.eq(child.lua_get('vim.wo[' .. V .. '.dwin].diff'), true)
   H.eq(child.wo.diff, true)
-  child.type_keys('H') -- ◆ back to #28
+  child.type_keys('[a') -- ◆ back to #28
   H.eq(table.concat(child.api.nvim_buf_get_lines(dbuf, 0, -1, false), '\n') .. '\n', contents[28])
   H.neq(info():find('Comparing: ◆ #28 (CL 28) → ● #30 (CL 30)', 1, true), nil)
   H.neq(slider_lines()[1]:find('◆', 1, true), nil)

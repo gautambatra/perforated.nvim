@@ -17,6 +17,16 @@ local function win_opts(win)
   vim.wo[win].signcolumn, vim.wo[win].wrap, vim.wo[win].foldcolumn = 'no', false, '0'
 end
 
+--- A window that shows code (a file, a revision, a diff side) follows the user's global
+--- line-number settings. New tabs and splits copy the options of the window they were opened
+--- from, which is often a plugin view with line numbers off.
+---@param win integer
+function M.code_win(win)
+  if vim.api.nvim_win_is_valid(win) then
+    vim.wo[win].number, vim.wo[win].relativenumber = vim.go.number, vim.go.relativenumber
+  end
+end
+
 --- A view buffer in a new tab.
 ---@param name string
 ---@return integer buf, integer win

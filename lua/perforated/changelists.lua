@@ -20,6 +20,30 @@ function M.opened_by_user(ws, cb)
   end)
 end
 
+--- The user's clients (`clients -u`), sorted by name: { client, Root, Host, Stream, … }.
+---@param ws perforated.Workspace
+---@param cb fun(clients: table[]?, err: string?)
+function M.clients(ws, cb)
+  local user = ws:user()
+  if not user then
+    return vim.schedule(function()
+      cb(nil, 'unknown user')
+    end)
+  end
+  ws:run({ 'clients', '-u', user }, {}, function(res)
+    if #res.errors > 0 or (not res.ok and #res.records == 0) then
+      return cb(nil, res.errors[1] or vim.trim(res.stderr))
+    end
+    local out = vim.tbl_filter(function(r)
+      return r.client ~= nil
+    end, res.records)
+    table.sort(out, function(a, b)
+      return a.client < b.client
+    end)
+    cb(out)
+  end)
+end
+
 --- Shelved files of several changelists in one call (`describe -S -s cl…`).
 ---@param ws perforated.Workspace
 ---@param changes string[]

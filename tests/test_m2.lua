@@ -113,6 +113,99 @@ T['client view'] = MiniTest.new_set({
   },
 })
 
+T['client view']['W switches to another of your clients in the same window'] = function()
+  local root2 = server.dir .. '/ws2'
+  server:client('alice_other', root2)
+  server:p4({ 'sync' }, { client = 'alice_other', cwd = root2 })
+  server:p4({ 'change', '-i' }, {
+    client = 'alice_other',
+    cwd = root2,
+    stdin = 'Change: new\nClient: alice_other\nDescription:\n\tOther work\n',
+  })
+  open_view()
+  local win = child.api.nvim_get_current_win()
+  child.lua([[vim.ui.select = function(items, _, cb)
+    for _, it in ipairs(items) do if it.client == 'alice_other' then return cb(it) end end
+  end]])
+  child.type_keys('W')
+  wait([[(function()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('Other work', 1, true) then return true end
+    end
+  end)()]])
+  H.eq(child.api.nvim_get_current_win(), win)
+  H.eq(has_line('Client alice_other'), true)
+  H.eq(has_line('Fix parser'), false)
+  -- The file buffers keep their own workspace.
+  H.eq(
+    child.lua_get(
+      [[require('perforated').workspace(vim.fn.bufnr(...)):client()]],
+      { root .. '/d.txt' }
+    ),
+    'alice_ws'
+  )
+  -- And back.
+  child.lua([[vim.ui.select = function(items, _, cb)
+    for _, it in ipairs(items) do if it.client == 'alice_ws' then return cb(it) end end
+  end]])
+  child.type_keys('W')
+  wait([[(function()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('Fix parser', 1, true) then return true end
+    end
+  end)()]])
+  H.eq(has_line('Client alice_ws'), true)
+end
+
+T['client view']['W keeps the client and shows p4 message when the switch fails'] = function()
+  local spec = server:p4({ 'client', '-o', 'alice_far' }).stdout
+  spec = spec:gsub('\nRoot:[^\n]*', '\nRoot:\t' .. server.dir .. '/far')
+  spec = spec:gsub('\nHost:[^\n]*', '\nHost:\telsewhere')
+  if not spec:find('\nHost:') then
+    spec = spec .. '\nHost:\telsewhere\n'
+  end
+  server:p4({ 'client', '-i' }, { stdin = spec })
+  open_view()
+  child.lua([[vim.ui.select = function(items, _, cb)
+    for _, it in ipairs(items) do if it.client == 'alice_far' then return cb(it) end end
+  end]])
+  child.lua([[_G.msgs = {}
+    local orig = vim.notify
+    vim.notify = function(m, ...) table.insert(_G.msgs, m) return orig(m, ...) end]])
+  child.type_keys('W')
+  wait([[(function()
+    for _, m in ipairs(_G.msgs) do if m:find('can only be used from host', 1, true) then return true end end
+  end)()]])
+  H.eq(has_line('Client alice_ws'), true)
+  H.eq(has_line('Fix parser'), true)
+end
+
+T['client view']['a slow Sync CL query does not hold back the other sections'] = function()
+  -- Wrap p4 so `changes -m1 //client/...#have` takes 3 s.
+  local wrapper = server.dir .. '/slow-p4'
+  H.write(wrapper, ('#!/bin/sh\ncase "$*" in *#have*) sleep 3;; esac\nexec %s "$@"\n'):format(P.p4))
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  child.lua(
+    'vim.g.perforated = vim.tbl_extend("force", vim.g.perforated, { p4 = ... })',
+    { wrapper }
+  )
+  child.lua([[require('perforated.config').reload(); require('perforated.core.env').reset()]])
+  child.cmd('P4')
+  local t0 = vim.uv.hrtime()
+  wait(
+    [[vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= nil and (function()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('Fix parser', 1, true) then return true end
+    end
+  end)()]],
+    2500
+  )
+  H.eq((vim.uv.hrtime() - t0) / 1e6 < 2500, true)
+  H.eq(has_line('Sync CL: loading…'), true)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(has_line('Sync CL: loading…'), false)
+end
+
 T['client view']['shows pending CLs, files, shelves, stale files, submitted, reconcile'] = function()
   open_view()
   H.eq(#child.api.nvim_list_tabpages(), 2)
@@ -186,7 +279,7 @@ T['client view']['M moves marked files to another changelist'] = function()
   goto_line('b.txt')
   child.type_keys('m')
   goto_line('c.txt')
-  child.type_keys('m', 'M')
+  child.type_keys('m', 'gm')
   H.eq(H.wait(child, 'false', 1500), false)
   local o = opened()
   H.eq(o['//depot/b.txt'], '2')
@@ -202,7 +295,7 @@ T['client view']['marks inside a collapsed changelist still apply'] = function()
   child.type_keys('m', 'h') -- mark, then collapse the default CL (the cursor lands on it)
   H.eq(has_line('b.txt'), false)
   -- M (a file action) runs on the hidden marked file, not on the changelist under the cursor.
-  child.type_keys('M')
+  child.type_keys('gm')
   H.eq(H.wait(child, 'false', 1500), false)
   local o = opened()
   H.eq(o['//depot/b.txt'], '2')

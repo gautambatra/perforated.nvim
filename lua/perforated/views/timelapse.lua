@@ -467,7 +467,7 @@ local function actions(view)
     {
       id = 'a_prev',
       desc = 'Move ◆ back (diff / range mode)',
-      keys = { 'H', '[a' },
+      keys = { '[a' },
       run = function()
         if view.mode ~= 'single' then
           go_a(view, engine.step(view.tl, view.a, -1))
@@ -477,7 +477,7 @@ local function actions(view)
     {
       id = 'a_next',
       desc = 'Move ◆ forward (diff / range mode)',
-      keys = { 'L', ']a' },
+      keys = { ']a' },
       run = function()
         if view.mode ~= 'single' then
           go_a(view, engine.step(view.tl, view.a, 1))
@@ -722,6 +722,7 @@ function M.open(ws, path, opts)
   require('perforated.hl').setup()
   vim.cmd('tabnew')
   local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+  require('perforated.views.base').code_win(win)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
