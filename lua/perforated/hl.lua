@@ -21,6 +21,7 @@ local LINKS = {
   PerforatedSection = 'Title',
   PerforatedHeader = 'Comment',
   PerforatedPath = 'Normal',
+  PerforatedCount = 'PerforatedPath', -- a changelist's opened-file count, when non-zero
   PerforatedAction = 'Statement',
   PerforatedRev = 'Comment',
   PerforatedBadge = 'WarningMsg',

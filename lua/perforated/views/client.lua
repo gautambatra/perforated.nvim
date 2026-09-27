@@ -244,7 +244,8 @@ local function build(view, data)
           { '  ' .. first_line(s.rec and s.rec.desc), 'PerforatedPath' },
         }
       end
-      title[#title + 1] = { ('  (%d)'):format(#s.files), 'PerforatedDim' }
+      title[#title + 1] =
+        { ('  (%d)'):format(#s.files), #s.files > 0 and 'PerforatedCount' or 'PerforatedDim' }
       if #shelved > 0 then
         title[#title + 1] =
           { '  ' .. icons.glyph('shelved') .. ' ' .. #shelved, 'PerforatedShelved' }
