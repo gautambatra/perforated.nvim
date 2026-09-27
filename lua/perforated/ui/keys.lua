@@ -121,8 +121,17 @@ function M.attach(buf, actions, view)
       desc = 'perforated: ' .. list[1].desc,
       callback = function()
         local node = view.tree:node_at()
+        local marked = view.tree:marked()
+        local function mark_applies(a)
+          for _, n in ipairs(marked) do
+            if M.applies(a, n) then
+              return true
+            end
+          end
+          return false
+        end
         for _, a in ipairs(list) do
-          if M.applies(a, node) or (a.multi and #view.tree:marked() > 0) then
+          if M.applies(a, node) or (a.multi and mark_applies(a)) then
             return M.dispatch(a, view)
           end
         end
