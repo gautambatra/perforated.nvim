@@ -116,8 +116,9 @@ function M.have_change(ws, cb)
 end
 
 --- Submitted changelists, newest first. `before` pages backwards (changes at or before it).
+--- Scoped to the client view unless `path` is given, or `anywhere` (no path: every depot).
 ---@param ws perforated.Workspace
----@param opts { user: string?, path: string?, max: integer?, before: integer? }
+---@param opts { user: string?, path: string?, anywhere: boolean?, max: integer?, before: integer? }
 ---@param cb fun(changes: table[]?, err: string?)
 function M.submitted_changes(ws, opts, cb)
   local args = { 'changes', '-s', 'submitted', '-l', '-m', tostring(opts.max or 50) }
@@ -125,7 +126,9 @@ function M.submitted_changes(ws, opts, cb)
     vim.list_extend(args, { '-u', opts.user })
   end
   local path = opts.path
-  if not path then
+  if not path and opts.anywhere and opts.before then
+    path = '//...' -- a bare @N would be taken relative to the client
+  elseif not path and not opts.anywhere then
     local client = ws:client()
     path = client and ('//%s/...'):format(client) or nil
   end

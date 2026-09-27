@@ -575,6 +575,7 @@ function M.refresh(view)
     end
     cls.submitted_changes(ws, {
       user = ws:user(),
+      anywhere = true, -- all of the user's submits, not only those in this client's view
       max = require('perforated.config').get().client_view.submitted_limit,
     }, function(changes, err)
       set('submitted', changes or {})
