@@ -188,8 +188,8 @@ other layouts):
  d diff against have revision  D diff all files  …  . actions  ? help
 ```
 
-- **Sync CL:** the newest changelist your workspace has synced (`p4 changes -m1
-  //client/...#have`), above the sections; `gd`, `K` and `y` work on it.
+- **Sync CL:** the newest changelist your workspace has synced (`p4 -c <client> changes -m1
+  #have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists with their files and shelved files, files needing attention
   (stale or unresolved), workspace reconcile, and your recent submits. Reconcile is expensive on
   large workspaces, so it only scans when you expand it (`l`), and `x` stops a running scan

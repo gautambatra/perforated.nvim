@@ -93,7 +93,9 @@ function M.describe(ws, changes, opts, cb)
   end)
 end
 
---- The newest changelist the workspace has synced (`changes -m1 //client/...#have`).
+--- The newest changelist the workspace has synced: `p4 -c <client> changes -m1 #have`. A bare
+--- revision covers every file of the client (the same answer as `//<client>/...#have`, from
+--- any directory).
 ---@param ws perforated.Workspace
 ---@param cb fun(change: table?)  nil when nothing is synced (or on error)
 function M.have_change(ws, cb)
@@ -104,8 +106,9 @@ function M.have_change(ws, cb)
     end)
   end
   ws:run(
-    { 'changes', '-m1', '-s', 'submitted', '-l', ('//%s/...#have'):format(client) },
-    { priority = 2 },
+    { 'changes', '-m1', '-s', 'submitted', '-l', '#have' },
+    -- A switched workspace already passes its -c.
+    { priority = 2, globals = not ws.client_arg and { '-c', client } or nil },
     function(res)
       cb(res.records[1])
     end

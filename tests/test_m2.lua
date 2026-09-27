@@ -181,7 +181,7 @@ T['client view']['W keeps the client and shows p4 message when the switch fails'
 end
 
 T['client view']['a slow Sync CL query does not hold back the other sections'] = function()
-  -- Wrap p4 so `changes -m1 //client/...#have` takes 3 s.
+  -- Wrap p4 so the Sync CL query (`changes -m1 #have`) takes 3 s.
   local wrapper = server.dir .. '/slow-p4'
   H.write(wrapper, ('#!/bin/sh\ncase "$*" in *#have*) sleep 3;; esac\nexec %s "$@"\n'):format(P.p4))
   vim.uv.fs_chmod(wrapper, tonumber('755', 8))
