@@ -564,7 +564,7 @@ can override them:
   PerforatedBlame              Comment
   PerforatedChange             Changed
   PerforatedChangelist         Identifier
-  PerforatedCount              PerforatedPath
+  PerforatedCount              PerforatedModified
   PerforatedDelete             Removed
   PerforatedDiffAdded          Added
   PerforatedDiffHunk           Title
