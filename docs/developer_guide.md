@@ -287,8 +287,8 @@ tools:
   Stop and close timers you own.
 - **Threads**: `vim.uv.new_work` runs pure Lua (no Neovim API) on a worker thread. The diff
   engine uses it for large files.
-- **Coroutines** can make callback chains read sequentially (`core/async.lua`); this codebase
-  mostly uses plain callbacks.
+- **Coroutines** can make callback chains read sequentially; this codebase uses plain
+  callbacks.
 - **`vim.wait(ms, cond)`** processes events while waiting — acceptable in short, bounded
   cases (the check-out waits for an in-flight `p4 edit` before a write), never as a general
   tool.
@@ -426,7 +426,6 @@ lua/perforated/
     log.lua                  ring buffer of p4 invocations (:P4 log)
     debug.lua / debug_impl.lua   debug log front end / implementation, timings
     events.lua               User autocmd events
-    async.lua                small coroutine helpers
   p4.lua                     typed p4 wrappers: fstat, print, pending changes, edit/add/revert
   buffer.lua                 per-buffer state, attach pipeline, base text, diff, signs
   signs.lua                  gutter signs, hunk navigation, preview, reset
@@ -821,10 +820,8 @@ rotation, snapshots, redaction of secrets) loads only when enabled (config, `PER
 env, or `:P4 debug on`). `dbg.timing(name, ms)` keeps fixed-size aggregates for
 `:P4 debug timings` and is always on (one table update).
 
-#### `core/events.lua`, `core/async.lua`
+#### `core/events.lua`
 `emit(name, data)` fires `User Perforated<Name>` (scheduled if called from a fast context).
-`async.lua` has small coroutine helpers (`run`, `await`, `all`, `debounce`,
-`throttle_by_key`) for flows that read better sequentially.
 
 ### p4 wrappers
 
@@ -1048,7 +1045,8 @@ Shared scaffolding: `tab(name)` / `float(name, title)` create the window and scr
 `nav(view, title)` returns the standard navigation actions (fold, refresh, close, help, menu);
 `finish(view)` attaches keys, the footer (or a float's own footer line) and sets the filetype
 after the first paint; `date`, `first_line`; `base_line(hunks, lnum)` maps a buffer line to
-its base line through hunks (used by annotate and blame).
+its base line through hunks (used by annotate and blame), and `base_map(hunks, n)` maps every
+line in one pass (annotate's render).
 
 #### `views/client.lua` (the biggest module)
 The client view ([§18.7](#187-you-open-the-client-view-p4)). `file_node` renders a file row
@@ -1134,7 +1132,7 @@ A lualine component showing `require('perforated').statusline()`.
 | `idle`, `swarm_url`, `reconcile_scope`, `integrate_target` | misc session state |
 
 **BufState** (`buffer.lua`): `buf`, `ws`, `path`, `key`, `status`, `rec` (fstat record),
-`base` / `base_text` / `base_spec`, `hunks`, `gen`, `timer`, `too_big`.
+`base` / `base_text` / `base_spec`, `hunks`, `gen`, `timer`, `status_sig`.
 
 **fstat record** (p4's own fields): `depotFile`, `clientFile`, `haveRev`, `headRev`,
 `headChange`, `headType`, `headAction`, `type`, `action` (set when opened), `change`,
@@ -1286,7 +1284,7 @@ mixed-case path. CI runs this leg on Linux.
 | File | Covers |
 |---|---|
 | `test_activation.lua` | dormancy, gate, workspaces, command list vs plugin/, aliases, completion |
-| `test_runner.lua`, `test_parse.lua`, `test_async.lua`, `test_cache_queue_config.lua` | core units |
+| `test_runner.lua`, `test_parse.lua`, `test_cache_queue_config.lua` | core units |
 | `test_conn.lua` | offline/backoff, auth: one prompt, stale-auth retry, login races |
 | `test_engine.lua` | diff engine: hunk types, ranges, async = sync |
 | `test_debug.lua` | debug log, redaction |
