@@ -36,13 +36,7 @@ local function in_depot(st)
 end
 
 local function hunk_at(st, line)
-  for _, h in ipairs(st.hunks or {}) do
-    local first = math.max(1, h.b_start)
-    local last = h.b_count > 0 and (h.b_start + h.b_count - 1) or first
-    if line >= first and line <= last then
-      return h
-    end
-  end
+  return (require('perforated.signs').hunk_at(st.buf, line))
 end
 
 def('checkout', 'Perforce: check out (open for edit)', function(st)

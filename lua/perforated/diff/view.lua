@@ -260,6 +260,14 @@ function M.pair(ws, left, right, info)
         end
         closed = true
         pcall(vim.api.nvim_del_augroup_by_id, aug)
+        -- Revision buffers outlive the tab (bufhidden=hide): drop the `q` tied to it.
+        local own = {}
+        for _, b in ipairs({ lbuf, rbuf }) do
+          if not user_bufs[b] then
+            own[#own + 1] = b
+          end
+        end
+        M.unmap(own, { 'q' })
         for _, w in ipairs({ lwin, rwin }) do
           if vim.api.nvim_win_is_valid(w) then
             pcall(vim.api.nvim_win_call, w, function()
@@ -275,6 +283,19 @@ function M.pair(ws, left, right, info)
   vim.api.nvim_set_current_win(rwin)
   require('perforated.core.events').emit('DiffOpen', data)
   return data
+end
+
+--- Remove buffer-local normal-mode maps (from buffers that may already be gone).
+---@param bufs integer[]
+---@param lhss string[]
+function M.unmap(bufs, lhss)
+  for _, b in ipairs(bufs) do
+    if vim.api.nvim_buf_is_valid(b) then
+      for _, lhs in ipairs(lhss) do
+        pcall(vim.keymap.del, 'n', lhs, { buffer = b })
+      end
+    end
+  end
 end
 
 return M

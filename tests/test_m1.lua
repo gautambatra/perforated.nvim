@@ -512,6 +512,61 @@ T['modes']['revert -a reverts only unchanged files'] = function()
   H.eq(opened(), { ['//depot/b.txt'] = 'default' })
 end
 
+T['modes']['on_write: a file made writable but never written goes back to read-only'] = function()
+  setup({ checkout = { prompt = false, on_write = true } })
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.type_keys('x')
+  H.eq(child.fn.filewritable(root .. '/a.txt'), 1)
+  child.cmd('edit!')
+  H.eq(child.fn.filewritable(root .. '/a.txt'), 0)
+  H.eq(opened()['//depot/a.txt'], nil)
+end
+
+T['modes']['revert -a keeps a file whose buffer has unsaved edits'] = function()
+  setup()
+  server:p4({ 'edit', root .. '/a.txt' }, { client = 'alice_ws', cwd = root })
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.api.nvim_buf_set_lines(0, 0, 1, false, { 'unsaved' })
+  child.cmd('P4 revert -a ' .. root .. '/a.txt')
+  vim.wait(300)
+  H.eq(opened(), { ['//depot/a.txt'] = 'default' })
+  H.eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'unsaved' })
+end
+
+T['modes']['file-changed warnings still work for buffers outside Perforce'] = function()
+  setup()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.cmd('edit ' .. server.dir .. '/outside.txt')
+  child.lua([[
+    vim.v.fcs_choice = ''
+    vim.api.nvim_exec_autocmds('FileChangedShell', { buffer = 0 })
+  ]])
+  H.eq(child.lua_get('vim.v.fcs_choice'), 'ask')
+end
+
+T['modes']['buffer.find matches whole names only'] = function()
+  setup()
+  child.cmd('badd ' .. root .. '/a.txt.orig')
+  H.eq(child.lua_get([[require('perforated.buffer').find(...)]], { root .. '/a.txt' }), vim.NIL)
+  edit('a.txt')
+  H.eq(
+    child.lua_get([[require('perforated.buffer').find(...)]], { root .. '/a.txt' }),
+    child.api.nvim_get_current_buf()
+  )
+end
+
+T['modes']['renaming a buffer re-attaches it for the new path'] = function()
+  setup()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.cmd('saveas ' .. root .. '/copy.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  H.eq(child.lua_get([[require('perforated.buffer').get().path]]), root .. '/copy.txt')
+end
+
 T['modes']['keymap preset is buffer-local to Perforce buffers'] = function()
   setup({ keymaps = 'default' })
   edit('a.txt')
