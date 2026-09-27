@@ -105,9 +105,36 @@ function M.update(buf)
   if unresolved then
     parts[#parts + 1] = cfg.unresolved .. 'unresolved'
   end
+  -- Runs after every re-diff while typing: skip the Vimscript conversions, the extmark and the
+  -- redraw when nothing the statusline shows has changed.
+  local line = table.concat(parts, ' ')
+  local sig = table.concat({
+    line,
+    st.status,
+    tostring(rec.action),
+    tostring(rec.change),
+    tostring(rec.haveRev),
+    tostring(rec.headRev),
+    tostring(stale),
+    tostring(unresolved),
+    sum.added,
+    sum.changed,
+    sum.removed,
+    d.conn,
+    d.ws,
+  }, '\0')
+  local signs = require('perforated.signs')
+  if
+    st.status_sig == sig
+    and vim.b[buf].perforated_status == line
+    and stale == (#vim.api.nvim_buf_get_extmarks(buf, signs.ns_stale, 0, -1, { limit = 1 }) > 0)
+  then
+    return
+  end
+  st.status_sig = sig
   vim.b[buf].perforated_status_dict = d
-  vim.b[buf].perforated_status = table.concat(parts, ' ')
-  require('perforated.signs').render_stale(buf, stale)
+  vim.b[buf].perforated_status = line
+  signs.render_stale(buf, stale)
   if buf == vim.api.nvim_get_current_buf() then
     vim.g.perforated_status = M.ws_summary(st.ws)
   end
@@ -138,6 +165,11 @@ end
 ---@return string
 function M.statusline()
   local buf = vim.api.nvim_get_current_buf()
+  -- Evaluated on every redraw: bail out before touching vim.g for non-Perforce buffers.
+  local ws = vim.b[buf].perforated_ws
+  if not ws then
+    return ''
+  end
   local file = vim.b[buf].perforated_status
   local g = vim.g.perforated_status
   if not file and not g then
@@ -145,7 +177,7 @@ function M.statusline()
   end
   local cfg = require('perforated.config').get().statusline
   local parts = { file }
-  if g and vim.b[buf].perforated_ws == g.ws then
+  if g and ws == g.ws then
     local wsp = {}
     if (g.stale or 0) > 0 then
       wsp[#wsp + 1] = cfg.stale .. g.stale

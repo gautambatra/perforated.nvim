@@ -119,9 +119,10 @@ M.report = report
 
 --- Make read-only files writable right away (what `p4 edit` is about to do anyway), so a
 --- `:w` issued before the server answers passes Neovim's permission check (E505), which runs
---- before any write autocmd. Returns a function restoring the original modes.
+--- before any write autocmd. Returns a function restoring the original modes, except for the
+--- paths in `keep` (a set of paths p4 did open).
 ---@param paths string[]
----@return fun()
+---@return fun(keep: table<string, true>?)
 local function optimistic_writable(paths)
   local restore = {}
   for _, p in ipairs(paths) do
@@ -132,9 +133,11 @@ local function optimistic_writable(paths)
       end
     end
   end
-  return function()
+  return function(keep)
     for p, mode in pairs(restore) do
-      vim.uv.fs_chmod(p, mode)
+      if not (keep and keep[p]) then
+        vim.uv.fs_chmod(p, mode)
+      end
     end
   end
 end
@@ -156,8 +159,22 @@ function M.edit(ws, paths, cl, cb)
     end
     local ok = #res.records > 0 and #res.errors == 0
     if not ok then
-      dbg.warn('checkout', 'edit failed; restoring file modes for %d path(s)', #paths)
-      restore()
+      -- Only the files p4 didn't open go back to read-only: after a partial failure the
+      -- opened ones must stay writable.
+      local opened = {}
+      for _, r in ipairs(res.records) do
+        if r.clientFile then
+          opened[vim.fs.normalize(r.clientFile)] = true
+        end
+      end
+      dbg.warn('checkout', 'edit failed; restoring file modes for unopened path(s)')
+      local keep = {}
+      for _, p in ipairs(paths) do
+        if opened[vim.fs.normalize(p)] then
+          keep[p] = true
+        end
+      end
+      restore(keep)
     end
     report('edit', res, #res.records)
     changed(ws)
@@ -198,6 +215,27 @@ end
 ---@param unchanged boolean?
 ---@param cb fun(ok: boolean)?
 function M.revert(ws, paths, unchanged, cb)
+  if unchanged then
+    -- `revert -a` compares the file on disk: a buffer with unsaved edits is changed, so keep
+    -- it opened rather than reverting it and discarding those edits.
+    paths = vim.tbl_filter(function(p)
+      for _, b in ipairs(bufs_for(ws, { p })) do
+        if vim.bo[b].modified then
+          return false
+        end
+      end
+      return true
+    end, paths)
+    if #paths == 0 then
+      notify('revert unchanged: every file has unsaved changes')
+      if cb then
+        vim.schedule(function()
+          cb(true)
+        end)
+      end
+      return
+    end
+  end
   local bufs = bufs_for(ws, paths)
   p4.revert(ws, paths, { unchanged = unchanged }, function(res)
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
@@ -284,7 +322,7 @@ local function on_first_change(buf)
     if cfg.on_write and not session.auto then
       -- Check out silently when the buffer is written. The file must already be writable by
       -- then (Neovim's E505 check precedes BufWritePre); restored if the edit fails.
-      c.restore = optimistic_writable({ st.path })
+      c.restore = c.restore or optimistic_writable({ st.path })
       return
     end
     return M.edit(st.ws, { st.path }, st.ws.sticky_cl)
@@ -334,7 +372,13 @@ local function before_write(buf)
     and allowed(st.path)
     and (cfg.on_write or session.auto or not cfg.prompt)
   then
-    M.edit(st.ws, { st.path }, st.ws.sticky_cl)
+    local restore = c.restore
+    c.restore = nil
+    M.edit(st.ws, { st.path }, st.ws.sticky_cl, function(ok)
+      if not ok and restore then
+        restore()
+      end
+    end)
   end
   if c.pending then
     local t0 = vim.uv.hrtime()
@@ -418,22 +462,33 @@ function M.attach(_)
       end,
     })
   end
-  on('FileChangedShell', function()
-    -- `p4 edit` flips the file's mode bit: never bother the user about that.
-    vim.v.fcs_choice = vim.v.fcs_reason == 'mode' and '' or 'ask'
-  end)
+  -- Registered for every buffer: once a FileChangedShell autocmd exists, Neovim does what
+  -- v:fcs_choice says instead of warning, so untracked buffers must get 'ask' too.
+  vim.api.nvim_create_autocmd('FileChangedShell', {
+    group = group,
+    callback = function(ev)
+      -- `p4 edit` flips the file's mode bit: never bother the user about that.
+      vim.v.fcs_choice = (tracked(ev.buf) and vim.v.fcs_reason == 'mode') and '' or 'ask'
+    end,
+  })
   on('BufWritePre', before_write)
   on('BufWritePost', after_write)
   -- Re-reading the file (:e!) starts over: a skipped/cancelled buffer prompts again.
-  on('BufReadPost', function(buf)
+  -- A file made writable for check-out on write, but never written, goes back to read-only.
+  local function drop(buf)
     local c = cs[buf]
     if c and not c.pending then
+      if c.restore then
+        c.restore()
+      end
       cs[buf] = nil
     end
-  end)
+  end
+  on('BufReadPost', drop)
   vim.api.nvim_create_autocmd('BufWipeout', {
     group = group,
     callback = function(ev)
+      drop(ev.buf)
       cs[ev.buf] = nil
     end,
   })

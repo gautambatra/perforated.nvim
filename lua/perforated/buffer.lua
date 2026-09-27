@@ -28,10 +28,13 @@ local M = {}
 ---@field hunks perforated.Hunk[]
 ---@field gen integer         diff generation (drops stale async results)
 ---@field timer uv.uv_timer_t?
----@field lines_attached boolean
----@field too_big boolean?
+---@field status_sig string? what the statusline last showed (status.lua skips no-op updates)
 
 local states = {} ---@type table<integer, perforated.BufState>
+-- Buffers with a live nvim_buf_attach. It outlives detach(): the attachment only ends on the
+-- next change (on_lines returns true) or unload, so a quick detach + attach (`:P4 move`) must
+-- not add a second one.
+local lines_attached = {} ---@type table<integer, true>
 local group ---@type integer
 
 ---@param buf integer
@@ -215,8 +218,7 @@ function M.update(buf)
     return status_changed(st)
   end
   local n = vim.api.nvim_buf_line_count(buf)
-  st.too_big = n > cfg.hard_max
-  if st.too_big then
+  if n > cfg.hard_max then
     st.hunks = {}
     require('perforated.signs').render(buf, {})
     return status_changed(st)
@@ -283,6 +285,9 @@ local ATTACH_CALLBACKS = {
   on_reload = function(_, buf)
     schedule_update(buf)
   end,
+  on_detach = function(_, buf)
+    lines_attached[buf] = nil
+  end,
 }
 
 -- ---------------------------------------------------------------------------------------------
@@ -309,6 +314,19 @@ local function ensure_group()
       end
     end,
   })
+  -- Renamed (`:saveas`, `:file`): the state belongs to the old path. Start over for the new one.
+  vim.api.nvim_create_autocmd('BufFilePost', {
+    group = group,
+    callback = function(ev)
+      local st = states[ev.buf]
+      if st and vim.api.nvim_buf_get_name(ev.buf) ~= st.path then
+        M.detach(ev.buf)
+        require('perforated.core.workspace').detach(ev.buf)
+        vim.b[ev.buf].perforated_ws = nil
+        require('perforated.gate').on_buf({ buf = ev.buf })
+      end
+    end,
+  })
 end
 
 ---@param ws perforated.Workspace
@@ -327,10 +345,10 @@ function M.attach(ws, buf)
     status = 'pending',
     hunks = {},
     gen = 0,
-    lines_attached = false,
   }
-  vim.api.nvim_buf_attach(buf, false, ATTACH_CALLBACKS)
-  states[buf].lines_attached = true
+  if not lines_attached[buf] then
+    lines_attached[buf] = vim.api.nvim_buf_attach(buf, false, ATTACH_CALLBACKS) or nil
+  end
   require('perforated.checkout').attach(buf)
   if config.get().keymaps == 'default' then
     require('perforated.keymaps').attach(buf)
@@ -374,6 +392,19 @@ function M.rekey(ws)
   for _, st in pairs(states) do
     if st.ws == ws then
       st.key = p4.key(ws, st.path)
+    end
+  end
+end
+
+--- The buffer whose name is exactly `path`. Unlike `vim.fn.bufnr(path)`, which treats its
+--- argument as a pattern (`/ws/a.c` matches `/ws/a.cpp`), this never returns another file.
+---@param path string absolute path
+---@return integer? buf
+function M.find(path)
+  path = vim.fs.normalize(path)
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(b) == path then
+      return b
     end
   end
 end

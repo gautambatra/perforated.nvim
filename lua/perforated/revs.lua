@@ -20,8 +20,8 @@ function M.lines(ws, side, cb)
   end
   vim.schedule(function()
     if side.path then
-      local b = vim.fn.bufnr(side.path)
-      if b > 0 and vim.api.nvim_buf_is_loaded(b) then
+      local b = require('perforated.buffer').find(side.path)
+      if b and vim.api.nvim_buf_is_loaded(b) then
         return cb(vim.api.nvim_buf_get_lines(b, 0, -1, false))
       end
       local ok, lines = pcall(vim.fn.readfile, side.path)

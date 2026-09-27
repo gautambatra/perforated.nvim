@@ -48,7 +48,8 @@ end
 ---@return string?
 local function spec_of(st)
   local rec = st.rec
-  if not rec or not rec.depotFile then
+  -- Binary files can't be annotated: skip them rather than retry on every cursor move.
+  if not rec or not rec.depotFile or not require('perforated.p4').is_text(rec) then
     return nil
   end
   if rec.action then

@@ -24,8 +24,8 @@ local function norm(side)
     return { empty = true }
   end
   if side.path then
-    local b = vim.fn.bufnr(side.path)
-    if b > 0 and vim.api.nvim_buf_is_loaded(b) and vim.bo[b].modified then
+    local b = require('perforated.buffer').find(side.path)
+    if b and vim.api.nvim_buf_is_loaded(b) and vim.bo[b].modified then
       return { lines = vim.api.nvim_buf_get_lines(b, 0, -1, false) }
     end
     return { path = side.path }

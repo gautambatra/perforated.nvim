@@ -170,7 +170,7 @@ open_tab = function(ws, title, entries, identical)
 
   local function show_entry(i)
     local e = entries[i]
-    if not e or state.current == i then
+    if not e or state.current == i or not vim.api.nvim_tabpage_is_valid(tab) then
       return
     end
     state.current = i
@@ -236,6 +236,8 @@ open_tab = function(ws, title, entries, identical)
     callback = function()
       vim.schedule(function()
         pcall(vim.api.nvim_del_augroup_by_id, group)
+        -- Revision buffers outlive the tab (bufhidden=hide): drop the keys tied to it.
+        dv.unmap(vim.tbl_keys(owned), { 'q', '<Tab>', '<S-Tab>' })
         for _, w in ipairs({ lwin, rwin }) do
           if vim.api.nvim_win_is_valid(w) then
             pcall(vim.api.nvim_win_call, w, function()
