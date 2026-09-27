@@ -664,11 +664,14 @@ why keys, menus and help never disagree.
 
 ### 18.7 You open the client view (`:P4`)
 
-1. `views/client.lua` opens a tab (or float/split), paints a skeleton instantly, then runs one
-   parallel round: pending changelists, `fstat` of opened files, submitted changelists, the
-   Sync CL (`changes -m1 //client/...#have`), and `p4 diff -sa` (which opened files changed).
-   A second round fetches shelved files only for changelists that have them.
-2. `build()` turns the data into tree nodes; the tree renders with one `set_lines`.
+1. `views/client.lua` opens a tab (or float/split), paints a skeleton instantly, then runs its
+   queries in parallel: pending changelists, `fstat` of opened files, your submitted
+   changelists (`changes -u <you>`, any client), the Sync CL (`-c <client> changes -m1
+   #have`), and `p4 diff -sa` (which opened files changed). Shelved files are fetched as soon
+   as the pending list arrives, only for changelists that have them.
+2. Each section is drawn as soon as its own query answers (`build()` turns the data into tree
+   nodes; the tree renders with one `set_lines`), so a slow query never holds back the rest.
+   Until then a section shows what the previous refresh found, or "loading…" the first time.
 3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop.
 4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view.
 
@@ -745,8 +748,11 @@ environment-only setups: a single background `p4 info` from the file's directory
 ### Core
 
 #### `core/workspace.lua`
-The registry (`get_or_create`, `get`, `list`, `for_buf`, `current`, `connection`) and the
-Workspace class:
+The registry (`get_or_create`, `get`, `list`, `for_buf`, `current`, `connection`,
+`for_client`) and the Workspace class. `for_client(ws, name)` returns a workspace of mode
+`'client'` bound to another of the user's clients (every call gets `-c <name>`, run from the
+same anchor); no buffer ever attaches to it and it never goes idle. Switching back to the
+original client returns the original workspace.
 
 - `run(args, opts, cb)` — the one way to run p4 for a workspace ([§17.3](#173-how-a-p4-call-flows)).
   Options: `priority`, `key` (dedup), `tagged` (default JSON), `stdin`, `timeout` (0 = none),
@@ -829,15 +835,17 @@ env, or `:P4 debug on`). `dbg.timing(name, ms)` keeps fixed-size aggregates for
 Typed wrappers returning parsed data. `key(ws, path)` is the cache key (lower-cased on
 case-insensitive servers). `fstat(ws, paths)` batches local paths through `-x -` and returns
 records by key plus "missing" reasons (not in view / no such file) per path.
-`fstat_opened(ws)` is `fstat -Ro //client/...`. `base_spec(rec)` decides the diff base (`#have`,
+`fstat_opened(ws)` is `fstat -Ro //client/...`. Local paths passed as p4 file arguments are
+escaped with `escape` (`@ # % *` → `%40 %23 %25 %2A`; `add` takes names literally, with `-f`
+when they contain wildcards). `base_spec(rec)` decides the diff base (`#have`,
 or the moved-from file). `print(ws, spec)` returns lines, cached when immutable;
 `print_many` prints several specs in one call. `pending_changes`, `new_change`, `edit`, `add`,
 `revert` (all through `-x -`) and `latest_changes` (the poll probe).
 
 #### `changelists.lua`
 Changelist queries used by views and operations: `describe` (files, optionally shelved),
-`shelved_files`, `submitted_changes` (paged, scoped to the client by default),
-`have_change` (the Sync CL), `status` (`p4 status` for reconcile, with job options),
+`shelved_files`, `submitted_changes` (paged, scoped to the client by default; `anywhere` for
+every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `W`), `status` (`p4 status` for reconcile, with job options),
 `reopen`, `opened_by_user` (the "all my clients" scope), `change_status`, and the change spec
 helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_description`,
 `spec_set_description`).
@@ -850,7 +858,9 @@ Per-buffer state (`BufState`, [§20](#20-data-model)) and the pipeline in
 shared table for `nvim_buf_attach` (no closures per buffer); stale async diff results are
 dropped by generation; `detach` drops the cached fstat of a file that's no longer shown and
 isn't opened (found by the memory soak test); `rekey` recomputes keys after the case-handling
-is learned; when enabled, blame and the LSP code-action server attach here.
+is learned; a renamed buffer (`:saveas`) re-attaches for its new path; `find(path)` looks a
+buffer up by exact name (`vim.fn.bufnr()` treats its argument as a pattern); when enabled,
+blame and the LSP code-action server attach here.
 
 #### `signs.lua`
 `render(buf, hunks)` — one extmark per hunk with `end_row` spreading the sign over the
@@ -859,9 +869,11 @@ with the hunk's unified diff) and `reset` (replace the hunk with the base lines)
 
 #### `status.lua`
 Statusline data only — never calls p4. `update(buf)` fills `vim.b.perforated_status_dict`
-(status, action, change, have/head, stale, unresolved, added/changed/removed counts, connection)
-and a ready-made `vim.b.perforated_status` string; `update_ws` fills `vim.g.perforated_status`
-(workspace markers: stale / unresolved counts, offline). Changes are coalesced into one
+(status, action, change, have/head, stale, unresolved, added/changed/removed counts, modified,
+client, connection) and a ready-made `vim.b.perforated_status` string from `statusline.format`
+(`tokens(d)` / `format(d)`; a template, or a function of the dict), skipping updates that
+change nothing; `update_ws` fills `vim.g.perforated_status` (workspace markers: stale /
+unresolved counts, offline or login needed). Changes are coalesced into one
 `User PerforatedStatus` event and a statusline redraw. `is_stale(rec)` is used everywhere.
 
 #### `checkout.lua` and `checkout_prompt.lua`
@@ -1019,7 +1031,7 @@ mid-typing).
 The quickfix sink: `set(spec)` makes one `setqflist` call with a title and a
 `context = { perforated = true, kind }`; entries carry `user_data`; a `quickfixtextfunc`
 aligns columns; perforated lists get buffer-local keys in the qf window (`d` diff, `x` revert,
-`M` move, `R` resolve, `gr` re-run the producer) plus syntax for the changed-file markers.
+`gm` move, `R` resolve, `gr` re-run the producer) plus syntax for the changed-file markers.
 
 #### `ui/toast.lua`
 Corner notifications for stale files: bottom-right, non-focusable, stacking; the dismissal
@@ -1046,7 +1058,9 @@ Shared scaffolding: `tab(name)` / `float(name, title)` create the window and scr
 `finish(view)` attaches keys, the footer (or a float's own footer line) and sets the filetype
 after the first paint; `date`, `first_line`; `base_line(hunks, lnum)` maps a buffer line to
 its base line through hunks (used by annotate and blame), and `base_map(hunks, n)` maps every
-line in one pass (annotate's render).
+line in one pass (annotate's render). `code_win(win)` gives a window that shows code (time-lapse,
+diff sides, files opened from views) the user's global `number` / `relativenumber`: new tabs
+copy the options of the plugin view they were opened from.
 
 #### `views/client.lua` (the biggest module)
 The client view ([§18.7](#187-you-open-the-client-view-p4)). `file_node` renders a file row
@@ -1054,8 +1068,10 @@ The client view ([§18.7](#187-you-open-the-client-view-p4)). `file_node` render
 and in "Needs attention" the changelist). `build(view, data)` assembles the sections: header,
 Sync CL, Pending (per changelist, with shelves), Needs attention, Workspace reconcile (lazy,
 scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted, with blank
-spacer rows between sections. `refresh(view)` runs the parallel round (coalescing refreshes:
-one in flight, one queued). `actions(view)` defines every key of the view. A `BufWritePost`
+spacer rows between sections. `refresh(view)` runs the queries in parallel and redraws as each
+answers (coalescing refreshes: one in flight, one queued). `switch_client(view)` (`W`) picks
+another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's message on
+failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view. A `BufWritePost`
 hook updates one file's changed marker; a `PerforatedChanged` hook refreshes the visible view.
 
 #### `views/describe.lua`
@@ -1109,7 +1125,8 @@ client-side via `vim.lsp.commands`. Loaded only when `lsp.enabled` is set.
 
 #### `timings.lua`, `hl.lua`
 `:P4 debug timings` report; highlight links (`LINKS`, re-applied on `ColorScheme`;
-`PerforatedUnchanged` is derived halfway between `Normal` and `Comment`).
+`PerforatedUnchanged` is derived halfway between `Normal` and `Comment`; `PerforatedCount`,
+a changelist's non-zero opened-file count, links to `PerforatedModified`).
 
 #### `lua/lualine/components/perforated.lua`
 A lualine component showing `require('perforated').statusline()`.
