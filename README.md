@@ -1,58 +1,171 @@
-# perforated.nvim
+<h1 align="center">perforated.nvim</h1>
+
+<p align="center">
+  <b>Perforce (Helix Core) for Neovim — the P4V workflow, without leaving your editor.</b><br>
+  Check-out on edit · gutter signs · a P4V-style client view · diff tabs · annotate · time-lapse ·
+  shelve / submit / sync / resolve — all asynchronous, all in pure Lua.
+</p>
+
+<p align="center">
+  <a href="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Neovim 0.11+" src="https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white">
+  <img alt="Pure Lua, zero dependencies" src="https://img.shields.io/badge/dependencies-none-blue">
+</p>
 
 > [!WARNING]
-> **perforated.nvim is pre-release.** Every feature below is implemented and tested (including
-> against a real Helix Core server); 🧪 marks an experimental one. Commands, options and
-> defaults may still change between commits until the first tagged release.
+> **Pre-release.** Every feature below is implemented and tested (including against a real
+> Helix Core server); 🧪 marks an experimental one. Commands, options and defaults may still
+> change until the first tagged release.
 
-Perforce (Helix Core) integration for Neovim. It is built to be fast and lightweight, and to
-keep out of your way:
+## Why perforated?
 
-- **Never blocks the editor.** Every `p4` call is asynchronous, with timeouts and an offline mode.
-- **Dormant outside Perforce workspaces.** Outside a workspace no modules load and no processes
-  or timers run.
-- **Built for large workspaces** (100k–1M files). p4 queries are batched instead of run once per
+Most Perforce plugins for Vim wrap `p4` in `system()`: every command freezes the editor until
+the server answers, and anything beyond edit / revert / diff means switching to P4V.
+perforated.nvim is built the other way round:
+
+- ⚡ **It never blocks.** Every `p4` call is asynchronous, with timeouts, cancellation and an
+  offline mode. Typing never waits on the server — not even `:w` on a file you just checked out.
+- 💤 **It costs nothing outside Perforce.** Startup is ~0.3 ms; outside a workspace no modules
+  load and no processes or timers run.
+- 🏗️ **It's built for huge workspaces** (100k–1M files). Queries are batched instead of run per
   file, and gutter diffs are computed inside Neovim, so they never call `p4 diff`.
-- **Zero dependencies.** Pure Lua plus the `p4` command-line client. Pickers, statuslines and
-  icon plugins are optional.
+- 🧩 **It has zero dependencies.** Pure Lua plus the `p4` command-line client. Telescope,
+  fzf-lua, snacks, mini.pick, lualine and icon plugins are used when you have them.
+- 🖥️ **It covers the P4V workflow.** Pending changelists, shelves, submit, sync, resolve with
+  your merge tool, integrate, history, annotate and time-lapse are all in Neovim.
 
-## Requirements
+### Compared with other Vim plugins
 
-- Neovim **0.11+**
-- The `p4` command-line client (Helix Core CLI) on your `$PATH`, or set its path in the config
-- A workspace configured through a `P4CONFIG` file (e.g. `.p4config`), or `P4CLIENT` set in your
-  environment or with `p4 set`
-- Linux, macOS or WSL
+| | perforated.nvim | [vim-vp4](https://github.com/ngemily/vim-vp4) | [vim-perforce](https://github.com/nfvs/vim-perforce) |
+|---|:-:|:-:|:-:|
+| Asynchronous (never freezes the editor) | ✅ | ❌ | ❌ |
+| Check-out on first change / on save | ✅ | ✅ | ✅ |
+| Gutter signs, hunk navigation / preview / reset | ✅ | ❌ | ❌ |
+| P4V-style client view (pending, shelved, stale, reconcile) | ✅ | ❌ | ❌ |
+| Side-by-side diffs, whole-changelist diff tab | ✅ | single file | ❌ |
+| Annotate, current-line blame, time-lapse | ✅ | annotate | ❌ |
+| Shelve / submit / sync / resolve / integrate | ✅ | shelve | ❌ |
+| Stale-file notifications, statusline | ✅ | ❌ | ❌ |
 
-## Installation
+Switching? [docs/migrating.md](docs/migrating.md) maps every command and setting.
 
-With [lazy.nvim](https://github.com/folke/lazy.nvim):
+## Quick start
 
-```lua
-{ 'gautambatra/perforated.nvim' }
-```
-
-That's all you need; `setup()` isn't required. To configure it, pass `opts`:
+**1. Install** (Neovim 0.11+, `p4` on your `$PATH`; Linux, macOS or WSL). With
+[lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
   'gautambatra/perforated.nvim',
   opts = {
-    keymaps = 'default', -- opt-in <leader>p… preset (see Keymaps)
+    keymaps = 'default', -- optional: the <leader>p… preset (see Keymaps)
   },
 }
 ```
 
-- **Don't lazy-load it on `cmd`/`keys`.** It has to be loaded when files open so it can attach to
-  them. Loading at startup costs under 0.5 ms, and `event = 'VeryLazy'` also works.
-- **Run `:checkhealth perforated` after installing.** It checks the `p4` binary, your
-  P4CONFIG/P4ENVIRO setup, server reachability and latency, login state, and tmux focus events.
+`setup()` is not required: `{ 'gautambatra/perforated.nvim' }` alone works, and options can
+also go in `vim.g.perforated = { … }`. **Don't lazy-load it on `cmd` or `keys`**: it attaches
+to files as they open (loading costs under 0.5 ms; `event = 'VeryLazy'` is fine).
 
-Configuration can also be set as `vim.g.perforated = { … }` before the plugin loads.
+<details>
+<summary>Other plugin managers</summary>
 
-## Features
+```lua
+-- Neovim 0.12 built-in vim.pack
+vim.pack.add({ 'https://github.com/gautambatra/perforated.nvim' })
+```
 
-### ✅ Client view (`:P4`)
+```vim
+" vim-plug
+Plug 'gautambatra/perforated.nvim'
+```
+
+Any manager that puts the repository on `runtimepath` works; there's no build step.
+</details>
+
+**2. Check your setup** with `:checkhealth perforated`. It checks the `p4` binary, your
+`P4CONFIG` / `P4ENVIRO`, server reachability and latency, login state, tmux focus events, and
+typos in your config. Your workspace needs a `P4CONFIG` file (e.g. `.p4config`) or `P4CLIENT`
+set in your environment or with `p4 set`.
+
+**3. Take the five-minute tour.** Open any file in your workspace, then:
+
+| Try this | What happens |
+|---|---|
+| Start editing a read-only file | A small menu offers to check it out — into your last changelist with `<CR>` |
+| Look at the sign column | Added / changed / deleted lines against your have revision; `]h` / `[h` jump between hunks |
+| `:P4` | The **client view**: your pending changelists, shelves, stale files and recent submits. Press `?` for its keys |
+| `d` on a file there, or `:P4 diff` | A side-by-side diff in a new tab (`q` closes it) |
+| `D` on a changelist | Every file of the changelist in a diff tab with a file panel |
+| `:P4 annotate` / `:P4 blame` | Who changed each line, coloured by age / as virtual text on the current line |
+| `:P4 timelapse` | Step through every revision of the file with `h` / `l`, P4V-style |
+| `P` on a changelist | Submit it, after a confirmation that warns about stale or unresolved files |
+
+Everything is also under `:P4 <Tab>`, and `:h perforated` has the full reference.
+
+## Feature guide
+
+Click a section to expand it.
+
+<details>
+<summary><b>✏️ Editing: check-out, add, signs and hunks, revert</b></summary>
+
+#### Check-out on edit
+
+The first change to an unopened (read-only) depot file opens a small menu next to the cursor:
+
+```
+╭ Perforce: check out? ──────────────────────────────────╮
+│ src/parser.cpp  #4/#4                                  │
+│                                                        │
+│  <CR>   Check out to CL 123470 "Fix crash in parser"   │
+│  c      choose changelist…                             │
+│  n      new changelist…                                │
+│  A      always use this target (session, no prompt)    │
+│  s      skip (this buffer)                             │
+│  S      never ask (this session)                       │
+╰────────────────────────────────────────────────────────╯
+```
+
+- **Sticky changelist.** The last CL you chose becomes the `<CR>` default for this session. It's
+  dropped automatically once that CL is submitted or deleted.
+- **Choosing a changelist.** `c` lists the default CL, your pending CLs and `+ new changelist…`.
+- **Cancelling isn't skipping.** `<Esc>`, or backing out of the CL picker or the description
+  prompt, leaves the file unopened and read-only. Only `s` skips the buffer, and `:e!` resets
+  that too. To check out later, reload with `:e!` and edit, or use `<leader>pe` / `:P4 edit`.
+- **Typing through the menu is safe.** Keys typed in the first 300 ms after the menu appears
+  count as text and are replayed into the buffer (`checkout.prompt_grace`).
+- **Writes never wait on the server.** Choosing a target makes the file writable right away;
+  `p4 edit` runs in the background.
+- **Warnings in the menu.** It warns when a newer revision exists in the depot, or when another
+  user has the file open.
+- **Silent mode.** `checkout = { prompt = false, on_write = true }` checks out silently when you
+  save.
+- **Directory limit.** `checkout.dirs` restricts automatic check-out to the directories you list.
+
+#### Add on write
+
+Saving a new file inside the workspace offers to `p4 add` it, using the same menu.
+`checkout.add_on_write = 'auto' | 'prompt' | false`.
+
+#### Gutter signs and hunks
+
+- Signs mark added, changed and deleted lines against your **#have** revision. Stale files
+  (have < head) get their own marker.
+- The base text is fetched once per revision and cached in memory. Diffs run inside Neovim, and
+  on a background thread for large files. Nothing calls `p4` while you type.
+- `]h` / `[h` jump between hunks; you can also preview a hunk or reset it to `#have` (undoable).
+
+#### Revert
+
+- `:P4 revert` asks for confirmation; `:P4 revert!` skips it.
+- `:P4 revert -a` reverts only files you haven't changed.
+- Affected buffers reload automatically.
+
+</details>
+
+<details>
+<summary><b>📋 Client view (<code>:P4</code>) and changelists</b></summary>
 
 A p4v-style overview of your workspace in a tab (`:P4 view float` or `:P4 view split` for
 other layouts):
@@ -115,7 +228,7 @@ other layouts):
   - `A` toggles between this client and **all your clients**.
   - `Q`/`gQ` send the line, the marked lines or a whole changelist to quickfix / the location list.
 
-### ✅ Changelists
+#### Changelists
 
 - **`c` / `:P4 change new`: create a changelist.** A small editor opens for the description;
   `:w` or `<C-s>` saves and `q` cancels. Check-out's "new changelist" uses the same editor.
@@ -139,7 +252,43 @@ other layouts):
   your client view unless you pass a path; `-u` shows another user's work. Pages load as you
   reach the end (or with `gn`), so no query is unbounded.
 
-### ✅ Describe, history, annotate, blame
+</details>
+
+<details>
+<summary><b>🔍 Diffs</b></summary>
+
+- **Identical files don't open a diff.** Every diff (`:P4 diff`, `d`, `w`, history, describe,
+  annotate) first checks whether the two sides are identical and just says so if they are. For
+  a set of files (`D` on a changelist, a shelf, `:P4 diff -a`), identical files are listed
+  under "Identical" at the end of the file panel and only the rest are diffed; if every file
+  is identical, the diff tab doesn't open. The check is cheap: digests for depot revisions and
+  `p4 diff -sr` for opened files (one call each), contents only for unsaved buffers and
+  revision-vs-workspace diffs.
+
+- `:P4 diff` opens the current file against its depot revision, side by side in a new tab, using
+  Neovim's diff mode (`]c`, `do`, `dp` all work). `q` closes the tab.
+- Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
+- `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
+  environment. GUI tools run detached; terminal tools open in a terminal tab.
+- **Events for customising the diff tab.** `User PerforatedDiffOpen` fires when the diff tab is
+  ready, and `User PerforatedDiffClose` fires once it closes, whether by `q`, `:q` or
+  `:tabclose`. `ev.data` holds `{ tab, wins = { left, right }, bufs = { left, right }, spec,
+  path }`. Example:
+  ```lua
+  vim.api.nvim_create_autocmd('User', {
+    pattern = 'PerforatedDiffOpen',
+    callback = function(ev) vim.wo[ev.data.wins.left].cursorline = true end,
+  })
+  ```
+  For settings that should apply to every diff (`nvim -d`, `:diffsplit`, `:P4 diff`), use
+  `OptionSet` with pattern `diff` instead, and restore them when the last diff window closes.
+- Any depot revision can be opened as a read-only buffer, e.g.
+  `:e perforated:////depot/path/file.c\#3` (escape `#` in `:e`).
+
+</details>
+
+<details>
+<summary><b>📜 Describe, history, annotate, blame</b></summary>
 
 - **`:P4 describe N` (`gd` on a changelist anywhere):** a changelist buffer with the header, the
   full description, the files and any shelved files. `<Tab>` expands a file's diff inline; it
@@ -169,7 +318,10 @@ other layouts):
 - **Swarm:** `gx` opens a changelist's review and `gX` copies its URL. The URL comes from
   `swarm.url` or the server's `P4.Swarm.URL` property.
 
-### ✅ Time-lapse
+</details>
+
+<details>
+<summary><b>⏱️ Time-lapse</b></summary>
 
 `:P4 timelapse` (`t` on a file in the client view, describe, history or annotate; `<C-S-t>`)
 opens the file in a read-only buffer (with its syntax highlighting) that steps through every
@@ -203,7 +355,10 @@ with the revisions it lived in); every revision is then rebuilt in memory, and a
 edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions). Files above
 `timelapse.max_bytes` (20 MB) point you to their history instead.
 
-### ✅ Shelve, submit, sync, resolve, integrate
+</details>
+
+<details>
+<summary><b>🚀 Shelve, submit, sync, resolve, integrate</b></summary>
 
 - **Shelve (`s`), unshelve (`S`), delete shelved files (`z`)** on a changelist or on marked
   files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
@@ -219,7 +374,7 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   update, be added or deleted, and whether opened files are affected) before you decide.
   **Sync to a changelist:** `g@` on any submitted changelist (Recent submitted, the Sync CL
   row, `:P4 changes`, describe, history), `:P4 sync @12345`, or `:P4 sync @` to pick one.
-  Labels and dates work too (`:P4 sync @mylabel`, `@2026/09/01`). open buffers reload without "file changed"
+  Labels and dates work too (`:P4 sync @mylabel`, `@2026/09/01`). Open buffers reload without "file changed"
   prompts, and their signs follow the new revision. Afterwards every opened file is re-checked:
   files that need attention (can't clobber, and *every* unresolved file in the workspace, not
   just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
@@ -244,119 +399,12 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   accepted, conflicts to the merge tool). `:P4 integrate` with no number asks for a source path
   and lets you pick one of its changelists.
 
-### ✅ Pickers
+</details>
 
-Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
-use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**,
-detected in that order, falling back to `vim.ui.select`. Set `picker = 'telescope'` (etc.) to
-choose one explicitly.
+<details>
+<summary><b>🔔 Stale files, quickfix lists, statusline</b></summary>
 
-### ✅ Workspace detection
-
-- Opening a file looks for your `P4CONFIG` file in that file's directory and its parents. The
-  lookup is pure Lua and cached per directory, and starts no processes.
-- The directory containing that file is the workspace **anchor**. Every p4 command for the
-  workspace runs from there, so all its buffers see the same settings.
-- Without a `P4CONFIG` file but with `P4CLIENT` set, one background `p4 info` per session learns
-  the client root.
-- Buffers from **several workspaces** can be open in one session. Each workspace keeps its
-  connection, caches and settings, shared by all of its buffers.
-- **All state is per Neovim session.** Several Neovim instances on one machine never interfere.
-
-### ✅ Check-out on edit
-
-The first change to an unopened (read-only) depot file opens a small menu next to the cursor:
-
-```
-╭ Perforce: check out? ──────────────────────────────────╮
-│ src/parser.cpp  #4/#4                                  │
-│                                                        │
-│  <CR>   Check out to CL 123470 "Fix crash in parser"   │
-│  c      choose changelist…                             │
-│  n      new changelist…                                │
-│  A      always use this target (session, no prompt)    │
-│  s      skip (this buffer)                             │
-│  S      never ask (this session)                       │
-╰────────────────────────────────────────────────────────╯
-```
-
-- **Sticky changelist.** The last CL you chose becomes the `<CR>` default for this session. It's
-  dropped automatically once that CL is submitted or deleted.
-- **Choosing a changelist.** `c` lists the default CL, your pending CLs and `+ new changelist…`.
-- **Cancelling isn't skipping.** `<Esc>`, or backing out of the CL picker or the description
-  prompt, leaves the file unopened and read-only. Only `s` skips the buffer, and `:e!` resets
-  that too. To check out later, reload with `:e!` and edit, or use `<leader>pe` / `:P4 edit`.
-- **Typing through the menu is safe.** Keys typed in the first 300 ms after the menu appears
-  count as text and are replayed into the buffer (`checkout.prompt_grace`).
-- **Writes never wait on the server.** Choosing a target makes the file writable right away;
-  `p4 edit` runs in the background.
-- **Warnings in the menu.** It warns when a newer revision exists in the depot, or when another
-  user has the file open.
-- **Silent mode.** `checkout = { prompt = false, on_write = true }` checks out silently when you
-  save.
-- **Directory limit.** `checkout.dirs` restricts automatic check-out to the directories you list.
-
-### ✅ Add on write
-
-Saving a new file inside the workspace offers to `p4 add` it, using the same menu.
-`checkout.add_on_write = 'auto' | 'prompt' | false`.
-
-### ✅ Gutter signs and hunks
-
-- Signs mark added, changed and deleted lines against your **#have** revision. Stale files
-  (have < head) get their own marker.
-- The base text is fetched once per revision and cached in memory. Diffs run inside Neovim, and
-  on a background thread for large files. Nothing calls `p4` while you type.
-- `]h` / `[h` jump between hunks; you can also preview a hunk or reset it to `#have` (undoable).
-
-### ✅ Diffs
-
-- **Identical files don't open a diff.** Every diff (`:P4 diff`, `d`, `w`, history, describe,
-  annotate) first checks whether the two sides are identical and just says so if they are. For
-  a set of files (`D` on a changelist, a shelf, `:P4 diff -a`), identical files are listed
-  under "Identical" at the end of the file panel and only the rest are diffed; if every file
-  is identical, the diff tab doesn't open. The check is cheap: digests for depot revisions and
-  `p4 diff -sr` for opened files (one call each), contents only for unsaved buffers and
-  revision-vs-workspace diffs.
-
-- `:P4 diff` opens the current file against its depot revision, side by side in a new tab, using
-  Neovim's diff mode (`]c`, `do`, `dp` all work). `q` closes the tab.
-- Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
-- `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
-  environment. GUI tools run detached; terminal tools open in a terminal tab.
-- **Events for customising the diff tab.** `User PerforatedDiffOpen` fires when the diff tab is
-  ready, and `User PerforatedDiffClose` fires once it closes, whether by `q`, `:q` or
-  `:tabclose`. `ev.data` holds `{ tab, wins = { left, right }, bufs = { left, right }, spec,
-  path }`. Example:
-  ```lua
-  vim.api.nvim_create_autocmd('User', {
-    pattern = 'PerforatedDiffOpen',
-    callback = function(ev) vim.wo[ev.data.wins.left].cursorline = true end,
-  })
-  ```
-  For settings that should apply to every diff (`nvim -d`, `:diffsplit`, `:P4 diff`), use
-  `OptionSet` with pattern `diff` instead, and restore them when the last diff window closes.
-- Any depot revision can be opened as a read-only buffer, e.g.
-  `:e perforated:////depot/path/file.c\#3` (escape `#` in `:e`).
-
-### ✅ Revert
-
-- `:P4 revert` asks for confirmation; `:P4 revert!` skips it.
-- `:P4 revert -a` reverts only files you haven't changed.
-- Affected buffers reload automatically.
-
-### ✅ Quickfix integration
-
-| Command | List |
-|---|---|
-| `:P4 opened` | Opened files grouped by changelist, with `STALE` / `UNRESOLVED` flags |
-| `:P4 status` | Stale and unresolved opened files, with the reason |
-| `:P4 hunks` | Every hunk across all opened files, found with one batched `p4 print` |
-| `:P4 hunks %` | Hunks of the current file, in the location list |
-
-Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cursor.
-
-### ✅ Stale-file detection
+#### Stale-file detection
 
 - **A cheap background check** runs every 5 minutes, only while Neovim has focus and you have
   files open. It also runs when focus returns and when you enter a Perforce buffer. The full
@@ -368,7 +416,18 @@ Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cur
   - `:P4 notifications` shows the history, and `:P4 dismiss` closes them.
 - **The stale marker stays in the statusline and sign column** until you sync.
 
-### ✅ Statusline
+#### Quickfix integration
+
+| Command | List |
+|---|---|
+| `:P4 opened` | Opened files grouped by changelist, with `STALE` / `UNRESOLVED` flags |
+| `:P4 status` | Stale and unresolved opened files, with the reason |
+| `:P4 hunks` | Every hunk across all opened files, found with one batched `p4 print` |
+| `:P4 hunks %` | Hunks of the current file, in the location list |
+
+Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cursor.
+
+#### Statusline
 
 ```lua
 -- lualine: a built-in component
@@ -394,14 +453,64 @@ The raw data is also available as variables:
 
 A `User PerforatedStatus` event fires whenever they change.
 
-### ✅ Connection handling
+</details>
+
+<details>
+<summary><b>🧩 Integrations: pickers, icons, P4V tools, code actions</b></summary>
+
+#### Pickers
+
+Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
+use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**,
+detected in that order, falling back to `vim.ui.select`. Set `picker = 'telescope'` (etc.) to
+choose one explicitly.
+
+#### Icons
+
+- File-type icons come from mini.icons or nvim-web-devicons, when installed.
+- Status glyphs use Nerd Font symbols, with an ASCII fallback. Both are configurable.
+
+#### P4V tools (p4vc)
+
+When `p4vc` is installed: `gR` / `<C-S-r>` opens the **revision graph** of the file under the
+cursor (client view, describe, history, annotate, time-lapse), the `.` menu adds **P4V's
+time-lapse**, and `:P4 p4vc {revgraph|timelapse|streamgraph} [file]` runs them directly (the
+current file by default). `:checkhealth perforated` shows whether it was found; set
+`p4vc = '/path/to/p4vc'` if it isn't on your `PATH`.
+
+#### 🧪 Code actions (experimental)
+
+`lsp = { enabled = true }` attaches a small in-process language server to Perforce buffers
+(no external process), so your code-action menu (`gra`, or your picker's) offers what
+applies to the file and line: check out, get latest, resolve, diff, preview / undo the change
+under the cursor, move to another changelist, revert (if unchanged), describe the file's
+changelist or the one that last changed the line, history, annotate, time-lapse.
+
+</details>
+
+<details>
+<summary><b>🛠️ Workspaces, connections, debug log</b></summary>
+
+#### Workspace detection
+
+- Opening a file looks for your `P4CONFIG` file in that file's directory and its parents. The
+  lookup is pure Lua and cached per directory, and starts no processes.
+- The directory containing that file is the workspace **anchor**. Every p4 command for the
+  workspace runs from there, so all its buffers see the same settings.
+- Without a `P4CONFIG` file but with `P4CLIENT` set, one background `p4 info` per session learns
+  the client root.
+- Buffers from **several workspaces** can be open in one session. Each workspace keeps its
+  connection, caches and settings, shared by all of its buffers.
+- **All state is per Neovim session.** Several Neovim instances on one machine never interfere.
+
+#### Connection handling
 
 - **Expired login:** exactly one password prompt, then the calls that failed are retried.
 - **Unreachable server:** offline mode. Calls fail immediately with a clear message, and a
   background retry backs off from 5 s to 5 min. The statusline shows `⊘`.
 - **Command log:** `:P4 log` lists every p4 command the plugin ran, with timings.
 
-### ✅ Debug log
+#### Debug log
 
 For diagnosing issues on a live machine, perforated can write a detailed log file. The log is
 off by default, and costs nothing while off. There are three ways to turn it on:
@@ -436,26 +545,7 @@ rotates at `debug.max_kb`. **Secrets are never written:** the password sent to `
 | `:P4 debug snapshot` | Write the current state (workspaces, buffers, queue, recent p4 calls) to the log, for bug reports |
 | `:P4 debug open` / `clear` | Open or delete the log file |
 
-### ✅ P4V tools (p4vc)
-
-When `p4vc` is installed: `gR` / `<C-S-r>` opens the **revision graph** of the file under the
-cursor (client view, describe, history, annotate, time-lapse), the `.` menu adds **P4V's
-time-lapse**, and `:P4 p4vc {revgraph|timelapse|streamgraph} [file]` runs them directly (the
-current file by default). `:checkhealth perforated` shows whether it was found; set
-`p4vc = '/path/to/p4vc'` if it isn't on your `PATH`.
-
-### 🧪 Code actions (experimental)
-
-`lsp = { enabled = true }` attaches a small in-process language server to Perforce buffers
-(no external process), so your code-action menu (`gra`, or your picker's) offers what
-applies to the file and line: check out, get latest, resolve, diff, preview / undo the change
-under the cursor, move to another changelist, revert (if unchanged), describe the file's
-changelist or the one that last changed the line, history, annotate, time-lapse.
-
-### ✅ Icons
-
-- File-type icons come from mini.icons or nvim-web-devicons, when installed.
-- Status glyphs use Nerd Font symbols, with an ASCII fallback. Both are configurable.
+</details>
 
 ## Commands
 
@@ -556,7 +646,25 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 
 ## Configuration
 
-These are the defaults for everything that has an effect today:
+Everything works out of the box. A few common tweaks:
+
+```lua
+opts = {
+  checkout = {
+    prompt = false, on_write = true, -- no menu: check out silently when you save
+    dirs = { '~/ws/src/myteam' }, -- only check out automatically under these directories
+  },
+  -- Keep the client view's reconcile scan to the parts you work on
+  client_view = { reconcile = { paths = { 'src/myteam' } } },
+  -- Current-line blame as virtual text
+  blame_line = { enabled = true },
+  -- Force a picker instead of auto-detecting one
+  picker = 'fzf_lua',
+}
+```
+
+<details>
+<summary><b>All options and their defaults</b></summary>
 
 ```lua
 {
@@ -630,8 +738,9 @@ These are the defaults for everything that has an effect today:
 }
 ```
 
-`:checkhealth perforated`
-reports unknown keys, which catches typos.
+</details>
+
+`:checkhealth perforated` reports unknown keys, which catches typos.
 
 Highlight groups (`PerforatedAdd`, `PerforatedChange`, `PerforatedDelete`, `PerforatedStale`,
 `PerforatedToast`, …) are all `default` links, so you can override them.
@@ -657,6 +766,20 @@ A memory soak test (1000 workspace files opened and closed) checks that nothing 
 grows with the number of buffers.
 
 The timing figures are the best of several runs, which filters out noise from other processes.
+
+## Troubleshooting
+
+- **Nothing happens when I open a file.** Run `:checkhealth perforated`, then `:P4 info`. The
+  plugin only activates when it finds your `P4CONFIG` file above the file, or when `P4CLIENT`
+  is set; `PERFORATED_DEBUG=1 nvim <file>` logs why a file was or wasn't treated as a Perforce
+  file (`:P4 debug open`).
+- **The check-out menu stopped appearing.** You may have pressed `s` (skip this buffer; `:e!`
+  resets it) or `S` (never ask this session), or the file is outside `checkout.dirs`.
+  `:P4 edit` always works.
+- **Stale notifications don't arrive while I'm in tmux.** tmux needs `set -g focus-events on`;
+  the health check tells you.
+- **Filing a bug?** `:P4 debug snapshot` writes the plugin's state to the log file; attach the
+  relevant part (passwords are never logged).
 
 ## Development
 
@@ -685,3 +808,6 @@ to `PATH`, or set `vim.g.perforated = { p4 = '<repo>/.deps/p4bin/p4' }`.
 The tests use [mini.test](https://github.com/nvim-mini/mini.nvim) with child Neovim instances.
 Unit-level tests run against a scriptable fake `p4`. Integration tests start a throwaway real
 `p4d` in rsh mode (no daemon, no ports), seeded fresh for each test.
+
+Issues and pull requests are welcome. `docs/developer_guide.md` walks through the architecture
+and conventions, and `make test` must stay green.
