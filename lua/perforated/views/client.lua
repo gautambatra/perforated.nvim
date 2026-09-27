@@ -430,7 +430,7 @@ end
 
 --- Re-query everything (coalesced: one refresh in flight, at most one queued). Each section
 --- is drawn as soon as its own query answers, so a slow query (the Sync CL's
---- `changes -m1 //client/...#have` on a large workspace) never holds back the rest. Until then
+--- `changes -m1 #have` on a large workspace) never holds back the rest. Until then
 --- a section shows what the previous refresh found, or "loading…" the first time.
 ---@param view table
 function M.refresh(view)
