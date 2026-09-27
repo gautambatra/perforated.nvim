@@ -10,10 +10,6 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace('perforated.slider')
 
-local function first_line(s)
-  return vim.trim((s or ''):match('[^\n]*') or '')
-end
-
 --- Revisions that exist, oldest first.
 local function order(tl)
   if not tl.order then
@@ -263,7 +259,5 @@ function M.attach(view, on_click)
   self:render()
   return self
 end
-
-M.first_line = first_line
 
 return M

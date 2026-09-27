@@ -128,14 +128,18 @@ function M.render(view)
   local ann = view.ann
   local cls, meta = ann.cls, ann.meta
   local n = vim.api.nvim_buf_line_count(view.src_buf)
-  local map = mapper(view)
+  local identity = not view.local_file
+  local bmap
+  if not identity then
+    local st = require('perforated.buffer').get(view.src_buf)
+    bmap = base.base_map(st and st.hunks or {}, n)
+  end
   local steps = age_steps(cls)
   local width = require('perforated.config').get().annotate.width
   local lines, hls, line_cl = {}, {}, {}
   local labels, groups = {}, {} -- one formatted label and group per changelist
-  local identity = not view.local_file
   for l = 1, n do
-    local b = identity and l or map(l)
+    local b = identity and l or bmap[l]
     local cl = b and cls[b] or nil
     line_cl[l] = cl or false
     if cl then
@@ -222,13 +226,16 @@ end
 --- Annotate a spec into the view (source window already shows the right buffer).
 local function annotate(view, cb)
   local cfg = require('perforated.config').get().annotate
+  local buf = view.src_buf
   history.annotate(view.ws, view.spec, { integrations = cfg.integrations }, function(ann, err)
+    -- A newer `~` / `<BS>` may have moved on while this revision was being annotated.
+    if view.closed or view.src_buf ~= buf then
+      return
+    end
     if not ann then
       return notify('annotate failed: ' .. tostring(err), vim.log.levels.ERROR)
     end
-    view.ann = ann
     -- A depot revision's text loads asynchronously: render once it is in.
-    local buf = view.src_buf
     local function ready(k)
       if vim.b[buf].perforated_loaded == false and k < 400 then
         return vim.defer_fn(function()
@@ -238,6 +245,7 @@ local function annotate(view, cb)
       if view.closed or view.src_buf ~= buf then
         return
       end
+      view.ann = ann
       M.render(view)
       if cb then
         cb()
@@ -258,6 +266,9 @@ end
 ---@param cb fun(r: perforated.Rev?)
 local function rev_of(view, change, cb)
   local function find()
+    if view.closed then
+      return
+    end
     local hit
     for _, r in ipairs(view.revs or {}) do
       if tonumber(r.change) == change then
@@ -273,28 +284,28 @@ local function rev_of(view, change, cb)
     return find()
   end
   local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
-  history.filelog(view.ws, view.ann.depotFile, { max = max }, function(list, err)
+  local depot = view.ann.depotFile
+  history.filelog(view.ws, depot, { max = max }, function(list, err)
     if not list then
       return notify('filelog failed: ' .. tostring(err), vim.log.levels.ERROR)
     end
-    view.revs, view.revs_of = list, view.ann.depotFile
+    view.revs, view.revs_of = list, depot
     find()
   end)
 end
 
---- The revision before `r`: the previous revision of its file, or for a branch/copy at #1 the
---- source revision it came from. nil: the file was added in `r`.
+--- The revision before `r`: the previous revision of its file, or for a branch/copy the
+--- source revision it came from. nil: the file was (re-)added in `r`.
 ---@param r perforated.Rev
 ---@return string?
 local function before(r)
-  local n = tonumber(r.rev) or 1
-  if n > 1 then
-    return r.depotFile .. '#' .. (n - 1)
-  end
-  if r.from and r.from.file and (r.from.how or ''):match('from$') then
-    return r.from.file .. (r.from.erev or '#head')
-  end
-  return nil
+  return history.previous(r).spec
+end
+
+--- The line of the annotated revision for a line of the source buffer (they differ when the
+--- workspace file has local edits; a locally changed line keeps its number).
+local function rev_line(view, lnum)
+  return view.local_file and mapper(view)(lnum) or lnum
 end
 
 --- `~`: annotate the revision before the change that last touched this line.
@@ -314,14 +325,13 @@ local function walk_back(view, item)
         vim.log.levels.INFO
       )
     end
-    local lnum = item.lnum
     table.insert(view.stack, {
       spec = view.spec,
       buf = vim.api.nvim_win_get_buf(view.src_win),
       local_file = view.local_file,
-      lnum = lnum,
+      lnum = item.lnum,
     })
-    M.goto_spec(view, spec, lnum)
+    M.goto_spec(view, spec, rev_line(view, item.lnum))
   end)
 end
 
@@ -414,7 +424,7 @@ local function actions(view)
       keys = { 't' },
       p4v = { '<C-S-t>' },
       run = function()
-        local line = vim.api.nvim_win_get_cursor(view.win)[1]
+        local line = rev_line(view, vim.api.nvim_win_get_cursor(view.win)[1])
         require('perforated.views.timelapse').open(ws, view.ann.depotFile, {
           rev = tonumber(view.ann.rev),
           line = line,
@@ -444,9 +454,10 @@ local function actions(view)
         local qf = require('perforated.ui.qf')
         local out = {}
         local name = vim.api.nvim_buf_get_name(view.src_buf)
+        local src = vim.api.nvim_buf_get_lines(view.src_buf, 0, -1, false)
         for l, c in ipairs(view.line_cl) do
           if c == cl then
-            local text = vim.api.nvim_buf_get_lines(view.src_buf, l - 1, l, false)[1] or ''
+            local text = src[l] or ''
             out[#out + 1] = qf.item(
               name,
               vim.trim(text),

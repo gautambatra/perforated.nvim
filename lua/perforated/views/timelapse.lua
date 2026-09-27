@@ -15,9 +15,7 @@ local function notify(msg, level)
   vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
-local function first_line(s)
-  return vim.trim((s or ''):match('[^\n]*') or '')
-end
+local first_line = require('perforated.views.base').first_line
 
 local info_ns = vim.api.nvim_create_namespace('perforated.timelapse.info')
 
@@ -184,7 +182,7 @@ end
 ---@param n integer
 local function is_deleted(tl, n)
   local r = tl.revs[n]
-  return r and (r.action == 'delete' or r.action == 'move/delete' or r.action == 'purge')
+  return r and require('perforated.history').deleted(r.action)
 end
 
 function M.show(view, n)
@@ -766,7 +764,8 @@ function M.open(ws, path, opts)
     end
     keys.attach(buf, view.actions, view)
     view.footer = require('perforated.ui.footer').attach(win)
-    local start = opts.rev and tl.revs[opts.rev] and opts.rev or tl.head
+    -- A file deleted at head opens on its newest revision with content.
+    local start = opts.rev and tl.revs[opts.rev] and opts.rev or tl.last or tl.head
     view.mode, view.scale = 'single', 'change'
     M.show(view, start)
     M.toggle_info(view, true)

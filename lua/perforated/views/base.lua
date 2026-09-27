@@ -133,8 +133,15 @@ function M.close(view)
   if vim.api.nvim_win_get_config(view.win).relative ~= '' then
     return vim.api.nvim_win_close(view.win, true)
   end
-  if #vim.api.nvim_tabpage_list_wins(0) == 1 and #vim.api.nvim_list_tabpages() > 1 then
-    return vim.cmd('tabclose')
+  local tab = vim.api.nvim_win_get_tabpage(view.win)
+  if #vim.api.nvim_tabpage_list_wins(tab) == 1 then
+    if #vim.api.nvim_list_tabpages() > 1 then
+      return vim.cmd('tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
+    end
+    -- The last window of the last tab can't close (E444): show an empty buffer instead.
+    return vim.api.nvim_win_call(view.win, function()
+      vim.cmd('enew')
+    end)
   end
   vim.api.nvim_win_close(view.win, true)
 end
@@ -202,6 +209,30 @@ function M.base_line(hunks, lnum)
     end
   end
   return lnum + delta
+end
+
+--- `base_line` for every line 1..n in one sweep (hunks are sorted and don't overlap): O(n +
+--- hunks) instead of O(n × hunks). `false` marks a line added or changed locally.
+---@param hunks perforated.Hunk[]
+---@param n integer
+---@return (integer|false)[]
+function M.base_map(hunks, n)
+  local out, delta, k = {}, 0, 1
+  local h = hunks[1]
+  for l = 1, n do
+    -- Hunks that end at or before l shift it; a pure deletion shifts the lines after it.
+    while h and l >= h.b_start + math.max(h.b_count, 1) do
+      delta = delta + h.a_count - h.b_count
+      k = k + 1
+      h = hunks[k]
+    end
+    if h and h.b_count > 0 and l >= h.b_start then
+      out[l] = false
+    else
+      out[l] = l + delta
+    end
+  end
+  return out
 end
 
 return M

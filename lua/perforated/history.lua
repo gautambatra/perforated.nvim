@@ -23,6 +23,34 @@ local FILELOG_FIELDS =
 ---@field type string?
 ---@field from { how: string, file: string, srev: string?, erev: string? }?  first integration record
 
+--- Whether a revision's action leaves no content (the file is deleted at that revision).
+---@param action string?
+---@return boolean
+function M.deleted(action)
+  return action == 'delete' or action == 'move/delete' or action == 'purge'
+end
+
+--- The revision before `r` (following a branch/copy back to its source at rev 1). A revision
+--- that (re-)adds the file has no previous content of its own, even when n > 1.
+---@param r perforated.Rev
+---@return perforated.RevSide
+function M.previous(r)
+  local n = tonumber(r.rev) or 1
+  if
+    n > 1
+    and r.action ~= 'add'
+    and r.action ~= 'branch'
+    and r.action ~= 'move/add'
+    and r.action ~= 'import'
+  then
+    return { spec = r.depotFile .. '#' .. (n - 1) }
+  end
+  if r.from and r.from.file and (r.from.how or ''):match('from$') then
+    return { spec = r.from.file .. (r.from.erev or '#head') }
+  end
+  return { empty = 'added' }
+end
+
 --- Revisions of a file, newest first (the file itself, then — with `follow` — the files it was
 --- branched from). One `filelog -l [-i] -m N` call; `before` pages backwards (`path#1,#before`).
 ---@param ws perforated.Workspace

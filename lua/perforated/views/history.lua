@@ -15,28 +15,10 @@ local function notify(msg, level)
   vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
---- The revision before `r` (following a branch/copy back to its source at rev 1).
----@param r perforated.Rev
----@return perforated.RevSide
-local function previous(r)
-  local n = tonumber(r.rev) or 1
-  if
-    n > 1
-    and r.action ~= 'add'
-    and r.action ~= 'branch'
-    and r.action ~= 'move/add'
-    and r.action ~= 'import'
-  then
-    return { spec = r.depotFile .. '#' .. (n - 1) }
-  end
-  if r.from and r.from.file and (r.from.how or ''):match('from$') then
-    return { spec = r.from.file .. (r.from.erev or '#head') }
-  end
-  return { empty = 'added' }
-end
+local previous = history.previous
 
 local function is_deleted(r)
-  return r.action == 'delete' or r.action == 'move/delete' or r.action == 'purge'
+  return history.deleted(r.action)
 end
 
 local function this_side(r)
@@ -305,6 +287,8 @@ local function load_page(view, cb)
     return
   end
   view.loading = true
+  view.gen = (view.gen or 0) + 1
+  local gen = view.gen
   local limit = require('perforated.config').get().history.limit
   local oldest
   for i = #view.revs, 1, -1 do
@@ -322,11 +306,20 @@ local function load_page(view, cb)
     view.depot,
     { max = limit, before = oldest and oldest - 1 },
     function(list, err)
+      if gen ~= view.gen then
+        return -- a refresh started over while this page was loading
+      end
       view.loading = false
       if not list then
         view.more = false
         notify(tostring(err), vim.log.levels.ERROR)
         return cb and cb()
+      end
+      -- A local path's first page tells us its depot path (the file's own revisions come
+      -- first, before the ones it was branched from).
+      if not view.depot_known and list[1] then
+        view.depot, view.depot_known = list[1].depotFile, true
+        view.ctx.depot = view.depot
       end
       local seen, own = view.seen, 0
       for _, r in ipairs(list) do
@@ -335,13 +328,9 @@ local function load_page(view, cb)
           seen[k] = true
           view.revs[#view.revs + 1] = r
         end
-        if r.depotFile == view.depot or (not view.depot_known and own == 0) then
+        if r.depotFile == view.depot then
           own = own + 1
         end
-      end
-      if not view.depot_known and list[1] then
-        view.depot, view.depot_known = list[1].depotFile, true
-        view.ctx.depot = view.depot
       end
       view.more = own >= limit
       if cb then
@@ -414,6 +403,7 @@ function M.open(ws, path, opts)
   end
   function view.refresh()
     view.revs, view.seen, view.more = {}, {}, true
+    view.loading, view.gen = false, (view.gen or 0) + 1
     load_page(view, paint)
   end
   view.actions = base.nav(view, 'History', { expand_menu = true })
