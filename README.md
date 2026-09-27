@@ -41,8 +41,10 @@ of your way:
 - **Time-lapse**, stepping through every revision of a file P4V-style, and current-line blame.
 - **Submit, sync, resolve (with your merge tool) and integrate**, as watchable, stoppable
   jobs.
-- **Stale-file notifications** when someone submits a newer revision of a file you have open,
-  and a statusline component.
+- **A rich statusline**: the client, the file's action and changelist, whether it's modified,
+  your revision, and stale / unresolved / offline / login-needed markers, from a template you
+  can rearrange (lualine component included).
+- **Stale-file notifications** when someone submits a newer revision of a file you have open.
 
 Switching? [docs/migrating.md](docs/migrating.md) maps every command and setting.
 
@@ -442,13 +444,25 @@ vim.o.statusline = '%f %= %{v:lua.require("perforated").statusline()} '
 For a function-style component, pass the function itself: `require('perforated').statusline`,
 without `()`. Calling it in your config evaluates it once at startup and shows an empty string.
 
-What it shows:
-- **Opened files:** the action and CL plus line counts, e.g. `edit@123 +3 ~1 ↓#4→#5  ↓2 !1`.
-  That reads: opened for edit in CL 123, three lines added, one changed, the file is stale (#4
-  vs #5), and in this workspace two opened files are stale and one is unresolved.
-- **Files not opened:** the have revision, e.g. `#3`, or `#3 ↓#3→#4` when stale.
-- **New files:** `not in depot`.
+What it shows, e.g. `alice_ws edit@123 ● #4 ↓#5 !unresolved  ↓2 !1`:
+- **The client**, then for an **opened file** its action and changelist (`edit@123`), and `●`
+  when it differs from the revision you have (`icons.glyphs.modified`; ASCII `*`).
+- **The revision you have** (`#4`), or `not in depot` for a new file.
+- **When they apply:** `↓#5` if a newer revision exists (stale), `!unresolved` if it needs a
+  resolve, and for the whole workspace `↓2` stale opened files, `!1` unresolved, `⊘` offline or
+  `⊘login` when you need to log in.
 - **Outside Perforce:** nothing.
+
+The file part is `statusline.format`, a template of tokens that disappear when they don't
+apply: `{client}`, `{action}`, `{change}`, `{modified}`, `{rev}`, `{head}`, `{stale}`,
+`{unresolved}` and `{diff}` (lines added / changed / removed, e.g. `+3 ~1 -2`). The default is
+`'{client} {action} {modified} {rev} {stale} {unresolved}'`; to add line counts:
+
+```lua
+statusline = { format = '{client} {action} {modified} {diff} {rev} {stale} {unresolved}' }
+```
+
+It can also be a function that receives the status dict and returns the string.
 
 The raw data is also available as variables:
 - `vim.b.perforated_status_dict` (per buffer)
@@ -727,7 +741,12 @@ opts = {
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
   toast = { timeout = 8000, backend = 'float', history = 50 }, -- timeout 0 = sticky; backend 'notify' = vim.notify
-  statusline = { stale = '↓', unresolved = '!', offline = '⊘' },
+  statusline = {
+    format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)
+    stale = '↓',
+    unresolved = '!',
+    offline = '⊘',
+  },
   icons = { provider = 'auto', style = 'auto', glyphs = {} }, -- provider: 'auto'|'mini'|'devicons'|false; style: 'nerd'|'ascii'|'auto'
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 }, -- ms
   cache = { content_mb = 32 }, -- in-memory cache of depot revisions

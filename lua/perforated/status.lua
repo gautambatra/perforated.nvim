@@ -1,8 +1,9 @@
 --- Statusline data. Statuslines only read variables; they never call into p4.
 ---
 ---   vim.b.perforated_status_dict  per buffer: { status, action, change, have, head, stale,
----                                  unresolved, added, changed, removed, conn, ws }
----   vim.b.perforated_status       per buffer: ready-made string
+---                                  unresolved, added, changed, removed, modified, client,
+---                                  conn, ws }
+---   vim.b.perforated_status       per buffer: ready-made string (`statusline.format`)
 ---   vim.g.perforated_status       workspace of the current buffer: { ws, client, user, conn,
 ---                                  opened, stale, unresolved }
 ---
@@ -55,6 +56,64 @@ function M.ws_summary(ws)
   }
 end
 
+--- The pieces a statusline format can use (empty when they don't apply).
+---@param d table  the status dict (vim.b.perforated_status_dict)
+---@param cfg table  config.statusline
+---@return table<string, string>
+function M.tokens(d, cfg)
+  local icons = require('perforated.ui.icons')
+  local opened = d.status == 'opened' or d.status == 'binary'
+  local t = { client = d.client or '' }
+  t.action = opened
+      and vim.trim(icons.action(d.action) .. ' ' .. d.action .. '@' .. (d.change or 'default'))
+    or ''
+  t.change = opened and (d.change or 'default') or ''
+  t.modified = d.modified and icons.glyph('modified') or ''
+  if d.have then
+    t.rev = '#' .. d.have
+  elseif d.status == 'new' then
+    t.rev = 'not in depot'
+  else
+    t.rev = ''
+  end
+  t.head = d.head and ('#' .. d.head) or ''
+  t.stale = d.stale and (cfg.stale .. '#' .. d.head) or ''
+  t.unresolved = d.unresolved and (cfg.unresolved .. 'unresolved') or ''
+  local diff = {}
+  if (d.added or 0) > 0 then
+    diff[#diff + 1] = '+' .. d.added
+  end
+  if (d.changed or 0) > 0 then
+    diff[#diff + 1] = '~' .. d.changed
+  end
+  if (d.removed or 0) > 0 then
+    diff[#diff + 1] = '-' .. d.removed
+  end
+  t.diff = table.concat(diff, ' ')
+  return t
+end
+
+--- The file part of the statusline: `statusline.format` (a template or a function of the
+--- status dict). Tokens that don't apply vanish along with the extra spaces.
+---@param d table
+---@param cfg table
+---@return string
+function M.format(d, cfg)
+  local fmt = cfg.format
+  if type(fmt) == 'function' then
+    local ok, out = pcall(fmt, d)
+    return ok and tostring(out or '') or ''
+  end
+  if d.status == 'pending' or d.status == 'unmanaged' then
+    return ''
+  end
+  local t = M.tokens(d, cfg)
+  local out = (fmt or ''):gsub('{(%w+)}', function(k)
+    return t[k] or ''
+  end)
+  return vim.trim((out:gsub('  +', ' ')))
+end
+
 ---@param buf integer
 function M.update(buf)
   local st = require('perforated.buffer').get(buf)
@@ -62,7 +121,6 @@ function M.update(buf)
     return
   end
   local cfg = require('perforated.config').get().statusline
-  local icons = require('perforated.ui.icons')
   local rec = st.rec or {}
   local sum = require('perforated.diff.engine').summary(st.hunks or {})
   local stale = is_stale(st.rec)
@@ -81,35 +139,15 @@ function M.update(buf)
     conn = st.ws.conn.state,
     ws = st.ws.key,
   }
-  local parts = {}
-  if st.status == 'opened' or st.status == 'binary' then
-    parts[#parts + 1] =
-      vim.trim(icons.action(rec.action) .. ' ' .. rec.action .. '@' .. (rec.change or 'default'))
-    if sum.added > 0 then
-      parts[#parts + 1] = '+' .. sum.added
-    end
-    if sum.changed > 0 then
-      parts[#parts + 1] = '~' .. sum.changed
-    end
-    if sum.removed > 0 then
-      parts[#parts + 1] = '-' .. sum.removed
-    end
-  elseif st.status == 'clean' and rec.haveRev then
-    parts[#parts + 1] = '#' .. rec.haveRev
-  elseif st.status == 'new' then
-    parts[#parts + 1] = 'not in depot'
-  end
-  if stale then
-    parts[#parts + 1] = ('%s#%s→#%s'):format(cfg.stale, rec.haveRev, rec.headRev)
-  end
-  if unresolved then
-    parts[#parts + 1] = cfg.unresolved .. 'unresolved'
-  end
+  d.client = st.ws:client()
+  d.modified = #(st.hunks or {}) > 0
+  local line = M.format(d, cfg)
   -- Runs after every re-diff while typing: skip the Vimscript conversions, the extmark and the
   -- redraw when nothing the statusline shows has changed.
-  local line = table.concat(parts, ' ')
   local sig = table.concat({
     line,
+    tostring(d.client),
+    tostring(d.modified),
     st.status,
     tostring(rec.action),
     tostring(rec.change),
@@ -161,7 +199,7 @@ function M.on_enter(buf)
 end
 
 --- Ready-made statusline component for the current buffer: file state + workspace markers.
----   e.g. " edit@123 +3 ~1 ↓#4→#5   ↓2 !1"
+---   e.g. "alice_ws edit@123 ● #4 ↓#5  ↓2 !1"
 ---@return string
 function M.statusline()
   local buf = vim.api.nvim_get_current_buf()
@@ -185,8 +223,10 @@ function M.statusline()
     if (g.unresolved or 0) > 0 then
       wsp[#wsp + 1] = cfg.unresolved .. g.unresolved
     end
-    if g.conn == 'offline' or g.conn == 'offline_auth' then
+    if g.conn == 'offline' then
       wsp[#wsp + 1] = cfg.offline
+    elseif g.conn == 'offline_auth' then
+      wsp[#wsp + 1] = cfg.offline .. 'login'
     end
     if #wsp > 0 then
       parts[#parts + 1] = table.concat(wsp, ' ')

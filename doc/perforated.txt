@@ -526,6 +526,7 @@ keys):
       },
       startup_check = true,
       statusline = {
+        format = "{client} {action} {modified} {rev} {stale} {unresolved}",
         offline = "⊘",
         stale = "↓",
         unresolved = "!"

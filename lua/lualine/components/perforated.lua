@@ -1,7 +1,8 @@
 -- lualine component: `sections = { lualine_c = { 'perforated' } }`
 --
--- Shows the current file's Perforce state (e.g. `edit@123 +3 ~1 ↓#4→#5`) plus workspace
--- markers (`↓2` stale opened files, `!1` unresolved, `⊘` offline). Empty outside Perforce.
+-- Shows the current file's Perforce state (`statusline.format`, e.g. `alice_ws edit@123 ● #4 ↓#5`)
+-- plus workspace markers (`↓2` stale opened files, `!1` unresolved, `⊘` offline, `⊘login`
+-- login needed). Empty outside Perforce.
 local M = require('lualine.component'):extend()
 
 function M:update_status()

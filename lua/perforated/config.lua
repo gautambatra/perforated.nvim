@@ -67,7 +67,15 @@ local defaults = {
   startup_check = true,
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 },
   toast = { timeout = 8000, backend = 'float', history = 50 },
-  statusline = { stale = '↓', unresolved = '!', offline = '⊘' },
+  statusline = {
+    -- File part. Tokens: {client} {action} (icon, action@CL) {change} {modified} (marker when
+    -- the file differs from its have revision) {rev} (#have, or "not in depot") {head}
+    -- {stale} {unresolved} {diff} (+added ~changed -removed lines). Or a function(dict).
+    format = '{client} {action} {modified} {rev} {stale} {unresolved}',
+    stale = '↓',
+    unresolved = '!',
+    offline = '⊘',
+  },
   icons = { provider = 'auto', style = 'auto', glyphs = {} },
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 },
   cache = { content_mb = 32 },
