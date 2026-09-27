@@ -204,7 +204,8 @@ other layouts):
   `:P4 opened` quickfix list (`·` for unchanged there). It costs one `p4 diff -sa` per refresh,
   which compares the files locally. The glyph is `icons.glyphs.modified` (ASCII: `*`).
 - **Always fresh:** the view re-queries every time it opens or refreshes, drawing a skeleton
-  instantly while the data loads. It also updates after check-outs and reverts made anywhere
+  instantly while the data loads. Each section appears as soon as its own query answers, so a
+  slow one (the Sync CL on a very large workspace) never holds back the rest. It also updates after check-outs and reverts made anywhere
   in Neovim.
 - **Keys:**
   - Vim-style keys, plus P4V's shortcuts (`<C-d>` diff, `<C-r>` revert, `<C-n>` new CL,
@@ -223,6 +224,10 @@ other layouts):
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
   - `m` marks files for multi-file actions (revert, move, …) and `u` clears the marks.
   - `A` toggles between this client and **all your clients**.
+  - `W` **switches to another of your clients**: pick one from a list of your clients (with
+    their root, host and stream) and the view shows it in the same window. If Perforce refuses
+    (e.g. a client bound to another host), its message is shown and the view keeps its client.
+    Your open files are unaffected: each keeps the workspace it lives in.
   - `Q`/`gQ` send the line, the marked lines or a whole changelist to quickfix / the location list.
 
 #### Changelists
@@ -239,7 +244,7 @@ other layouts):
   it; its opened files move to the default changelist (or are reverted, if you choose that) and
   its shelved files are deleted, then the changelist is. The default changelist can't be
   deleted; another client's changelist needs `change.allow_force`.
-- **`M`: move files between changelists.** Pick an existing changelist or create a new one.
+- **`gm`: move files between changelists.** Pick an existing changelist or create a new one.
 - **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
   diff on the right; moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
   window. It works for pending changelists, shelves and submitted changelists. Each file loads
@@ -296,7 +301,7 @@ other layouts):
   `w` with your workspace file and `gh` with the head revision (`w` on the Shelved line: every
   shelved file against the workspace, in a diff tab). `:P4 describe` with no number uses the
   current file's changelist.
-- **`:P4 filelog [path]` (`L` / `<C-t>`): file history.** A float lists the revisions, with
+- **`:P4 filelog [path]` (`gL` / `<C-t>`): file history.** A float lists the revisions, with
   the files a branch came from. `<CR>` opens the action menu: `d` diff against the previous
   revision, `w` against your workspace file, `gd` describe, `K` view changelist, `o` open the
   revision read-only, `b` annotate it. Pages load as you reach the end (or `gn`). `Q` moves
@@ -344,7 +349,7 @@ revision instantly:
   comparison modes add a second handle, `◆`: the older revision you compare against.
   *Incremental diff* shows `◆` in a window on the left, diffed against `●`; *range* shows `●`
   with every line added since `◆` highlighted (tagged with the revision that added it) and
-  every line deleted since `◆` shown where it was. `h` / `l` move `●`, `H` / `L` move `◆`, and
+  every line deleted since `◆` shown where it was. `h` / `l` move `●`, `[a` / `]a` move `◆`, and
   the info panel says which mode you're in and where `◆` is.
 
 It takes two p4 calls (`filelog` and `annotate -a`, which lists every line the file ever had
@@ -357,7 +362,7 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 <details>
 <summary><b>🚀 Shelve, submit, sync, resolve, integrate</b></summary>
 
-- **Shelve (`s`), unshelve (`S`), delete shelved files (`z`)** on a changelist or on marked
+- **Shelve (`s`), unshelve (`S`), delete shelved files (`<Del>`)** on a changelist or on marked
   files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
   [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
   shelf's own changelist when it's yours, otherwise you pick one; files that need a resolve are

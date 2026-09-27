@@ -434,7 +434,7 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'L' },
+      keys = { 'gL' },
       p4v = { '<C-t>' },
       run = function()
         require('perforated.views.history').open(

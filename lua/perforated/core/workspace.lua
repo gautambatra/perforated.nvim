@@ -124,6 +124,27 @@ function M.get_or_create(spec)
   return ws
 end
 
+--- The same workspace, but using another client of the user (the client view's "switch
+--- client"). Every p4 call runs with `-c <name>` from the same directory, so the server and user
+--- stay the same. Buffers are never attached to it: files keep the workspace they live in.
+--- Switching back to the original client returns the original workspace.
+---@param ws perforated.Workspace
+---@param name string
+---@return perforated.Workspace
+function M.for_client(ws, name)
+  local base = ws.base or ws
+  if name == base:client() then
+    return base
+  end
+  local key = base.key .. '|client:' .. name
+  local other = registry[key]
+  if not other then
+    other = M.get_or_create({ key = key, anchor = base.anchor, mode = 'client' })
+    other.base, other.client_arg = base, name
+  end
+  return other
+end
+
 --- The connection-only context (no client), created on first use.
 ---@return perforated.Workspace
 function M.connection()
@@ -201,7 +222,9 @@ function Workspace:run(args, opts, cb)
       runner.run({
         args = args,
         cwd = (self.mode == 'connection' and opts.cwd) or self:cwd(),
-        globals = opts.globals,
+        globals = self.client_arg
+            and vim.list_extend({ '-c', self.client_arg }, opts.globals or {})
+          or opts.globals,
         tagged = opts.tagged,
         stdin = opts.stdin,
         timeout = timeout,
@@ -332,6 +355,9 @@ end
 
 ---@return string?
 function Workspace:client()
+  if self.client_arg then
+    return self.client_arg
+  end
   local info = self.info
   if info and info.clientName and info.clientName ~= '*unknown*' then
     return info.clientName
@@ -385,7 +411,13 @@ end
 --- Free heavy state when no buffer uses the workspace and cwd is outside it. The object
 --- (and cheap state such as the sticky CL) stays registered and reactivates on demand.
 function Workspace:_maybe_idle()
-  if self.mode == 'connection' or self.idle or next(self.buffers) or self:_cwd_inside() then
+  if
+    self.mode == 'connection'
+    or self.mode == 'client'
+    or self.idle
+    or next(self.buffers)
+    or self:_cwd_inside()
+  then
     return
   end
   self.idle = true

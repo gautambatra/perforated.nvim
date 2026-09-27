@@ -15,7 +15,7 @@ aliases.
 | `:Vp4Add` | `:P4 add` — or on `:w` of a new file (`checkout.add_on_write`) |
 | `:Vp4Delete[!]` | `:P4 delete` (confirms; the buffer is closed) |
 | `:Vp4Revert[!]` | `:P4 revert[!]` (`!` skips the confirmation) |
-| `:Vp4Reopen` | `:P4 reopen [-c CL]` (no `-c`: pick one), or `M` in the client view / quickfix |
+| `:Vp4Reopen` | `:P4 reopen [-c CL]` (no `-c`: pick one), or `gm` in the client view / quickfix |
 | `:Vp4Diff` | `:P4 diff` (side-by-side in a tab; `q` closes) |
 | `:Vp4Diff s` | `:P4 diff @=<your CL>` |
 | `:Vp4Diff p` | `:P4 diff prev` |

@@ -364,7 +364,7 @@ T['m3']['client view: L history, gd describe on a CL'] = function()
   child.cmd('tabclose')
   wait([[vim.bo.filetype == 'perforated']])
   goto_line('b.txt')
-  child.type_keys('L')
+  child.type_keys('gL')
   wait_text('initial import')
 end
 

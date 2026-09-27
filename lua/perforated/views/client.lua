@@ -139,11 +139,15 @@ local function build(view, data)
         },
       },
     }
-  elseif data.have == false then
+  else
     roots[#roots + 1] = {
       id = 'have',
       kind = 'header',
-      text = { { '    Sync CL: ', 'PerforatedSection' }, { 'nothing synced', 'PerforatedDim' } },
+      text = {
+        { '    Sync CL: ', 'PerforatedSection' },
+        have == false and { 'nothing synced', 'PerforatedDim' }
+          or { 'loading…', 'PerforatedLoading' },
+      },
     }
   end
 
@@ -272,6 +276,13 @@ local function build(view, data)
     end
   end
   local npending = #pending_children
+  if not (data.pending and data.opened) then
+    -- Still loading (first refresh): no half-built changelists, nothing needs attention yet.
+    pending_children, attention, npending =
+      {
+        { id = 'pending:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
+      }, {}, 0
+  end
   if data.err and data.err ~= '' then
     -- A failed query must not look like an empty workspace.
     table.insert(pending_children, 1, {
@@ -384,13 +395,19 @@ local function build(view, data)
       },
     }
   end
+  local nsub = #sub_children
+  if not data.submitted then
+    sub_children = {
+      { id = 'sub:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
+    }
+  end
   roots[#roots + 1] = {
     id = 'sec:submitted',
     kind = 'section',
     open = true,
     text = {
       { 'Recent submitted', 'PerforatedSection' },
-      { ('  (%d)'):format(#sub_children), 'PerforatedDim' },
+      { ('  (%d)'):format(nsub), 'PerforatedDim' },
     },
     children = sub_children,
   }
@@ -411,7 +428,10 @@ end
 -- Data
 -- -------------------------------------------------------------------------------------------
 
---- Re-query everything (coalesced: one refresh in flight, at most one queued).
+--- Re-query everything (coalesced: one refresh in flight, at most one queued). Each section
+--- is drawn as soon as its own query answers, so a slow query (the Sync CL's
+--- `changes -m1 //client/...#have` on a large workspace) never holds back the rest. Until then
+--- a section shows what the previous refresh found, or "loading…" the first time.
 ---@param view table
 function M.refresh(view)
   if not vim.api.nvim_buf_is_valid(view.buf) then
@@ -424,61 +444,96 @@ function M.refresh(view)
   view.loading = true
   local ws = view.ws
   local t0 = vim.uv.hrtime()
+  local prev = view.data or {}
   ws:ensure_info(function()
-    local data, left = {}, 5
+    local data, got, left = {}, {}, 6
+    local function set(k, v)
+      data[k], got[k] = v, true
+    end
+    local function field(k)
+      if got[k] then
+        return data[k]
+      end
+      return prev[k]
+    end
+    local function render()
+      if not vim.api.nvim_buf_is_valid(view.buf) then
+        return
+      end
+      local shown = { err = data.err }
+      -- Pending CLs and their files are shown together, never one new and one old.
+      if got.pending and got.opened then
+        shown.pending, shown.opened = data.pending, data.opened
+      else
+        shown.pending, shown.opened = prev.pending, prev.opened
+      end
+      shown.have, shown.submitted = field('have'), field('submitted')
+      shown.shelved, shown.modified = field('shelved'), field('modified')
+      shown.overlay = require('perforated.modified').overlay(ws)
+      view.data = shown
+      local t1 = vim.uv.hrtime()
+      view.tree:set(build(view, shown))
+      dbg.timing('client view: render', (vim.uv.hrtime() - t1) / 1e6)
+      M.update_footer(view)
+    end
+    local queued = false
     local function done()
       left = left - 1
       if left > 0 then
+        -- Partial result: draw it on the next tick (several answers in one tick draw once).
+        if not queued then
+          queued = true
+          vim.schedule(function()
+            queued = false
+            if view.loading then
+              render()
+            end
+          end)
+        end
         return
       end
-      -- Second round: shelved files, only for CLs that have any.
+      view.loading = false
+      render()
+      dbg.timing('client view: refresh', (vim.uv.hrtime() - t0) / 1e6)
+      dbg.debug(
+        'client',
+        'refresh %s: %d pending, %d opened, %d submitted in %.0fms',
+        ws.key,
+        #(data.pending or {}),
+        #(data.opened or {}),
+        #(data.submitted or {}),
+        (vim.uv.hrtime() - t0) / 1e6
+      )
+      if view.again then
+        view.again = false
+        M.refresh(view)
+      end
+    end
+    p4.pending_changes(ws, function(changes, err)
+      set('pending', changes or {})
+      data.err = data.err or err
+      done()
+      -- Shelved files, only for CLs that have any.
       local with_shelves = {}
-      for _, c in ipairs(data.pending or {}) do
+      for _, c in ipairs(changes or {}) do
         if c.shelved ~= nil then
           with_shelves[#with_shelves + 1] = c.change
         end
       end
       cls.shelved_files(ws, with_shelves, function(shelved)
-        data.shelved = shelved
-        data.overlay = require('perforated.modified').overlay(ws)
-        view.loading = false
-        if vim.api.nvim_buf_is_valid(view.buf) then
-          view.data = data
-          local t1 = vim.uv.hrtime()
-          view.tree:set(build(view, data))
-          dbg.timing('client view: render', (vim.uv.hrtime() - t1) / 1e6)
-          dbg.timing('client view: refresh', (vim.uv.hrtime() - t0) / 1e6)
-          M.update_footer(view)
-          dbg.debug(
-            'client',
-            'refresh %s: %d pending, %d opened, %d submitted in %.0fms',
-            ws.key,
-            #(data.pending or {}),
-            #(data.opened or {}),
-            #(data.submitted or {}),
-            (vim.uv.hrtime() - t0) / 1e6
-          )
-        end
-        if view.again then
-          view.again = false
-          M.refresh(view)
-        end
+        set('shelved', shelved)
+        done()
       end)
-    end
-    p4.pending_changes(ws, function(changes, err)
-      data.pending = changes or {}
-      data.err = data.err or err
-      done()
     end, view.scope)
     local function failed(res)
       data.err = data.err or res.errors[1] or vim.trim(res.stderr or '')
     end
     cls.have_change(ws, function(c)
-      data.have = c or false
+      set('have', c or false)
       done()
     end)
-    require('perforated.modified').query(ws, nil, function(set)
-      data.modified = set or false -- false: unknown (no markers)
+    require('perforated.modified').query(ws, nil, function(changed)
+      set('modified', changed or false) -- false: unknown (no markers)
       done()
     end)
     if view.scope == 'user' then
@@ -489,12 +544,13 @@ function M.refresh(view)
         if n > 0 then
           return
         end
-        data.opened = recs or {}
+        local opened = recs or {}
         for _, o in ipairs(others or {}) do
           if o.client ~= ws:client() then
-            data.opened[#data.opened + 1] = o
+            opened[#opened + 1] = o
           end
         end
+        set('opened', opened)
         done()
       end
       p4.fstat_opened(ws, {}, function(r, res)
@@ -510,7 +566,7 @@ function M.refresh(view)
       end)
     else
       p4.fstat_opened(ws, {}, function(recs, res)
-        data.opened = recs or {}
+        set('opened', recs or {})
         if not recs then
           failed(res)
         end
@@ -521,7 +577,7 @@ function M.refresh(view)
       user = ws:user(),
       max = require('perforated.config').get().client_view.submitted_limit,
     }, function(changes, err)
-      data.submitted = changes or {}
+      set('submitted', changes or {})
       data.err = data.err or err
       done()
     end)
@@ -817,6 +873,14 @@ local function actions(view)
         M.refresh(view)
       end,
     },
+    {
+      id = 'switch_client',
+      desc = 'Switch client (pick one of your clients)',
+      keys = { 'W' },
+      run = function()
+        M.switch_client(view)
+      end,
+    },
 
     -- Files
     {
@@ -900,7 +964,7 @@ local function actions(view)
     {
       id = 'delete_shelved',
       desc = 'Delete shelved files',
-      keys = { 'z' },
+      keys = { '<Del>' },
       kinds = { shelf = true, shelved_file = true },
       multi = true,
       run = function(_, ctx)
@@ -1071,7 +1135,7 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'L' },
+      keys = { 'gL' },
       p4v = { '<C-t>' },
       kinds = { opened_file = true, shelved_file = true },
       run = function(items)
@@ -1214,7 +1278,7 @@ local function actions(view)
     {
       id = 'move',
       desc = 'Move to changelist',
-      keys = { 'M' },
+      keys = { 'gm' },
       kinds = FILE,
       multi = true,
       footer = 40,
@@ -1523,6 +1587,7 @@ function M.open_file(view, path)
     vim.cmd('edit ' .. vim.fn.fnameescape(path))
   else
     vim.cmd('tabnew ' .. vim.fn.fnameescape(path))
+    require('perforated.views.base').code_win(vim.api.nvim_get_current_win())
   end
 end
 
@@ -1575,15 +1640,88 @@ local function show(buf, kind)
   return vim.api.nvim_get_current_win()
 end
 
+--- Pick another of the user's clients and show it in this view's window. The switch is
+--- checked first (`opened -m 1` with the new client fails as p4 would, e.g. for a client bound
+--- to another host); on failure p4's message is shown and the view keeps its client.
+---@param view table
+function M.switch_client(view)
+  local ws = view.ws
+  cls.clients(ws, function(list, err)
+    if not list then
+      return notify('could not list clients: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+    if #list == 0 then
+      return notify('no clients found for ' .. tostring(ws:user()), vim.log.levels.WARN)
+    end
+    local current = ws:client()
+    require('perforated.picker').pick({
+      title = 'Switch client',
+      items = list,
+      format = function(c)
+        return ('%s %-32s %s  %s'):format(
+          c.client == current and '*' or ' ',
+          c.client,
+          (c.Host and c.Host ~= '') and ('@' .. c.Host) or '',
+          c.Stream or c.Root or ''
+        )
+      end,
+      preview = function(c)
+        local out = {
+          'Client:  ' .. c.client,
+          'Root:    ' .. (c.Root or ''),
+          'Host:    ' .. ((c.Host and c.Host ~= '') and c.Host or '(any)'),
+        }
+        if c.Stream then
+          out[#out + 1] = 'Stream:  ' .. c.Stream
+        end
+        out[#out + 1] = ''
+        vim.list_extend(out, vim.split(vim.trim(c.Description or ''), '\n', { plain = true }))
+        return out
+      end,
+      on_choice = function(chosen)
+        local c = chosen and chosen[1]
+        if not c or c.client == current then
+          return
+        end
+        local target = require('perforated.core.workspace').for_client(ws, c.client)
+        target:run({ 'opened', '-m', '1' }, {}, function(res)
+          if #res.errors > 0 or (not res.ok and #res.records == 0) then
+            local msg = res.errors[1] or vim.trim(res.stderr or '')
+            return notify(
+              ('cannot switch to %s: %s'):format(c.client, msg ~= '' and msg or 'p4 failed'),
+              vim.log.levels.ERROR
+            )
+          end
+          local win = view_win(view)
+          if not win then
+            return
+          end
+          local old = view.buf
+          local new = M.open(target, { kind = view.kind, win = win })
+          new.origin_win = view.origin_win -- files still open where the user came from
+          if vim.api.nvim_buf_is_valid(old) and old ~= (views[target.key] or {}).buf then
+            pcall(vim.api.nvim_buf_delete, old, { force = true })
+          end
+          notify('switched to client ' .. c.client)
+        end)
+      end,
+    })
+  end)
+end
+
 --- Open (or focus) the client view of a workspace.
 ---@param ws perforated.Workspace
----@param opts { kind: ('tab'|'float'|'split')? }?
+---@param opts { kind: ('tab'|'float'|'split')?, win: integer? }?  win: show it in that window
 function M.open(ws, opts)
   local kind = (opts and opts.kind) or require('perforated.config').get().client_view.kind
   local origin = vim.api.nvim_get_current_win()
   local view = views[ws.key]
   if view and vim.api.nvim_buf_is_valid(view.buf) then
     local win = view_win(view)
+    if opts and opts.win and win ~= opts.win then
+      vim.api.nvim_win_set_buf(opts.win, view.buf)
+      win = opts.win
+    end
     if win then
       vim.api.nvim_set_current_win(win)
       view.win = win
@@ -1625,7 +1763,13 @@ function M.open(ws, opts)
       return it and (it.depotFile or it.clientFile)
     end)
   )
-  view.win = show(buf, kind)
+  if opts and opts.win and vim.api.nvim_win_is_valid(opts.win) then
+    vim.api.nvim_win_set_buf(opts.win, buf)
+    vim.api.nvim_set_current_win(opts.win)
+    view.win = opts.win
+  else
+    view.win = show(buf, kind)
+  end
   vim.wo[view.win].cursorline = true
   vim.wo[view.win].wrap = false
   vim.wo[view.win].number = false

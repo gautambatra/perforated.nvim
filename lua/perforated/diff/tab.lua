@@ -132,6 +132,8 @@ open_tab = function(ws, title, entries, identical)
   vim.cmd('leftabove vnew')
   local lwin = vim.api.nvim_get_current_win()
   local placeholder_l = vim.api.nvim_get_current_buf()
+  require('perforated.views.base').code_win(lwin)
+  require('perforated.views.base').code_win(rwin)
   for _, b in ipairs({ placeholder_l, placeholder_r }) do
     vim.bo[b].bufhidden = 'wipe'
   end

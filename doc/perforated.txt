@@ -190,11 +190,12 @@ Client view (:P4)                                     *perforated-client-view*
   m               Mark / unmark
   u               Clear marks
   A               Toggle scope: this client / all my clients
+  W               Switch client (pick one of your clients)
   d <C-d>         Diff against have revision
   d <C-d>         Diff shelved vs base revision
   s               Shelve
   S               Unshelve
-  z               Delete shelved files
+  <Del>           Delete shelved files
   P <C-s>         Submit
   R               Resolve
   gy              Get latest revision
@@ -207,7 +208,7 @@ Client view (:P4)                                     *perforated-client-view*
   gx              Open review in Swarm
   gX              Copy Swarm review URL
   g/ <C-g>        Go to changelist / path / user
-  L <C-t>         File history
+  gL <C-t>        File history
   t <C-S-t>       Time-lapse
   b               Annotate
   w               Diff shelved vs workspace file
@@ -217,7 +218,7 @@ Client view (:P4)                                     *perforated-client-view*
   x <C-r>         Revert
   X               Revert if unchanged
   X               Revert unchanged files
-  M               Move to changelist
+  gm              Move to changelist
   y               Copy CL number
   c <C-n>         New changelist
   <Del>           Delete changelist
@@ -247,7 +248,7 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   gh              Diff shelved vs head revision
   D               Diff all files
   o               Open file
-  L <C-t>         File history
+  gL <C-t>        File history
   t <C-S-t>       Time-lapse
   b               Annotate
   C               Edit description
@@ -289,7 +290,7 @@ Annotate (:P4 annotate)                                  *perforated-annotate*
   <BS>            Back to the newer revision
   d <C-d>         Diff this change (the file's revision in it vs the one before)
   t <C-S-t>       Time-lapse from this revision
-  L <C-t>         File history
+  gL <C-t>        File history
   Q               Lines from this changelist to the location list
   y               Copy CL number
   gx              Open review in Swarm
@@ -305,8 +306,8 @@ Time-lapse (:P4 timelapse)                              *perforated-timelapse*
   [R              First revision
   ]R              Last revision
   m               Mode: single / incremental diff / range
-  H [a            Move ◆ back (diff / range mode)
-  L ]a            Move ◆ forward (diff / range mode)
+  [a              Move ◆ back (diff / range mode)
+  ]a              Move ◆ forward (diff / range mode)
   s               Show / hide the slider
   S               Slider labels: changelists / revisions
   i               Show / hide the revision details

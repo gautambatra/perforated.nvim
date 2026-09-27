@@ -101,9 +101,11 @@ end
 T['m6'][':P4 debug timings lists p4 commands and plugin timings'] = function()
   setup()
   child.cmd('P4')
-  wait(
-    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true) ~= nil]]
-  )
+  -- The refresh timing is recorded once every section has answered.
+  wait([[(function()
+    local v = vim.b.perforated_ws and require('perforated.views.client')._get(vim.b.perforated_ws)
+    return v ~= nil and v.data ~= nil and not v.loading
+  end)()]])
   child.cmd('P4 debug timings')
   local text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
   H.neq(text:find('fstat', 1, true), nil)
