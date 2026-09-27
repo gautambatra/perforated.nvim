@@ -31,6 +31,7 @@ local M = {}
 ---@field status_sig string? what the statusline last showed (status.lua skips no-op updates)
 
 local states = {} ---@type table<integer, perforated.BufState>
+local warned = {} ---@type table<string, true>  messages shown once per session
 -- Buffers with a live nvim_buf_attach. It outlives detach(): the attachment only ends on the
 -- next change (on_lines returns true) or unload, so a quick detach + attach (`:P4 move`) must
 -- not add a second one.
@@ -194,7 +195,12 @@ function M.load_base(buf)
     if not lines then
       cur.base = nil
       dbg.error('buffer', 'buf %d: base %s failed: %s', buf, spec, tostring(err))
-      return vim.notify_once('[perforated] could not load base for diff: ' .. tostring(err))
+      local msg = 'could not load base for diff: ' .. tostring(err)
+      if not warned[msg] then -- once per reason, like vim.notify_once
+        warned[msg] = true
+        require('perforated.ui.toast').notify(msg, vim.log.levels.WARN)
+      end
+      return
     end
     dbg.debug('buffer', 'buf %d: base %s loaded (%d lines)', buf, spec, #lines)
     cur.base = lines

@@ -20,7 +20,7 @@ local M = {}
 local views = {} ---@type table<string, table> workspace key → view
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 local function first_line(s)
@@ -1603,7 +1603,7 @@ function M.close(view)
   if view.kind == 'tab' and win and #vim.api.nvim_list_tabpages() > 1 then
     local tab = vim.api.nvim_win_get_tabpage(win)
     pcall(vim.cmd, 'tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
-  elseif win and #vim.api.nvim_list_wins() > 1 then
+  elseif win and require('perforated.views.base').normal_wins() > 1 then
     pcall(vim.api.nvim_win_close, win, true)
   else
     vim.cmd('enew')

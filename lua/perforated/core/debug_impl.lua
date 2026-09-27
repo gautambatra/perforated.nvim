@@ -258,7 +258,7 @@ function M.open()
   M.flush()
   local file = path or M.default_file()
   if not vim.uv.fs_stat(file) then
-    return vim.notify('[perforated] no debug log yet: ' .. file)
+    return require('perforated.ui.toast').notify('[perforated] no debug log yet: ' .. file)
   end
   vim.cmd('botright split ' .. vim.fn.fnameescape(file))
   vim.bo.autoread = true

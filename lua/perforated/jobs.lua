@@ -135,7 +135,7 @@ end
 function M.cancel(job)
   local list = job and { job } or vim.list_extend({}, jobs)
   if #list == 0 then
-    return vim.notify('[perforated] no running jobs')
+    return require('perforated.ui.toast').notify('[perforated] no running jobs')
   end
   for _, j in ipairs(list) do
     j.cancel_requested = true
@@ -143,7 +143,7 @@ function M.cancel(job)
       j.ctl.cancel()
     end
   end
-  vim.notify(('[perforated] stopping %d job(s)…'):format(#list))
+  require('perforated.ui.toast').notify(('[perforated] stopping %d job(s)…'):format(#list))
   render_float()
 end
 

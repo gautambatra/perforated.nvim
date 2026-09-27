@@ -82,7 +82,7 @@ function M.nav(forward, count)
   local buf = vim.api.nvim_get_current_buf()
   local hunks = hunks_of(buf)
   if #hunks == 0 then
-    return vim.notify('[perforated] no hunks', vim.log.levels.INFO)
+    return require('perforated.ui.toast').notify('[perforated] no hunks', vim.log.levels.INFO)
   end
   local line = vim.api.nvim_win_get_cursor(0)[1]
   local target
@@ -120,7 +120,10 @@ function M.preview()
   local st = require('perforated.buffer').get(buf)
   local h = M.hunk_at(buf)
   if not st or not h or not st.base then
-    return vim.notify('[perforated] no hunk under cursor', vim.log.levels.INFO)
+    return require('perforated.ui.toast').notify(
+      '[perforated] no hunk under cursor',
+      vim.log.levels.INFO
+    )
   end
   local lines, hls = {}, {}
   for i = h.a_start, h.a_start + h.a_count - 1 do
@@ -170,7 +173,10 @@ function M.reset()
   local st = require('perforated.buffer').get(buf)
   local h = M.hunk_at(buf)
   if not st or not h or not st.base then
-    return vim.notify('[perforated] no hunk under cursor', vim.log.levels.INFO)
+    return require('perforated.ui.toast').notify(
+      '[perforated] no hunk under cursor',
+      vim.log.levels.INFO
+    )
   end
   local old = {}
   for i = h.a_start, h.a_start + h.a_count - 1 do

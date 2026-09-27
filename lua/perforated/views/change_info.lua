@@ -26,7 +26,10 @@ function M.open(ws, item)
   cls.describe(ws, { change }, {}, function(by)
     local d = by[change]
     if not d then
-      return vim.notify('[perforated] could not describe CL ' .. change, vim.log.levels.ERROR)
+      return require('perforated.ui.toast').notify(
+        '[perforated] could not describe CL ' .. change,
+        vim.log.levels.ERROR
+      )
     end
     if item.shelved == nil and d.rec.status == 'pending' then
       return cls.shelved_files(ws, { change }, function(sh)

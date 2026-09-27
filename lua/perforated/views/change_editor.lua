@@ -16,7 +16,7 @@ local config = require('perforated.config')
 local M = {}
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 --- Open the description float.
@@ -189,7 +189,7 @@ function M.edit(ws, change, opts)
   opts = opts or {}
   if change == 'default' then
     return notify(
-      'the default changelist has no description: move its files to a new changelist (M)',
+      'the default changelist has no description: move its files to a new changelist (gm)',
       vim.log.levels.WARN
     )
   end

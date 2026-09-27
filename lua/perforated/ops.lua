@@ -9,7 +9,7 @@ local cls = require('perforated.changelists')
 local M = {}
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 --- All messages of a result (errors first).
@@ -109,7 +109,7 @@ function M.shelve(ws, change, paths, cb)
   cb = cb or function() end
   if change == 'default' then
     notify(
-      'files in the default changelist cannot be shelved: move them to a numbered changelist first (M)',
+      'files in the default changelist cannot be shelved: move them to a numbered changelist first (gm)',
       vim.log.levels.WARN
     )
     return cb(false)

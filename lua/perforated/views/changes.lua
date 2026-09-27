@@ -70,7 +70,7 @@ local function load_page(view)
     end
     view.loading = false
     if not changes then
-      vim.notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
+      require('perforated.ui.toast').notify('[perforated] ' .. tostring(err), vim.log.levels.ERROR)
       changes = {}
     end
     vim.list_extend(view.changes, changes)

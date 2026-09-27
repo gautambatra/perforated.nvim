@@ -6,6 +6,7 @@
 --- * Focus-gated: toasts raised while Neovim is unfocused are queued until FocusGained.
 --- * History (`:P4 notifications`); `toast.timeout = 0` = sticky until `:P4 dismiss`;
 ---   `toast.backend = 'notify'` routes to vim.notify instead.
+--- * Every plugin message goes through `M.notify` (a toast by default), not only stale files.
 
 local M = {}
 
@@ -121,21 +122,57 @@ local function arm_activity()
   end, key_ns)
 end
 
+--- Split a line into pieces at most `width` display cells wide, at spaces where possible.
+---@param line string
+---@param width integer
+---@return string[]
+local function wrap(line, width)
+  local out = {}
+  while vim.fn.strdisplaywidth(line) > width do
+    local cut = vim.fn.byteidx(line, width) -- byte index of the first char that doesn't fit
+    if cut <= 0 then
+      break
+    end
+    local head = line:sub(1, cut)
+    local space = head:match('.*() ')
+    if space and space > width / 3 then
+      out[#out + 1] = line:sub(1, space - 1)
+      line = line:sub(space + 1)
+    else
+      out[#out + 1] = head
+      line = line:sub(cut + 1)
+    end
+  end
+  out[#out + 1] = line
+  return out
+end
+
+local BORDER = {
+  [vim.log.levels.ERROR] = 'PerforatedToastErrorBorder',
+  [vim.log.levels.INFO] = 'PerforatedToastInfoBorder',
+}
+
 ---@param t perforated.Toast
 function M._render(t)
+  local max = math.max(20, math.floor(vim.o.columns * 0.6))
   local lines = {}
   for _, l in ipairs(t.lines) do
-    lines[#lines + 1] = ' ' .. l .. ' '
+    for _, piece in ipairs(wrap(l, max - 2)) do
+      lines[#lines + 1] = ' ' .. piece .. ' '
+    end
   end
   local width = vim.fn.strdisplaywidth(t.title) + 4
   for _, l in ipairs(lines) do
     width = math.max(width, vim.fn.strdisplaywidth(l))
   end
-  width = math.min(width, math.floor(vim.o.columns * 0.6))
+  width = math.min(width, max)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_extmark(buf, ns, #lines - 1, 0, { line_hl_group = 'PerforatedDim' })
+  if t.detail then
+    -- Stale-file toasts end with a details line (revision, CL, user).
+    vim.api.nvim_buf_set_extmark(buf, ns, #lines - 1, 0, { line_hl_group = 'PerforatedDim' })
+  end
   t.win = vim.api.nvim_open_win(buf, false, {
     relative = 'editor',
     row = 0,
@@ -150,7 +187,11 @@ function M._render(t)
     noautocmd = true,
     zindex = 150,
   })
-  vim.wo[t.win].winhighlight = 'NormalFloat:PerforatedToast,FloatBorder:PerforatedToastBorder'
+  local level = t.level or vim.log.levels.WARN
+  local border = BORDER[level]
+    or (level < vim.log.levels.INFO and BORDER[vim.log.levels.INFO])
+    or 'PerforatedToastBorder'
+  vim.wo[t.win].winhighlight = 'NormalFloat:PerforatedToast,FloatBorder:' .. border
   vim.wo[t.win].wrap = false
   shown[#shown + 1] = t
   M._restack()
@@ -161,9 +202,16 @@ end
 ---@param title string
 ---@param lines string[]
 ---@param level integer?
-function M.show(title, lines, level)
+---@param opts { detail: boolean? }?  detail: the last line is a (dimmed) details line
+function M.show(title, lines, level, opts)
   setup()
-  local t = { title = title, lines = lines, level = level, time = os.time() }
+  local t = {
+    title = title,
+    lines = lines,
+    level = level,
+    time = os.time(),
+    detail = opts and opts.detail,
+  }
   require('perforated.core.debug').info(
     'toast',
     '%s: %s (focused=%s backend=%s)',
@@ -186,6 +234,33 @@ function M.show(title, lines, level)
     return
   end
   M._render(t)
+end
+
+local TITLES = {
+  [vim.log.levels.ERROR] = 'Perforce: error',
+  [vim.log.levels.WARN] = 'Perforce: warning',
+}
+
+--- A plugin message: a toast titled by its level, or `vim.notify` when
+--- `toast.backend = 'notify'`. Safe to call from any context.
+---@param msg string
+---@param level integer?  vim.log.levels (default INFO)
+function M.notify(msg, level)
+  level = level or vim.log.levels.INFO
+  msg = tostring(msg):gsub('^%[perforated%] ', '')
+  if vim.in_fast_event() then
+    return vim.schedule(function()
+      M.notify(msg, level)
+    end)
+  end
+  if cfg().backend == 'notify' then
+    return vim.notify('[perforated] ' .. msg, level)
+  end
+  M.show(
+    TITLES[level] or 'Perforce',
+    vim.split(msg, '\n', { plain = true, trimempty = true }),
+    level
+  )
 end
 
 --- Close every toast.

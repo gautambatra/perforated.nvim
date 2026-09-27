@@ -193,8 +193,9 @@ end
 function M.or_open(ws, left, right, open)
   M.check(ws, { { left = left, right = right } }, function(same)
     if same[1] then
-      vim.notify(
-        ('[perforated] identical: %s and %s'):format(label(left), label(right)),
+      require('perforated.ui.toast').show(
+        'Perforce: identical, nothing to diff',
+        { label(left), label(right) },
         vim.log.levels.INFO
       )
     else

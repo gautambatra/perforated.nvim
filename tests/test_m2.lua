@@ -169,13 +169,9 @@ T['client view']['W keeps the client and shows p4 message when the switch fails'
   child.lua([[vim.ui.select = function(items, _, cb)
     for _, it in ipairs(items) do if it.client == 'alice_far' then return cb(it) end end
   end]])
-  child.lua([[_G.msgs = {}
-    local orig = vim.notify
-    vim.notify = function(m, ...) table.insert(_G.msgs, m) return orig(m, ...) end]])
   child.type_keys('W')
-  wait([[(function()
-    for _, m in ipairs(_G.msgs) do if m:find('can only be used from host', 1, true) then return true end end
-  end)()]])
+  H.eq(H.wait_message(child, 'can only be used from host', 15000), true)
+  H.eq(H.wait_message(child, 'Perforce: error'), true)
   H.eq(has_line('Client alice_ws'), true)
   H.eq(has_line('Fix parser'), true)
 end
@@ -421,7 +417,7 @@ T['client view']['C is not offered on the default changelist'] = function()
   goto_line('default')
   child.type_keys('C')
   H.eq(child.bo.filetype, 'perforated')
-  H.expect.no_equality(child.cmd_capture('messages'):find('does not apply here', 1, true), nil)
+  H.eq(H.wait_message(child, 'does not apply here'), true)
 end
 
 T['client view']['d on a shelved file diffs base vs shelf'] = function()
@@ -606,15 +602,13 @@ end
 
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
-  -- b.txt and c.txt are opened but unchanged: no diff tab, just a message
-  child.lua(
-    [[_G.msgs = {}; local n = vim.notify; vim.notify = function(m, ...) table.insert(_G.msgs, m); n(m, ...) end]]
-  )
+  -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up
   goto_line('default')
   child.type_keys('D')
   wait(
-    [[vim.tbl_contains(vim.tbl_map(function(m) return m:find('all 2 files are identical', 1, true) ~= nil end, _G.msgs), true)]]
+    [[vim.tbl_contains(vim.tbl_map(function(t) return (t.title .. ' ' .. table.concat(t.lines, ' ')):find('all 2 files are identical', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
   )
+  H.eq(#child.lua_get([[require('perforated.ui.toast').visible()]]), 1)
   H.eq(#child.api.nvim_list_tabpages(), 2)
   -- one changed, one identical: only the changed one is diffed; the other is listed
   H.write(root .. '/b.txt', 'b2\n')
@@ -739,10 +733,7 @@ T['change command'][':P4 change on a file in the default CL explains; :P4 change
   child.cmd('edit ' .. root .. '/b.txt')
   H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'opened']])
   child.cmd('P4 change')
-  H.expect.no_equality(
-    child.cmd_capture('messages'):find('default changelist has no description', 1, true),
-    nil
-  )
+  H.eq(H.wait_message(child, 'default changelist has no description'), true)
   child.cmd('P4 change 2')
   wait([[vim.bo.filetype == 'perforated-description']])
   H.eq(child.api.nvim_buf_get_lines(0, 0, 1, false), { 'Fix parser' })

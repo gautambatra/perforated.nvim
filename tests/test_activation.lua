@@ -221,10 +221,7 @@ T['commands']['workspace-only scope is refused outside a workspace'] = function(
     require('perforated.commands').resolve('workspace', function() _G.called = true end)
   ]])
   H.eq(child.lua_get('_G.called'), false)
-  H.expect.no_equality(
-    child.cmd_capture('messages'):find('not in a Perforce workspace', 1, true),
-    nil
-  )
+  H.eq(H.wait_message(child, 'not in a Perforce workspace'), true)
 end
 
 T['commands']['plugin/ subcommand list matches the command table'] = function()

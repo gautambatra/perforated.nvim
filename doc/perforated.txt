@@ -596,6 +596,8 @@ can override them:
   PerforatedTitle              Title
   PerforatedToast              NormalFloat
   PerforatedToastBorder        DiagnosticWarn
+  PerforatedToastErrorBorder   DiagnosticError
+  PerforatedToastInfoBorder    DiagnosticInfo
   PerforatedUnchanged          between Normal and Comment
   PerforatedUnresolved         DiagnosticError
 

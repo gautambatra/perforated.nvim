@@ -1,6 +1,7 @@
 --- Progress for long p4 operations (sync, submit). While running: Neovim 0.12+ progress
 --- messages (the message area; fidget/snacks pick them up). The final result is always a
---- `vim.notify` as well, so it can't be missed.
+--- plugin message as well (a toast, or vim.notify with `toast.backend = 'notify'`), so it can't
+--- be missed.
 
 local M = {}
 
@@ -28,7 +29,7 @@ function M.start(title, msg)
       return p
     end
   end
-  vim.notify(('[perforated] %s: %s'):format(title, msg))
+  require('perforated.ui.toast').notify(('[perforated] %s: %s'):format(title, msg))
   return p
 end
 
@@ -61,7 +62,7 @@ function M.finish(p, msg, failed)
       source = 'perforated',
     })
   end
-  vim.notify(
+  require('perforated.ui.toast').notify(
     ('[perforated] %s: %s'):format(p.title, msg),
     failed and vim.log.levels.ERROR or vim.log.levels.INFO
   )

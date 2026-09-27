@@ -16,7 +16,7 @@ local ns = vim.api.nvim_create_namespace('perforated.annotate')
 local AGE_STEPS = 10
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 local function hex_of(group)

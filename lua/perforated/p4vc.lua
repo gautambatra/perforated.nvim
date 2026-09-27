@@ -21,7 +21,7 @@ end
 function M.run(ws, cmd, path)
   local bin = M.bin()
   if not bin then
-    return vim.notify(
+    return require('perforated.ui.toast').notify(
       '[perforated] p4vc not found (set p4vc = "/path/to/p4vc")',
       vim.log.levels.WARN
     )
@@ -38,7 +38,7 @@ function M.run(ws, cmd, path)
     function(res)
       if res.code ~= 0 then
         vim.schedule(function()
-          vim.notify(
+          require('perforated.ui.toast').notify(
             ('[perforated] p4vc %s failed: %s'):format(cmd, vim.trim(res.stderr or '')),
             vim.log.levels.ERROR
           )
@@ -47,9 +47,14 @@ function M.run(ws, cmd, path)
     end
   )
   if not ok then
-    return vim.notify('[perforated] p4vc: ' .. tostring(err), vim.log.levels.ERROR)
+    return require('perforated.ui.toast').notify(
+      '[perforated] p4vc: ' .. tostring(err),
+      vim.log.levels.ERROR
+    )
   end
-  vim.notify(('[perforated] p4vc %s%s'):format(cmd, path and (' ' .. path) or ''))
+  require('perforated.ui.toast').notify(
+    ('[perforated] p4vc %s%s'):format(cmd, path and (' ' .. path) or '')
+  )
 end
 
 --- Registry actions for a view: revgraph (`gR` / `<C-S-r>`) and P4V's time-lapse, on items

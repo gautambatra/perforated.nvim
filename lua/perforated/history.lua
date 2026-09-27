@@ -307,7 +307,7 @@ end
 function M.swarm(ws, change, copy)
   M.swarm_url(ws, function(base)
     if not base then
-      return vim.notify(
+      return require('perforated.ui.toast').notify(
         '[perforated] no Swarm URL (set swarm.url, or the server property P4.Swarm.URL)',
         vim.log.levels.WARN
       )
@@ -316,7 +316,7 @@ function M.swarm(ws, change, copy)
     if copy then
       vim.fn.setreg('"', url)
       pcall(vim.fn.setreg, '+', url)
-      vim.notify('[perforated] copied ' .. url)
+      require('perforated.ui.toast').notify('[perforated] copied ' .. url)
     else
       vim.ui.open(url)
     end

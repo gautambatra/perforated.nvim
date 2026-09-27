@@ -309,7 +309,13 @@ T['m3']['annotate: local edits show "Not submitted"; q closes'] = function()
   -- Every line is labelled, including consecutive lines from the same change.
   H.eq(child.api.nvim_buf_get_lines(0, 0, 2, false), { 'Not submitted', 'Not submitted' })
   child.type_keys('q')
-  H.eq(#child.api.nvim_tabpage_list_wins(0), 1)
+  -- Normal windows only (a message pop-up is a float).
+  H.eq(
+    child.lua_get(
+      [[#vim.tbl_filter(function(w) return vim.api.nvim_win_get_config(w).relative == '' end, vim.api.nvim_tabpage_list_wins(0))]]
+    ),
+    1
+  )
   H.eq(child.wo.scrollbind, false)
 end
 

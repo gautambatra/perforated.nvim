@@ -14,7 +14,7 @@ local M = {}
 local MAX_INLINE = 20000 -- lines per side; above this, `d` only
 
 local function notify(msg, level)
-  vim.notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
+  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
 --- The two sides of a file entry.
