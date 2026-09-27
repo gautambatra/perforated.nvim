@@ -81,7 +81,7 @@ T['checkout']['unopened file is clean and read-only; statusline shows #have'] = 
     [[require('perforated.buffer').get() and require('perforated.buffer').get().status == 'clean']]
   )
   H.eq(child.bo.readonly, true)
-  H.eq(child.lua_get('vim.b.perforated_status'), '#1')
+  H.eq(child.lua_get('vim.b.perforated_status'), 'alice_ws #1')
 end
 
 T['checkout']['first change prompts; <CR> checks out to default; signs appear'] = function()
@@ -100,7 +100,12 @@ T['checkout']['first change prompts; <CR> checks out to default; signs appear'] 
   )
   H.eq(#marks, 1)
   H.eq(marks[1][4].sign_hl_group, 'PerforatedChange')
-  wait([[vim.b.perforated_status == 'edit@default ~1']])
+  -- Client, action@CL, the modified marker and the revision; line counts only via {diff}.
+  wait([[vim.b.perforated_status:match('^alice_ws .*edit@default ' .. vim.pesc(
+    require('perforated.ui.icons').glyph('modified')) .. ' #1$') ~= nil]])
+  child.lua([[require('perforated.config').set({ statusline = { format = '{action} {diff}' } })
+    require('perforated.status').update(vim.api.nvim_get_current_buf())]])
+  wait([[vim.b.perforated_status:match('edit@default ~1$') ~= nil]])
 end
 
 T['checkout']['n creates a changelist which becomes sticky for the next file'] = function()
@@ -567,6 +572,20 @@ T['modes']['renaming a buffer re-attaches it for the new path'] = function()
   H.eq(child.lua_get([[require('perforated.buffer').get().path]]), root .. '/copy.txt')
 end
 
+T['modes']['statusline tells an expired login from an unreachable server'] = function()
+  setup()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua(
+    [[vim.g.perforated_status = vim.tbl_extend('force', vim.g.perforated_status, { conn = 'offline' })]]
+  )
+  H.eq(child.lua_get([[require('perforated').statusline()]]), 'alice_ws #1  ⊘')
+  child.lua(
+    [[vim.g.perforated_status = vim.tbl_extend('force', vim.g.perforated_status, { conn = 'offline_auth' })]]
+  )
+  H.eq(child.lua_get([[require('perforated').statusline()]]), 'alice_ws #1  ⊘login')
+end
+
 T['modes']['keymap preset is buffer-local to Perforce buffers'] = function()
   setup({ keymaps = 'default' })
   edit('a.txt')
@@ -613,7 +632,7 @@ T['stale']['a submit elsewhere raises one toast and statusline markers'] = funct
   local line = child.lua_get([[require('perforated.ui.toast').visible()[1].lines[1] ]])
   H.expect.no_equality(line:find('#1→#2 · CL 2 · bob', 1, true), nil)
   wait([[vim.g.perforated_status.stale == 1]])
-  wait([[require('perforated').statusline():find('↓#1→#2', 1, true) ~= nil]])
+  wait([[require('perforated').statusline():find('#1 ↓#2', 1, true) ~= nil]])
   H.expect.no_equality(
     child.lua_get([[require('perforated').statusline()]]):find('↓1', 1, true),
     nil
