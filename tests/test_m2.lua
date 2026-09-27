@@ -322,7 +322,7 @@ T['client view']['marks inside a collapsed changelist still apply'] = function()
   goto_line('b.txt')
   child.type_keys('m', 'h') -- mark, then collapse the default CL (the cursor lands on it)
   H.eq(has_line('b.txt'), false)
-  -- M (a file action) runs on the hidden marked file, not on the changelist under the cursor.
+  -- gm (a file action) runs on the hidden marked file, not on the changelist under the cursor.
   child.type_keys('gm')
   H.eq(H.wait(child, 'false', 1500), false)
   local o = opened()

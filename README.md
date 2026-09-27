@@ -522,7 +522,8 @@ changelist or the one that last changed the line, history, annotate, time-lapse.
 
 #### Connection handling
 
-- **Expired login:** exactly one password prompt, then the calls that failed are retried.
+- **Expired login:** exactly one password prompt, then the calls that failed are retried. If
+  you cancel it, calls fail fast and the statusline shows `⊘login` until `:P4 login`.
 - **Unreachable server:** offline mode. Calls fail immediately with a clear message, and a
   background retry backs off from 5 s to 5 min. The statusline shows `⊘`.
 - **Command log:** `:P4 log` lists every p4 command the plugin ran, with timings.

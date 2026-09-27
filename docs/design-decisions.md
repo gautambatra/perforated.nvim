@@ -74,7 +74,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - **Submitted CLs:** `change -u -o N` / `change -u -i`. `-u` lets the owner update the description of their own submitted CL.
   - If the server refuses (not the owner, or policy), the error is shown inline.
   - Admins can set `change.allow_force = true` to retry with `-f`, after an explicit confirmation.
-- **Default CL:** its description **cannot** be edited. `C` isn't offered on the default CL, and its files can only be moved (`M`) to an existing CL or a new one.
+- **Default CL:** its description **cannot** be edited. `C` isn't offered on the default CL, and its files can only be moved (`gm`) to an existing CL or a new one.
 - **After a save:** the CL memo cache is updated and every open view showing that CL (client view, describe, annotate, blame line) refreshes its text. The check-out float's "new CL" input uses the same quick editor, starting as a single line that expands on `<C-CR>` for multi-line descriptions.
 - **Optional description template** (`change.template`), e.g. a string or function that pre-fills new CLs (`[JIRA-]`, reviewers). New CLs only.
 
@@ -90,8 +90,8 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
   - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 notifications` replays recent toasts, and submit always re-checks and warns.
   - **No OS or desktop notifications.**
 - **Statusline markers** stay until you sync or resolve, with configurable glyphs:
-  - **Per file:** `↓#8→#9` (`vim.b.perforated_status`, `vim.b.perforated_status_dict.stale`).
-  - **Per workspace:** `↓2` (stale opened files) and `!1` (unresolved) in `vim.g.perforated_status` (not `vim.g.perforated`, which holds the config), shown on every buffer of that workspace.
+  - **Per file:** `#8 ↓#9` (`vim.b.perforated_status`, `vim.b.perforated_status_dict.stale`), within the file part: client, action@CL, a modified marker, the have revision, then stale / unresolved when they apply (`statusline.format`, a template of tokens; line counts are the optional `{diff}`).
+  - **Per workspace:** `↓2` (stale opened files), `!1` (unresolved), `⊘` offline and `⊘login` (login needed) in `vim.g.perforated_status` (not `vim.g.perforated`, which holds the config), shown on every buffer of that workspace.
   - Both are available through the lualine component and `require('perforated').statusline()`.
 
 ## Icons
@@ -111,8 +111,9 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - Folding: `l` / `<Tab>` / `<CR>` expand, `h` collapse (on a child: jump to parent + collapse). `<CR>` on a leaf → action menu.
 - **Context action menu** everywhere: `.` / `<RightMouse>` (not `<Space>`: commonly the leader key) → float listing only actions valid for the item under cursor, each with its hotkey. Normal code buffers: `<leader>p<Space>`.
 - Navigation: `]]`/`[[` sections, `gr` refresh, `q` close, `?` help, `m`/`u` mark/unmark, `/` filter.
-- Vim-style actions: `d` diff, `D` diff all in CL, `e` edit, `a` add, `x` revert, `X` revert unchanged, `M` move to CL, `R` resolve, `s` shelve, `S` unshelve, `z` delete shelved, `c` new CL, `C` edit CL description (quick float; `gS` full spec), `P` submit, `y` yank, `L` history, `b` annotate, `o` open, `t` time-lapse, `A` toggle pending scope, `gy` sync, `gR` revision graph (p4vc), `g/` go-to/lookup, `g1/g2/g0/g9` jump sections.
+- Vim-style actions: `d` diff, `D` diff all in CL, `e` edit, `a` add, `x` revert, `X` revert unchanged, `gm` move to CL, `R` resolve, `s` shelve, `S` unshelve, `<Del>` delete shelved (on a shelf; on a CL: delete the CL), `c` new CL, `C` edit CL description (quick float; `gS` full spec), `P` submit, `y` yank, `gL` history, `b` annotate, `o` open, `t` time-lapse, `A` toggle pending scope, `W` switch client, `gy` sync, `gR` revision graph (p4vc), `g/` go-to/lookup, `g1/g2/g0/g9` jump sections.
 - **P4V layer, on by default** (`keys.p4v = false` disables): `C-d` diff, `C-e` edit, `C-r` revert, `C-s` submit, `C-g` go-to/lookup, `C-t` history, `C-S-t` time-lapse*, `C-S-g` sync*, `C-S-c` copy depot path*, `C-S-r` revision graph*, `C-n` new CL, `C-f` filter, `C-1/2/0/9` section jumps*, `C-w` close. (*needs CSI-u terminal; vim-style fallback always exists.) **No lock/unlock.**
+- **Never shadow Vim's own motions** in plugin buffers: no `z` (folds, scrolling), `M`, `H`, `L` (cursor to screen middle / top / bottom).
 - Always-visible context-sensitive footer with the most common keys.
 - Normal-buffer preset (opt-in) prefix: **`<leader>p`**; hunks `]h`/`[h`.
 
@@ -126,7 +127,7 @@ Mechanics (one shared `ui/qf.lua`):
 - **Build with a single `setqflist` call.** Each list gets a `title` (e.g. `P4 opened · client gautam_ws`) and a `context` (`{perforated=true, kind, args}`), so `gr` inside the qf window re-runs the query and replaces the list in place, and `:colder`/`:cnewer` history stays usable.
 - **Streaming or slow sources** (sync, reconcile) create an empty list, then fill it with `setqflist({}, 'a', {id=…, items=…})` as results arrive. Focus is never taken unless the user opens it.
 - **Depot-only entries** (not in the workspace) use `perforated://` URIs as `filename`, so `:cnext` opens the revision read-only through `BufReadCmd`.
-- **Every entry carries `user_data`** `{depotFile, rev, change, action, kind}`. The qf window then gets buffer-local keys from the same action registry: `d` diff, `x` revert, `M` move, `D` describe, `.` menu. These are active only for perforated lists, detected via `context`.
+- **Every entry carries `user_data`** `{depotFile, rev, change, action, kind}`. The qf window then gets buffer-local keys from the same action registry: `d` diff, `x` revert, `gm` move, `D` describe, `.` menu. These are active only for perforated lists, detected via `context`.
 - A **`quickfixtextfunc`** aligns columns (`action  #have/#head  CL  path  desc`) without making the stored entries bigger.
 - `valid=0` entries serve as group headers, e.g. one per CL.
 - A **generic "send to quickfix" action** in the registry: `Q` sends the item under the cursor, the marked items, or the whole list to quickfix; `gQ` sends to the location list. It works in the client view, describe, history, annotate, the diff tab file panel, and picker results. Every picker adapter maps its native send-to-qf key to our entry format, so `user_data` survives.
