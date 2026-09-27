@@ -13,6 +13,7 @@ CONTENTS                                                 *perforated-contents*
   Configuration                           |perforated-config|
   Highlight groups                        |perforated-highlights|
   Events                                  |perforated-events|
+  License                                 |perforated-license|
 
 ==============================================================================
 INTRODUCTION                                                *perforated-intro*
@@ -606,5 +607,11 @@ EVENTS                                                     *perforated-events*
   PerforatedWorkspaceIdle        a workspace went idle (no buffers left) { ws }
   PerforatedDiffOpen      a diff tab opened { tab, wins, bufs, spec, path }
   PerforatedDiffClose     it closed (same data)
+
+==============================================================================
+LICENSE                                                   *perforated-license*
+
+MIT License. Copyright (c) 2026 Gautam Batra. The full text is in the LICENSE
+file at the root of the repository.
 
  vim:tw=78:ts=8:ft=help:norl:

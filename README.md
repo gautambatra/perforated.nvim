@@ -10,6 +10,7 @@
   <a href="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Neovim 0.11+" src="https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white">
   <img alt="Pure Lua, zero dependencies" src="https://img.shields.io/badge/dependencies-none-blue">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
 
 > [!WARNING]
@@ -807,3 +808,7 @@ Unit-level tests run against a scriptable fake `p4`. Integration tests start a t
 
 Issues and pull requests are welcome. `docs/developer_guide.md` walks through the architecture
 and conventions, and `make test` must stay green.
+
+## License
+
+[MIT](LICENSE) © 2026 Gautam Batra

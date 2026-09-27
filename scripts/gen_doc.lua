@@ -102,6 +102,7 @@ for _, s in ipairs({
   { 'Configuration', 'perforated-config' },
   { 'Highlight groups', 'perforated-highlights' },
   { 'Events', 'perforated-events' },
+  { 'License', 'perforated-license' },
 }) do
   add(('  %-40s|%s|'):format(s[1], s[2]))
 end
@@ -244,6 +245,11 @@ add('  PerforatedWorkspaceActivated   a workspace became active { ws }')
 add('  PerforatedWorkspaceIdle        a workspace went idle (no buffers left) { ws }')
 add('  PerforatedDiffOpen      a diff tab opened { tab, wins, bufs, spec, path }')
 add('  PerforatedDiffClose     it closed (same data)')
+
+header('LICENSE', 'perforated-license')
+wrap(
+  'MIT License. Copyright (c) 2026 Gautam Batra. The full text is in the LICENSE file at the root of the repository.'
+)
 add()
 add(' vim:tw=78:ts=8:ft=help:norl:')
 
