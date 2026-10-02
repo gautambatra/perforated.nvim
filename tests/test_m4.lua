@@ -189,6 +189,7 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
   child.lua(
     [[_G.confirm_msg = nil; require('perforated.ui.prompt').confirm = function(msg) _G.confirm_msg = msg; return 1 end]]
   )
+  H.record_busy(child)
   child.cmd('P4 change -d ' .. cl)
   wait('_G.confirm_msg ~= nil')
   H.neq(child.lua_get('_G.confirm_msg'):find('1 opened file', 1, true), nil)
@@ -199,6 +200,8 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
     end, 100),
     true
   )
+  -- "Deleting CL N…" from the confirmation until it's done.
+  wait(('vim.deep_equal(_G.busy, { { msg = "Deleting CL %s…", open = false } })'):format(cl))
   H.eq(changes_pending():find('doomed', 1, true), nil)
   H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = 'default' })
   H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b2') -- edits kept

@@ -336,6 +336,13 @@ function M.delete_change(ws, change, cb)
         if not mode then
           return cb(false)
         end
+        -- From here on p4 runs several commands (shelf, files, the changelist itself): say so.
+        local done = require('perforated.ui.toast').busy(('Deleting CL %s…'):format(change))
+        local outer = cb
+        cb = function(ok)
+          done()
+          outer(ok)
+        end
         local function delete()
           local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
           ws:run(args, {}, function(res)

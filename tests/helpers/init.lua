@@ -123,6 +123,23 @@ end
 
 --- Wait in the child until a Lua expression is truthy.
 ---@return boolean
+--- Record busy pop-ups in the child: `_G.busy` gets `{ msg, open }` per pop-up (open = not
+--- closed yet).
+---@param child table
+function H.record_busy(child)
+  child.lua([[
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    _G.busy = {}
+    toast.busy = function(msg)
+      local close = busy(msg)
+      local entry = { msg = msg, open = true }
+      table.insert(_G.busy, entry)
+      return function() entry.open = false; close() end
+    end
+  ]])
+end
+
 function H.wait(child, expr, timeout)
   return child.lua(
     ('return vim.wait(%d, function() return (%s) and true or false end, 10)'):format(

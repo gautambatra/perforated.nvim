@@ -256,7 +256,11 @@ function M.revert(ws, paths, unchanged, cb)
     end
   end
   local bufs = bufs_for(ws, paths)
+  local done = unchanged
+      and busy('Reverting %s if unchanged…', 'Reverting unchanged files…', paths)
+    or busy('Reverting %s…', 'Reverting %d files…', paths)
   p4.revert(ws, paths, { unchanged = unchanged }, function(res)
+    done()
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
     changed(ws)
     local reverted = {}
