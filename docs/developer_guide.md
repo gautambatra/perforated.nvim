@@ -461,7 +461,7 @@ lua/perforated/
     footer.lua               key footer float anchored to a window
     float.lua                single-key modal menu
     qf.lua                   quickfix/location-list sink and qf-window keys
-    toast.lua                corner notifications (activity- and focus-gated), busy pop-ups
+    toast.lua                pop-up notifications (placed by kind; activity- and focus-gated)
     prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
     icons.lua                file icons (mini.icons/devicons) and status glyphs
     progress.lua             progress messages (0.12) + final notification
@@ -1057,13 +1057,17 @@ aligns columns; perforated lists get buffer-local keys in the qf window (`d` dif
 `gm` move, `R` resolve, `gr` re-run the producer) plus syntax for the changed-file markers.
 
 #### `ui/toast.lua`
-Corner notifications: bottom-right, non-focusable, stacking; the dismissal countdown starts at
+Pop-up notifications, non-focusable, centred horizontally, placed by kind (`place`):
+`center` for things the user waits on (busy), `action` (the default) near the top for the
+result of what they just did, stacking down, and `background` above the statusline for
+polling news and finished jobs, stacking up; `_restack` lays out each group. The dismissal
+countdown starts at
 the user's first keypress (so a toast can't vanish unseen), toasts raised while unfocused wait
-for `FocusGained`; history for `:P4 notifications`. `notify(msg, level)` is how every module
+for `FocusGained`; history for `:P4 notifications`. `notify(msg, level, { place })` is how every module
 tells the user something (never `vim.notify` directly): a toast titled by level (errors get
 `PerforatedToastErrorBorder`, info `PerforatedToastInfoBorder`), long lines wrapped, or
 `vim.notify` when `toast.backend = 'notify'`. Safe from fast (luv) callbacks. `show(title,
-lines, level, { detail })` is the lower-level call (stale-file toasts: a dimmed details line).
+lines, level, { detail, place })` is the lower-level call (stale-file toasts: a dimmed details line).
 `busy(msg)` is a "working on it" pop-up with no countdown and no history entry; it returns the
 function that closes it (the diff tab's "Opening diff view…").
 

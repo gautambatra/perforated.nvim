@@ -74,7 +74,7 @@ function M.input(opts, on_confirm)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { default })
   local win = vim.api.nvim_open_win(buf, true, {
     relative = 'editor',
-    row = math.floor(vim.o.lines * 0.3),
+    row = math.floor((vim.o.lines - 3) / 2), -- a blocking question: the middle of the screen
     col = math.floor((vim.o.columns - width) / 2),
     width = width,
     height = 1,

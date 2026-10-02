@@ -42,6 +42,35 @@ T['messages']['are toasts titled by level; long lines wrap; errors get an error 
   H.eq(child.lua_get([[#require('perforated.ui.toast').history()]]), 2)
 end
 
+T['messages']['placement: action results at the top, background at the bottom, busy centred'] = function()
+  child = H.child({})
+  child.o.lines, child.o.columns = 30, 100
+  child.o.laststatus, child.o.cmdheight = 2, 1
+  child.lua([[
+    local toast = require('perforated.ui.toast')
+    toast.notify('created CL 12') -- action
+    toast.notify('moved 2 files') -- action, stacked below
+    toast.notify('synced 120 files', vim.log.levels.INFO, { place = 'background' })
+    toast.show('stale', { 'a', 'b' }, vim.log.levels.WARN, { place = 'background' })
+    _G.close = toast.busy('Opening diff view…')
+  ]])
+  local pos = child.lua_get([[vim.tbl_map(function(t)
+    local c = vim.api.nvim_win_get_config(t.win)
+    return { line = t.lines[1], row = c.row, col = c.col, w = c.width, h = c.height }
+  end, require('perforated.ui.toast').visible())]])
+  local by = {}
+  for _, p in ipairs(pos) do
+    by[p.line] = p
+    H.eq(math.abs((p.col + (p.w + 2) / 2) - 50) <= 1, true) -- centred horizontally
+  end
+  H.eq(by['created CL 12'].row, 1) -- two lines from the top (no tabline)
+  H.eq(by['moved 2 files'].row, 1 + 3) -- below the first (1 line + border)
+  -- Newest background toast at the bottom, right above the statusline and command line.
+  H.eq(by['a'].row + by['a'].h + 2, 30 - 1 - 1)
+  H.eq(by['synced 120 files'].row + 3, by['a'].row)
+  H.eq(math.abs(by['Opening diff view…'].row + 1.5 - 15) <= 1, true) -- vertical middle
+end
+
 T['messages']['confirmations are a pop-up menu: & letters, <CR> = default, <Esc> cancels'] = function()
   child = H.child({})
   child.lua([[vim.fn.confirm = function() _G.cmdline = true; return 1 end]])
