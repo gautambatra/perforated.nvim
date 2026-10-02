@@ -38,7 +38,7 @@ T['messages']['are toasts titled by level; long lines wrap; errors get an error 
   H.eq(shown[2].height > 1, true) -- wrapped, not cut off
   H.eq(shown[2].width <= 48, true)
   H.eq(shown[2].hl:find('PerforatedToastErrorBorder', 1, true) ~= nil, true)
-  -- Kept in the :P4 notifications history.
+  -- Kept in the :P4 messages history.
   H.eq(child.lua_get([[#require('perforated.ui.toast').history()]]), 2)
 end
 

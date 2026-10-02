@@ -691,9 +691,9 @@ M.commands = {
     end,
   },
 
-  notifications = {
+  messages = {
     scope = 'none',
-    desc = 'Show recent notifications (stale files, …)',
+    desc = 'Show recent messages',
     run = function()
       require('perforated.ui.toast').open_history()
     end,
@@ -701,7 +701,7 @@ M.commands = {
 
   dismiss = {
     scope = 'none',
-    desc = 'Dismiss visible notifications',
+    desc = 'Dismiss visible messages',
     run = function()
       require('perforated.ui.toast').dismiss()
     end,
