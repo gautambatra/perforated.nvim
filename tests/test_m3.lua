@@ -239,6 +239,7 @@ T['m3']['history presenter = quickfix'] = function()
 end
 
 T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = function()
+  H.wait_idle(child)
   child.lua([[require('perforated.core.log').clear()]])
   child.api.nvim_win_set_cursor(0, { 3, 0 }) -- not line 1: the column starts empty
   child.cmd('P4 annotate')
@@ -250,7 +251,7 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   H.eq(#lines, 3)
   -- One call: `annotate -c -i -u -q` carries the user and date of every line.
   H.eq(p4_calls('annotate')[1]:match('annotate .*'), 'annotate -c -i -u -q //depot/a.txt#3')
-  H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 1)
+  H.eq(H.p4_subcommands(child), { 'annotate' })
   H.eq(child.wo.scrollbind, true)
   H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
   H.eq(child.lua_get([=[vim.api.nvim_win_get_cursor(vim.fn.win_getid(vim.fn.winnr('l')))[1]]=]), 3)

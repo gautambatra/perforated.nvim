@@ -84,6 +84,7 @@ T['timelapse'] = MiniTest.new_set({
 
 T['timelapse']['every rebuilt revision equals p4 print; two p4 calls'] = function()
   local contents = setup()
+  H.wait_idle(child) -- the buffer's own fstat / refresh must not count
   child.lua([[require('perforated.core.log').clear()]])
   child.lua(([[
     _G.tl = nil
@@ -93,7 +94,7 @@ T['timelapse']['every rebuilt revision equals p4 print; two p4 calls'] = functio
   ]]):format(root .. '/f.txt'))
   wait('_G.tl ~= nil')
   H.eq(child.lua_get('_G.err'), vim.NIL)
-  H.eq(#child.lua_get([[require('perforated.core.log').entries()]]), 2)
+  H.eq(H.p4_subcommands(child), { 'filelog', 'annotate' })
   for r = 1, REVS do
     local got = child.lua_get(
       ('table.concat(require("perforated.timelapse").revision(_G.tl, %d), "\\n") .. "\\n"'):format(
