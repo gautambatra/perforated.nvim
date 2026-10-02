@@ -57,6 +57,83 @@ T['offline']['connection failure → offline, fail fast, probe recovers'] = func
   H.eq(r.ok, true)
 end
 
+T['offline']['a slow command that times out probes first: online if the server answers'] = function()
+  root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  child = H.child({
+    fake = {
+      rules = {
+        { match = '^opened', sleep = 1.5 }, -- slow, not disconnected
+        { match = 'info %-s', records = { { serverVersion = 'x' } } },
+        { match = '.', records = { { serverVersion = 'x' } } },
+      },
+    },
+    env = { P4CONFIG = '.p4config' },
+    config = { p4 = H.fake_p4, runner = { timeout = 300 } },
+  })
+  child.lua(([[
+    _G.ws = require('perforated.core.activation').for_dir(%q)
+    _G.ws.conn:_set('online')
+    _G.res = nil
+    _G.ws:run({ 'opened' }, {}, function(r) _G.res = r end)
+  ]]):format(root))
+  H.eq(H.wait(child, '_G.res ~= nil', 10000), true)
+  H.eq(child.lua_get('_G.res.timed_out'), true)
+  -- The probe (p4 info -s) answers: still online, nothing refused.
+  H.eq(H.wait(child, [[not _G.ws.conn.checking]], 5000), true)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'online')
+  local calls = vim.tbl_map(function(c)
+    return table.concat(c.argv, ' ')
+  end, H.calls(child.fake.log))
+  H.eq(
+    vim.tbl_contains(
+      vim.tbl_map(function(c)
+        return c:find('info %-s') ~= nil
+      end, calls),
+      true
+    ),
+    true
+  )
+
+  -- When the probe fails too, the workspace goes offline.
+  H.rules(child.fake.rules, {
+    { match = '^opened', sleep = 1.5 },
+    vim.tbl_extend('force', { match = 'info %-s' }, CONNECT_FAIL),
+  })
+  child.lua([[_G.res = nil; _G.ws:run({ 'opened' }, {}, function(r) _G.res = r end)]])
+  H.eq(H.wait(child, '_G.res ~= nil', 10000), true)
+  H.eq(H.wait(child, [[_G.ws.conn.state == 'offline']], 5000), true)
+end
+
+T['offline']['resolve runs as a job: a slow resolve -am is not cut off by the call timeout'] = function()
+  root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  child = H.child({
+    fake = {
+      rules = {
+        { match = '^resolve %-am', sleep = 1, records = { { clientFile = root .. '/a.c' } } },
+        { match = '.', records = {} },
+      },
+    },
+    env = { P4CONFIG = '.p4config' },
+    config = { p4 = H.fake_p4, runner = { timeout = 300 } },
+  })
+  child.lua(([[
+    _G.ws = require('perforated.core.activation').for_dir(%q)
+    _G.ws.conn:_set('online')
+    require('perforated.resolve').run(_G.ws, nil, function(n, left) _G.r = { n, left } end)
+  ]]):format(root))
+  H.eq(H.wait(child, '_G.r ~= nil', 10000), true)
+  -- No call was cut off: resolve -am ran without the call timeout.
+  H.eq(
+    child.lua_get([[vim.tbl_map(function(e) return e.err or 'ok' end,
+      require('perforated.core.log').entries())]]),
+    { 'ok', 'ok' }
+  )
+  H.eq(child.lua_get('_G.r'), { 1, 0 })
+  H.eq(child.lua_get('_G.ws.conn.state'), 'online')
+end
+
 T['offline']['server-side errors do not mark the connection offline'] = function()
   setup({ { match = '.', records = { { data = 'no such file(s).', generic = 17, severity = 3 } } } })
   local r = run({ 'fstat', 'x' })

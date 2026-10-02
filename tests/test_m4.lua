@@ -483,6 +483,19 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   H.eq(#qf, 1)
   H.neq(qf[1].text:find('exited with 1', 1, true), nil)
   H.neq(p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }), '')
+  -- Never silent: a job pop-up when it starts, and a warning with the outcome.
+  local msgs = child.lua_get([[vim.tbl_map(function(t) return t.title .. ': ' .. t.lines[1] end,
+    require('perforated.ui.toast').history())]])
+  H.eq(
+    msgs[#msgs - 1],
+    'Perforce: p4: resolve workspace…  (:P4 jobs to watch, :P4 cancel to stop)'
+  )
+  H.neq(
+    msgs[#msgs]:find(
+      '^Perforce: warning: p4: 1 file%(s%) left unresolved %(quickfix%): merge tool exited with 1'
+    ),
+    nil
+  )
 end
 
 T['m4'][':P4 reopen moves the current file to another changelist'] = function()

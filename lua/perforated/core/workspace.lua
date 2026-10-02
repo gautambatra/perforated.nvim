@@ -238,7 +238,7 @@ function Workspace:run(args, opts, cb)
       if opts.no_observe then
         return cb(res)
       end
-      local kind = self.conn:observe(res)
+      local kind = self.conn:observe(res, { probe = opts.probe })
       if kind == 'auth' and not opts.no_auth_retry and epoch ~= self.conn.epoch then
         -- Started before a login that has since succeeded: the error is stale. Retry quietly
         -- instead of prompting for a password a second time.

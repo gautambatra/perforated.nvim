@@ -108,6 +108,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 ## Auth / offline
 - Auth error → pause queue, prompt once (inputsecret → `p4 login` stdin), resume.
 - Server unreachable → **offline mode** (cached signs keep working, clear errors, retry with backoff, statusline indicator).
+- A call that merely **times out** isn't proof of an outage *(2026-10-03)*: the plugin probes (`info -s`) first and goes offline only if the probe fails. Heavy, legitimately slow commands (sync, submit, resolve, reconcile) run as jobs without the call timeout.
 
 ## Commands & keymaps
 - `:P4 <sub>` with completion **plus** flat aliases (`:P4edit`, `:P4diff`, …) generated from the same table. A bang goes on the subcommand: `:P4 revert!`, `:P4 diff!` (`:P4! revert` also works).

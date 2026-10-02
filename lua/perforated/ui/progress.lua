@@ -57,7 +57,7 @@ end
 --- Finish a progress item.
 ---@param p perforated.Progress
 ---@param msg string
----@param failed boolean?
+---@param failed boolean|'warn'|nil  'warn': done, but something needs attention
 function M.finish(p, msg, failed)
   if p.id then
     pcall(vim.api.nvim_echo, { { msg } }, false, {
@@ -69,11 +69,14 @@ function M.finish(p, msg, failed)
       source = 'perforated',
     })
   end
-  -- A failure needs attention like an action's result; success is background news (the job
-  -- may finish long after it was started).
+  -- A failure (or a warning) needs attention like an action's result; success is background
+  -- news (the job may finish long after it was started).
+  local level = failed == 'warn' and vim.log.levels.WARN
+    or failed and vim.log.levels.ERROR
+    or vim.log.levels.INFO
   require('perforated.ui.toast').notify(
     ('[perforated] %s: %s'):format(p.title, msg),
-    failed and vim.log.levels.ERROR or vim.log.levels.INFO,
+    level,
     { place = failed and 'action' or 'background' }
   )
 end

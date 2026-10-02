@@ -113,10 +113,39 @@ function Conn:refuse()
 end
 
 --- Feed a result; returns the classification.
+---
+--- A timeout alone isn't proof the server is gone (a big `resolve -am` or `print` can just be
+--- slow): unless the output names a connection failure, it triggers an immediate probe and only
+--- a failed probe (or a probe's own timeout) marks the workspace offline.
 ---@param res perforated.RunResult
+---@param opts { probe: boolean? }?  the result of a probe
 ---@return 'ok'|'auth'|'connect'|'error'
-function Conn:observe(res)
+function Conn:observe(res, opts)
   local kind = M.classify(res)
+  if kind == 'connect' and res.timed_out and not (opts and opts.probe) then
+    local texts = vim.list_extend({ res.stderr or '' }, res.errors or {})
+    local named = false
+    for _, t in ipairs(texts) do
+      for _, pat in ipairs(M.CONNECT_PATTERNS) do
+        named = named or t:find(pat) ~= nil
+      end
+    end
+    if not named then
+      if self.state == 'online' and not self.checking then
+        self.checking = true
+        require('perforated.core.debug').log(
+          'info',
+          'conn',
+          '%s: a call timed out; probing before going offline',
+          self.ws.key
+        )
+        self:probe(function()
+          self.checking = false
+        end)
+      end
+      return kind
+    end
+  end
   if kind == 'ok' or kind == 'error' then
     -- A server-side error still proves the server is reachable and we're authenticated.
     -- Not while a login is in progress: only the login decides that (some commands, like
