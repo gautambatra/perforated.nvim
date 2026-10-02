@@ -487,8 +487,10 @@ T['ops']['lualine component renders the statusline'] = function()
 end
 
 T['ops'][':P4 revert! restores depot content and state'] = function()
+  H.record_busy(child)
   child.cmd('P4 revert!')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  H.eq(child.lua_get('_G.busy'), { { msg = 'Reverting a.txt…', open = false } })
   H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'one', 'two', 'three', 'four', 'five' })
   H.eq(opened()['//depot/a.txt'], nil)
 end

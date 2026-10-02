@@ -211,7 +211,7 @@ function M.prompt(buf, verb, target)
       { key = 'A', label = 'always use this target (session, no prompt)', value = 'auto' },
       verb == 'add' and { key = 's', label = "don't ask again for this file", value = 'skip' }
         or { key = 's', label = 'skip (this buffer)', value = 'skip' },
-      { key = 'S', label = 'never ask (this session)', value = 'never' },
+      { key = 'S', label = "don't ask for any file (this session)", value = 'never' },
     },
   })
   c.prompting = false
