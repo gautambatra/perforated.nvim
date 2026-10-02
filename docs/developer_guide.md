@@ -909,7 +909,9 @@ as end-of-line virtual text.
 loads it directly (not relying on `BufReadCmd`, which doesn't fire inside other
 autocommands); `read(buf)` fills it asynchronously via `p4.print`, sets the filetype from the
 depot path, keeps the buffer read-only (with `readonly` off while writing, to avoid W10) and
-refreshes diff mode in windows showing it.
+refreshes diff mode in windows showing it. Revision buffers outlive their views (`bufhidden=hide`), so
+reusing one of a *mutable* spec (`@=CL` shelves, `#head`, `@label`) reads it again, keeping the
+old text until the new arrives; only numbered revisions (`#N`) are reused as they are.
 
 #### `diff/engine.lua`
 In-process diffs: `hunks(base, cur)` via `vim.text.diff` (`result_type = 'indices'`, myers +

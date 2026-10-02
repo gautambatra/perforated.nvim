@@ -129,6 +129,42 @@ T['m4']['shelve (replace after confirm), delete shelved, unshelve into the same 
   H.eq(p4({ 'describe', '-S', '-s', cl }):find('//depot/main/b.txt#', 1, true), nil)
 end
 
+T['m4']['shelf vs workspace after a re-shelve shows the new shelved content'] = function()
+  setup()
+  local cl = new_change('reshelve')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  H.write(root .. '/main/b.txt', 'b2\n')
+  p4({ 'shelve', '-c', cl })
+  H.write(root .. '/main/b.txt', 'b2 local\n')
+  local spec = '//depot/main/b.txt@=' .. cl
+  local function shelved_side()
+    child.lua(
+      ([[require('perforated.diff.tab').open_shelf_vs_workspace(require('perforated').workspace(), %q)]]):format(
+        cl
+      )
+    )
+    wait(
+      ('vim.fn.bufnr(%q) > 0 and vim.b[vim.fn.bufnr(%q)].perforated_loaded == true'):format(
+        'perforated://' .. spec,
+        'perforated://' .. spec
+      )
+    )
+  end
+  local lines = ('vim.api.nvim_buf_get_lines(vim.fn.bufnr(%q), 0, -1, false)'):format(
+    'perforated://' .. spec
+  )
+  shelved_side()
+  H.eq(child.lua_get(lines), { 'b2' })
+  child.cmd('tabclose')
+
+  -- Re-shelve, replacing the shelf (what the shelve action's "replace" does).
+  H.write(root .. '/main/b.txt', 'b3\n')
+  p4({ 'shelve', '-f', '-c', cl })
+  H.write(root .. '/main/b.txt', 'b3 local\n')
+  shelved_side()
+  wait(('vim.deep_equal(%s, { "b3" })'):format(lines))
+end
+
 local function changes_pending()
   return p4({ 'changes', '-s', 'pending' })
 end
