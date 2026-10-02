@@ -180,7 +180,7 @@ M.commands = {
       local unchanged = flags['-a']
       if not unchanged and not o.bang then
         local what = #files == 1 and vim.fn.fnamemodify(files[1], ':~:.') or (#files .. ' files')
-        local ok = vim.fn.confirm(
+        local ok = require('perforated.ui.prompt').confirm(
           ('Revert %s? Local changes will be lost.'):format(what),
           '&Revert\n&Cancel',
           2

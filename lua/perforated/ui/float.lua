@@ -8,6 +8,7 @@ M.ns = vim.api.nvim_create_namespace('perforated.float')
 ---@field key string    keytrans() form, e.g. '<CR>', 'c', 'S'
 ---@field label string
 ---@field value any
+---@field aliases string[]?  more keys that choose it (not shown)
 
 ---@class perforated.MenuOpts
 ---@field title string
@@ -15,6 +16,7 @@ M.ns = vim.api.nvim_create_namespace('perforated.float')
 ---@field items perforated.MenuItem[]
 ---@field grace integer?        ms after opening during which keys count as typing, not choices
 ---@field relative 'cursor'|'editor'|nil
+---@field header_hl string|false|nil  highlight of the header lines (default PerforatedDim)
 
 --- Show a single-key menu and wait for a choice (processes events meanwhile, so async work keeps
 --- running). Keys pressed during the grace period are returned for replay: they were almost
@@ -53,8 +55,9 @@ function M.menu(opts)
       { end_col = 2 + n, hl_group = 'PerforatedKey' }
     )
   end
-  for i = 1, #(opts.header or {}) do
-    vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, { line_hl_group = 'PerforatedDim' })
+  local header_hl = opts.header_hl == nil and 'PerforatedDim' or opts.header_hl
+  for i = 1, header_hl and #(opts.header or {}) or 0 do
+    vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, { line_hl_group = header_hl })
   end
 
   local relative = opts.relative or 'cursor'
@@ -87,6 +90,9 @@ function M.menu(opts)
   local by_key = {}
   for _, it in ipairs(opts.items) do
     by_key[it.key] = it
+    for _, k in ipairs(it.aliases or {}) do
+      by_key[k] = by_key[k] or it
+    end
   end
   -- Multi-key choices (`gY`, `g@`): keys typed so far that start a longer key wait for the rest.
   local function is_prefix(typed)

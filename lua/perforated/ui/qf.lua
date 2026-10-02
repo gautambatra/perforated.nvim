@@ -208,8 +208,11 @@ on_qf_buf = function(buf)
       return require('perforated.ui.toast').notify('[perforated] no workspace file under cursor')
     end
     if
-      vim.fn.confirm(('Revert %s?'):format(vim.fn.fnamemodify(path, ':~:.')), '&Revert\n&Cancel', 2)
-      == 1
+      require('perforated.ui.prompt').confirm(
+        ('Revert %s?'):format(vim.fn.fnamemodify(path, ':~:.')),
+        '&Revert\n&Cancel',
+        2
+      ) == 1
     then
       require('perforated.checkout').revert(ws, { path }, false, refresher(true))
     end

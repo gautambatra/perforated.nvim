@@ -59,6 +59,7 @@ edit, add, revert (+ revert unchanged), reopen (move to CL), change specs in `ac
 ## Editing CL descriptions
 One action, **`C` "edit description"**, available anywhere a CL appears:
 - the client view (pending, submitted and shelved rows)
+- the `K` "view changelist" popup: `C` turns the popup itself into the quick editor (same place), and a save or cancel returns to the popup
 - the describe buffer
 - history, annotate and time-lapse entries (the CL of that revision)
 - picker results
@@ -78,6 +79,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
   - If the server refuses (not the owner, or policy), the error is shown inline.
   - Admins can set `change.allow_force = true` to retry with `-f`, after an explicit confirmation.
 - **Default CL:** its description **cannot** be edited. `C` isn't offered on the default CL, and its files can only be moved (`gm`) to an existing CL or a new one.
+- **`gm` on a changelist** (any pending CL with opened files, default included) moves all its opened files: the picker lists every other pending CL, the default one and "+ new changelist…".
 - **After a save:** the CL memo cache is updated and every open view showing that CL (client view, describe, annotate, blame line) refreshes its text. The check-out float's "new CL" input uses the same quick editor, starting as a single line that expands on `<C-CR>` for multi-line descriptions.
 - **Optional description template** (`change.template`), e.g. a string or function that pre-fills new CLs (`[JIRA-]`, reviewers). New CLs only.
 
@@ -121,7 +123,8 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - Normal-buffer preset (opt-in) prefix: **`<leader>p`**; hunks `]h`/`[h`.
 
 ## Feedback
-- Minimal notifications; progress for long ops (0.12 native progress, forwarded to fidget/snacks); `vim.b`/`vim.g` statusline vars + lualine component; `:P4 log` of every p4 command with timings.
+- Minimal notifications; `vim.b`/`vim.g` statusline vars + lualine component; `:P4 log` of every p4 command with timings.
+- **Everything follows `toast.backend`** *(2026-10-02)*: with pop-ups (the default) messages, confirmations (a centred single-key menu) and text prompts (a one-line input float) never use the command line. Long jobs show a pop-up when they start and when they finish, and live progress only in `:P4 jobs`. Slow-to-open views show a busy pop-up ("Opening diff view…") until they're ready. With `backend = 'notify'`: `vim.notify`, `confirm()`, `vim.ui.input` and 0.12 native progress messages. The `p4 login` password prompt always stays on the command line.
 
 ## Quickfix / location list
 Principle: **any list of files, revisions or lines can go to quickfix.** Workspace-wide lists go to the **quickfix list**. Lists about one file (its hunks, its history, lines from one CL) go to the **location list** of that window. Each entry can be switched to the other list.

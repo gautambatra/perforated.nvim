@@ -20,7 +20,36 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 ---@field left perforated.DiffSide
 ---@field right perforated.DiffSide|{ path: string }
 
+-- "Opening diff view…": shown as soon as a diff tab is asked for (fetching file lists and the
+-- identical-files check take a moment), closed when the tab opens or the request ends any
+-- other way (every such way goes through `notify` or `finish_busy`).
+local busy ---@type fun()?
+
+local function start_busy()
+  if busy then
+    return
+  end
+  local close = require('perforated.ui.toast').busy('Opening diff view…')
+  busy = close
+  -- Never left up by an unexpected failure.
+  vim.defer_fn(function()
+    if busy == close then
+      busy = nil
+      close()
+    end
+  end, 30000)
+end
+
+local function finish_busy()
+  if busy then
+    local close = busy
+    busy = nil
+    close()
+  end
+end
+
 local function notify(msg, level)
+  finish_busy()
   require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
@@ -39,6 +68,7 @@ local open_tab
 ---@param title string
 ---@param entries perforated.DiffEntry[]
 function M.open(ws, title, entries)
+  start_busy()
   if #entries == 0 then
     return notify(title .. ': no files')
   end
@@ -50,6 +80,7 @@ function M.open(ws, title, entries)
       end
     end
     if n == #entries then
+      finish_busy()
       return require('perforated.ui.toast').show('Perforce: identical, nothing to diff', {
         #entries == 1 and (title .. ': the file is identical')
           or ('%s: all %d files are identical'):format(title, #entries),
@@ -282,6 +313,7 @@ open_tab = function(ws, title, entries, identical)
   vim.api.nvim_win_set_cursor(panel, { 3, 0 })
   show_entry(1)
   vim.api.nvim_set_current_win(panel)
+  finish_busy()
   return state
 end
 
@@ -324,6 +356,7 @@ end
 ---@param ws perforated.Workspace
 ---@param item table
 function M.open_change(ws, item)
+  start_busy()
   if item.status == 'submitted' or (item.rec == nil and item.files == nil and item.desc) then
     -- Submitted CL: #rev-1 ↔ #rev for every file.
     return cls.describe(ws, { item.change }, {}, function(by)
@@ -383,6 +416,7 @@ end
 ---@param change string
 ---@param shelved table[]?  the shelf's files (fetched when nil)
 function M.open_shelf_vs_workspace(ws, change, shelved)
+  start_busy()
   if not shelved then
     return cls.shelved_files(ws, { change }, function(by)
       M.open_shelf_vs_workspace(ws, change, by[change] or {})
@@ -418,6 +452,7 @@ end
 --- Every opened file of the workspace.
 ---@param ws perforated.Workspace
 function M.open_opened(ws)
+  start_busy()
   p4.fstat_opened(ws, {}, function(recs)
     M.open(ws, 'opened files · ' .. (ws:client() or ws.key), opened_entries(ws, recs or {}))
   end)

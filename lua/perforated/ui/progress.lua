@@ -1,11 +1,18 @@
---- Progress for long p4 operations (sync, submit). While running: Neovim 0.12+ progress
---- messages (the message area; fidget/snacks pick them up). The final result is always a
---- plugin message as well (a toast, or vim.notify with `toast.backend = 'notify'`), so it can't
---- be missed.
+--- Progress for long p4 operations (sync, submit, reconcile).
+---
+--- Pop-ups (the default `toast.backend`): one when the job starts and one with its result; the
+--- running state is in `:P4 jobs`, never in the message area.
+--- `toast.backend = 'notify'`: Neovim 0.12+ progress messages while running (the message area;
+--- fidget/snacks pick them up), and the result through vim.notify.
 
 local M = {}
 
-local has_progress = vim.fn.has('nvim-0.12') == 1
+--- Native progress messages: only with the vim.notify backend (pop-ups never use the message
+--- area) and on Neovim 0.12+.
+local function native()
+  return vim.fn.has('nvim-0.12') == 1
+    and require('perforated.config').get().toast.backend == 'notify'
+end
 
 ---@class perforated.Progress
 ---@field id integer|string|nil
@@ -17,7 +24,7 @@ local has_progress = vim.fn.has('nvim-0.12') == 1
 ---@return perforated.Progress
 function M.start(title, msg)
   local p = { title = title }
-  if has_progress then
+  if native() then
     local ok, id = pcall(
       vim.api.nvim_echo,
       { { msg } },
@@ -37,7 +44,7 @@ end
 ---@param p perforated.Progress
 ---@param msg string
 function M.update(p, msg)
-  if has_progress and p.id then
+  if p.id then
     pcall(
       vim.api.nvim_echo,
       { { msg } },
@@ -52,7 +59,7 @@ end
 ---@param msg string
 ---@param failed boolean?
 function M.finish(p, msg, failed)
-  if has_progress and p.id then
+  if p.id then
     pcall(vim.api.nvim_echo, { { msg } }, false, {
       kind = 'progress',
       id = p.id,

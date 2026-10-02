@@ -294,7 +294,7 @@ end
 
 T['client view']['x reverts the file under the cursor; view refreshes'] = function()
   open_view()
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   goto_line('b.txt')
   child.type_keys('x')
   wait(
@@ -320,6 +320,85 @@ T['client view']['M moves marked files to another changelist'] = function()
   local o = opened()
   H.eq(o['//depot/b.txt'], '2')
   H.eq(o['//depot/c.txt'], '2')
+end
+
+T['client view']['gm on a changelist moves all its files; the picker offers the others'] = function()
+  open_view()
+  child.lua([[vim.ui.select = function(items, opts, cb)
+    _G.offered = vim.tbl_map(function(it) return it.change end, items)
+    _G.title = opts.prompt
+    for _, it in ipairs(items) do if it.change == 'default' then return cb(it) end end
+  end]])
+  goto_line('CL 2  Fix parser')
+  child.type_keys('gm')
+  wait([[_G.offered ~= nil]])
+  H.eq(child.lua_get('_G.offered'), { 'default', 'new' }) -- every other changelist, not CL 2
+  H.eq(child.lua_get('_G.title'):find('Move 1 file(s) from CL 2', 1, true) ~= nil, true)
+  H.eq(H.wait(child, 'false', 1500), false)
+  H.eq(opened()['//depot/a.txt'], 'default')
+
+  -- From the default changelist into a new one (created in the description float).
+  child.lua([[vim.ui.select = function(items, _, cb)
+    _G.offered = vim.tbl_map(function(it) return it.change end, items)
+    for _, it in ipairs(items) do if it.change == 'new' then return cb(it) end end
+  end]])
+  wait([[(]] .. view_expr(root) .. [[).loading == false]])
+  goto_line('default')
+  child.type_keys('gm')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  H.eq(child.lua_get('_G.offered'), { '2', 'new' })
+  child.type_keys('Moved here', '<Esc>', '<C-s>')
+  H.eq(H.wait(child, 'false', 2000), false)
+  local o = opened()
+  H.eq(o['//depot/a.txt'], o['//depot/b.txt'])
+  H.eq(o['//depot/a.txt'], o['//depot/c.txt'])
+  H.neq(o['//depot/a.txt'], 'default')
+  H.neq(o['//depot/a.txt'], '2')
+end
+
+T['client view']['K popup: C edits the description in place, then comes back'] = function()
+  open_view()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('K')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  local win = child.api.nvim_get_current_win()
+  child.type_keys('C')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  H.eq(child.api.nvim_get_current_win(), win) -- the same popup, now in edit mode
+  H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'Fix parser', 'second line' })
+  child.type_keys('ccFix the parser', '<Esc>', '<C-s>')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Fix the parser', 1, true) ~= nil]]
+  )
+  local spec = server:p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
+  H.neq(spec:find('\tFix the parser\n\tsecond line', 1, true), nil)
+  -- q in edit mode (unmodified) goes back to the popup too; q there closes it.
+  child.type_keys('C')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+end
+
+T['client view']['D shows "Opening diff view…" until the tab is open'] = function()
+  H.write(root .. '/b.txt', 'b2\n')
+  open_view()
+  child.lua([[
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    _G.busy = {}
+    toast.busy = function(msg)
+      table.insert(_G.busy, msg)
+      return busy(msg)
+    end
+  ]])
+  goto_line('default')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  H.eq(child.lua_get('_G.busy'), { 'Opening diff view…' })
+  H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
 end
 
 T['client view']['marks inside a collapsed changelist still apply'] = function()
@@ -580,7 +659,8 @@ T['client view']['diff tab: moving the cursor in the panel loads each file (both
   open_view()
   goto_line('initial import')
   child.type_keys('D')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 3]])
+  -- The diff tab (floats count as windows: the client view's footer and the busy pop-up too).
+  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
   -- Move through the panel the way a user does (CursorMoved inside the panel).
   local seen = {}
   for row = 3, 6 do
@@ -677,7 +757,9 @@ end
 
 T['client view']['multi-key actions (gY) can be chosen from the action menu'] = function()
   open_view()
-  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 3 end]])
+  child.lua(
+    [[require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 3 end]]
+  )
   goto_line('b.txt')
   child.type_keys('.')
   vim.uv.sleep(300) -- the menu waits for keys (no RPC meanwhile)

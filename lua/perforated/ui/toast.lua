@@ -98,7 +98,7 @@ end
 
 local function start_countdown(t)
   local timeout = cfg().timeout
-  if t.counting or timeout <= 0 or not t.win then
+  if t.counting or t.busy or timeout <= 0 or not t.win then
     return
   end
   t.counting = true
@@ -146,6 +146,8 @@ local function wrap(line, width)
   out[#out + 1] = line
   return out
 end
+
+M._wrap = wrap
 
 local BORDER = {
   [vim.log.levels.ERROR] = 'PerforatedToastErrorBorder',
@@ -261,6 +263,25 @@ function M.notify(msg, level)
     vim.split(msg, '\n', { plain = true, trimempty = true }),
     level
   )
+end
+
+--- A "working on it" pop-up for an action that takes a moment (e.g. "Opening diff view…"):
+--- shown at once, no countdown, not in the history. Returns the function that closes it; call
+--- it on every outcome. With `toast.backend = 'notify'` it's a plain vim.notify.
+---@param msg string
+---@return fun() close
+function M.busy(msg)
+  if cfg().backend == 'notify' then
+    vim.notify('[perforated] ' .. msg, vim.log.levels.INFO)
+    return function() end
+  end
+  setup()
+  local t = { title = 'Perforce', lines = { msg }, level = vim.log.levels.INFO, busy = true }
+  M._render(t)
+  vim.cmd.redraw() -- now: the work that follows may keep the main loop busy for a while
+  return function()
+    close(t)
+  end
 end
 
 --- Close every toast.

@@ -46,7 +46,7 @@ local function setup(extra_config)
     }, extra_config or {}),
   })
   child.o.lines, child.o.columns = 40, 160
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   child.cmd('edit ' .. root .. '/main/a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
 end
@@ -187,7 +187,7 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
   H.write(root .. '/main/b.txt', 'b2\n')
   p4({ 'shelve', '-c', cl })
   child.lua(
-    [[_G.confirm_msg = nil; vim.fn.confirm = function(msg) _G.confirm_msg = msg; return 1 end]]
+    [[_G.confirm_msg = nil; require('perforated.ui.prompt').confirm = function(msg) _G.confirm_msg = msg; return 1 end]]
   )
   child.cmd('P4 change -d ' .. cl)
   wait('_G.confirm_msg ~= nil')
@@ -209,7 +209,7 @@ T['m4']['delete changelist: revert choice, empty CL, default refused'] = functio
   local cl = new_change('revert me')
   p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
   H.write(root .. '/main/b.txt', 'b2\n')
-  child.lua([[vim.fn.confirm = function() return 2 end]]) -- "Revert them"
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 2 end]]) -- "Revert them"
   child.lua(
     ([[require('perforated.ops').delete_change(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
       cl
@@ -219,7 +219,7 @@ T['m4']['delete changelist: revert choice, empty CL, default refused'] = functio
   H.eq(opened()['//depot/main/b.txt'], nil)
   H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b1')
   local empty = new_change('empty one')
-  child.lua([[vim.fn.confirm = function() return 1 end; _G.r = nil]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end; _G.r = nil]])
   child.lua(
     ([[require('perforated.ops').delete_change(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
       empty
@@ -271,7 +271,9 @@ end
 T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   setup()
   -- every sync is confirmed: "Cancel" runs nothing
-  child.lua([[vim.fn.confirm = function(msg) _G.asked = msg; return 3 end]]) -- Sync/Preview/Cancel
+  child.lua(
+    [[require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 3 end]]
+  ) -- Sync/Preview/Cancel
   child.lua([[require('perforated.core.log').clear(); _G.r = nil]])
   child.cmd('P4 sync')
   H.eq(child.lua_get('_G.asked'), 'Sync the whole workspace?')
@@ -284,7 +286,7 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
     ),
     0
   )
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   bob_submits('main/a.txt', 'l1\nfrom bob\nl3\nl4\nl5\n')
   child.lua(
     [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
@@ -298,7 +300,7 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   -- Preview on request: `sync -n`, then the question again with the counts (cancelled here)
   child.lua([[
     _G.asks = {}
-    vim.fn.confirm = function(msg) table.insert(_G.asks, msg); return 2 end -- Preview, then Cancel
+    require('perforated.ui.prompt').confirm = function(msg) table.insert(_G.asks, msg); return 2 end -- Preview, then Cancel
     _G.r = nil
   ]])
   child.cmd('P4 sync @1')
@@ -307,7 +309,7 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   H.eq(child.api.nvim_buf_get_lines(0, 1, 2, false)[1], 'from bob') -- nothing synced
 
   -- g@ on a submitted changelist in the client view: the workspace goes back to CL 1
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   child.cmd('P4')
   -- Sections draw as their queries answer: wait for the Sync CL and Recent submitted.
   wait(
@@ -407,7 +409,7 @@ T['m4']['reconcile scans only the configured paths; p changes them'] = function(
     [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('newer.txt', 1, true) ~= nil]]
   )
   -- p with an empty answer: the whole client
-  child.lua([[vim.ui.input = function(_, cb) cb('') end]])
+  child.lua([[require('perforated.ui.prompt').input = function(_, cb) cb('') end]])
   goto_line('Workspace reconcile')
   child.type_keys('p')
   wait(
@@ -620,7 +622,7 @@ T['m4']['integrate: preview, confirm, integrate into a branch, resolve'] = funct
   bob_submits('main/b.txt', 'b-fix\n', 'fix b')
   local fix = server:p4({ 'changes', '-m1', '//depot/main/b.txt' }).stdout:match('Change (%d+)')
   child.lua([[
-    vim.ui.input = function(_, cb) cb('//depot/rel/...') end
+    require('perforated.ui.prompt').input = function(_, cb) cb('//depot/rel/...') end
     vim.ui.select = function(items, _, cb) cb(items[1]) end -- default changelist
   ]])
   child.lua(
@@ -663,7 +665,7 @@ T['sync monitoring'] = function()
   })
   child.cmd('edit ' .. r .. '/a.c')
   H.wait(child, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   child.lua(
     [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
   )

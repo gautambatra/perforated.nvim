@@ -42,6 +42,74 @@ T['messages']['are toasts titled by level; long lines wrap; errors get an error 
   H.eq(child.lua_get([[#require('perforated.ui.toast').history()]]), 2)
 end
 
+T['messages']['confirmations are a pop-up menu: & letters, <CR> = default, <Esc> cancels'] = function()
+  child = H.child({})
+  child.lua([[vim.fn.confirm = function() _G.cmdline = true; return 1 end]])
+  local function ask(keys)
+    child.lua_notify(
+      [[_G.r = require('perforated.ui.prompt').confirm('Delete CL 5?\nIts shelf goes too.', '&Delete\n&Cancel', 2)]]
+    )
+    vim.uv.sleep(100)
+    child.type_keys(keys)
+    return child.lua_get('_G.r')
+  end
+  H.eq(ask('<CR>'), 2)
+  H.eq(ask('d'), 1)
+  H.eq(ask('D'), 1)
+  H.eq(ask('c'), 2)
+  H.eq(ask('<Esc>'), 0)
+  H.eq(child.lua_get('_G.cmdline'), vim.NIL) -- never the command line
+  H.eq(child.lua_get([[require('perforated.ui.float').active]]), vim.NIL)
+end
+
+T['messages']['text input is a pop-up; empty and cancelled answers differ'] = function()
+  child = H.child({})
+  local function ask(keys)
+    child.lua([[_G.r = 'unset'; require('perforated.ui.prompt').input(
+      { prompt = 'Go to (CL number, path or user): ', default = '12' },
+      function(v) _G.r = v == nil and 'nil' or v end)]])
+    H.eq(child.bo.filetype, 'perforated-input')
+    H.eq(child.api.nvim_win_get_config(0).title[1][1], ' Go to (CL number, path or user) ')
+    child.type_keys(keys)
+    H.eq(H.wait(child, [[_G.r ~= 'unset']]), true)
+    H.eq(child.bo.filetype ~= 'perforated-input', true)
+    return child.lua_get('_G.r')
+  end
+  H.eq(ask({ '3', '<CR>' }), '123')
+  H.eq(ask({ '<C-u>', '<CR>' }), '')
+  H.eq(ask('<Esc>'), 'nil')
+end
+
+T['messages']['jobs: a pop-up when they start and when they end, nothing in between'] = function()
+  child = H.child({})
+  child.lua([[
+    _G.echo = 0
+    local echo = vim.api.nvim_echo
+    vim.api.nvim_echo = function(...) _G.echo = _G.echo + 1; return echo(...) end
+    local progress = require('perforated.ui.progress')
+    local p = progress.start('p4', 'sync…  (:P4 jobs to watch, :P4 cancel to stop)')
+    progress.update(p, '10 files')
+    progress.finish(p, 'synced 10 files')
+  ]])
+  H.eq(child.lua_get('_G.echo'), 0)
+  H.eq(
+    child.lua_get(
+      [[vim.tbl_map(function(t) return t.lines[1] end, require('perforated.ui.toast').history())]]
+    ),
+    { 'p4: sync…  (:P4 jobs to watch, :P4 cancel to stop)', 'p4: synced 10 files' }
+  )
+end
+
+T['messages']['a busy pop-up stays until closed and is not in the history'] = function()
+  child = H.child({})
+  child.lua([[_G.close = require('perforated.ui.toast').busy('Opening diff view…')]])
+  child.type_keys('j') -- activity starts countdowns of normal toasts, not this one
+  H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 1)
+  H.eq(child.lua_get([[#require('perforated.ui.toast').history()]]), 0)
+  child.lua([[_G.close()]])
+  H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
+end
+
 T['messages']["toast.backend = 'notify' sends them to vim.notify"] = function()
   child = H.child({ config = { toast = { backend = 'notify' } } })
   child.lua([[
@@ -55,6 +123,17 @@ T['messages']["toast.backend = 'notify' sends them to vim.notify"] = function()
     { '[perforated] edit failed: locked', vim.log.levels.ERROR },
   })
   H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
+  -- … and questions to Neovim's own confirm / vim.ui.input.
+  child.lua([[
+    vim.fn.confirm = function(msg, choices, default) _G.c = { msg, choices, default }; return 1 end
+    vim.ui.input = function(opts, cb) _G.i = opts.prompt; cb('x') end
+    _G.r1 = require('perforated.ui.prompt').confirm('Sure?', '&Yes\n&No', 2)
+    require('perforated.ui.prompt').input({ prompt = 'Name: ' }, function(v) _G.r2 = v end)
+  ]])
+  H.eq(
+    child.lua_get('{ _G.c, _G.r1, _G.i, _G.r2 }'),
+    { { 'Sure?', '&Yes\n&No', 2 }, 1, 'Name: ', 'x' }
+  )
 end
 
 return T
