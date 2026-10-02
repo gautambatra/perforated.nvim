@@ -123,6 +123,47 @@ end
 
 --- Wait in the child until a Lua expression is truthy.
 ---@return boolean
+--- Wait until the child's p4 queue has been idle (nothing running or waiting) for `quiet` ms,
+--- so a test that counts p4 calls doesn't count a buffer's own late fstat or refresh. Also
+--- covers the buffer layer's 30 ms fstat batching window.
+---@param child table
+---@param quiet integer?  default 300
+function H.wait_idle(child, quiet)
+  quiet = quiet or 300
+  local since = vim.uv.now()
+  local ok = vim.wait(15000, function()
+    local busy = child.lua_get([[(function()
+      local q = require('perforated.core.queue').global()
+      return q.running > 0 or q:pending_count() > 0
+    end)()]])
+    if busy then
+      since = vim.uv.now()
+    end
+    return vim.uv.now() - since >= quiet
+  end, 50)
+  H.eq(ok, true)
+end
+
+--- p4 subcommands logged in the child since `core.log.clear()`, oldest first (`fstat`,
+--- `annotate`…): a count assertion that fails shows which calls were made.
+---@param child table
+---@return string[]
+function H.p4_subcommands(child)
+  return child.lua_get([=[(function()
+    local with_arg = { ['-x'] = true, ['-c'] = true, ['-u'] = true, ['-p'] = true,
+      ['-P'] = true, ['-H'] = true, ['-C'] = true, ['-d'] = true, ['-z'] = true }
+    local out = {}
+    for _, e in ipairs(require('perforated.core.log').entries()) do
+      local i = 2 -- argv[1] is the p4 binary
+      while e.argv[i] and e.argv[i]:sub(1, 1) == '-' do
+        i = i + (with_arg[e.argv[i]] and 2 or 1)
+      end
+      out[#out + 1] = e.argv[i] or '?'
+    end
+    return out
+  end)()]=])
+end
+
 --- Record busy pop-ups in the child: `_G.busy` gets `{ msg, open }` per pop-up (open = not
 --- closed yet).
 ---@param child table
