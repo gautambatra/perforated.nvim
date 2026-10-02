@@ -886,7 +886,9 @@ behaviour to some directories. The prompt and changelist picker live in `checkou
 so the activation path doesn't load UI code.
 
 #### `poll.lua`
-Stale/unresolved detection ([§18.6](#186-stale-files)). `refresh(ws)` also keeps the fstat
+Stale/unresolved detection ([§18.6](#186-stale-files)). It tracks focus itself
+(`M.focused`, from `FocusLost`/`FocusGained`), so polling pauses in an unfocused Neovim from
+the start and the toast module isn't loaded on the activation path. `refresh(ws)` also keeps the fstat
 cache honest (drops entries of files no longer opened) and pushes fresh records into loaded
 buffers. The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
 test finding).

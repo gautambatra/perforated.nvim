@@ -186,14 +186,14 @@ end
 --- Cheap probe; escalates to a full refresh (plus loaded clean buffers) only on news.
 ---@param ws perforated.Workspace
 function M.probe(ws)
-  if ws.idle or ws.conn.state ~= 'online' or not require('perforated.ui.toast').focused then
+  if ws.idle or ws.conn.state ~= 'online' or not M.focused then
     dbg.trace(
       'poll',
       '%s probe skipped (idle=%s conn=%s focused=%s)',
       ws.key,
       tostring(ws.idle),
       ws.conn.state,
-      tostring(require('perforated.ui.toast').focused)
+      tostring(M.focused)
     )
     return
   end
@@ -251,6 +251,10 @@ local function ensure_timer()
   end)
 end
 
+--- Whether Neovim has focus: polling runs only while it does. Tracked here from the first
+--- workspace on (the toast module tracks it only once a toast has been shown).
+M.focused = true
+
 local did_autocmds = false
 local function ensure_autocmds()
   if did_autocmds then
@@ -258,9 +262,16 @@ local function ensure_autocmds()
   end
   did_autocmds = true
   local group = vim.api.nvim_create_augroup('perforated.poll', { clear = true })
+  vim.api.nvim_create_autocmd('FocusLost', {
+    group = group,
+    callback = function()
+      M.focused = false
+    end,
+  })
   vim.api.nvim_create_autocmd('FocusGained', {
     group = group,
     callback = function()
+      M.focused = true
       local now = vim.uv.now()
       if now - last_focus_probe >= cfg().focus_throttle * 1000 then
         last_focus_probe = now
