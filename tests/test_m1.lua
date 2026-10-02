@@ -418,7 +418,7 @@ T['ops'][':P4 opened and :P4 hunks fill the quickfix list'] = function()
   wait([[#vim.fn.getqflist() == 2]])
   local items = child.fn.getqflist()
   H.eq(items[1].valid, 0) -- default changelist header
-  H.eq(child.fn.bufname(items[2].bufnr), root .. '/a.txt')
+  H.eq(child.api.nvim_buf_get_name(items[2].bufnr), root .. '/a.txt') -- bufname() may be relative (nightly)
   H.eq(child.fn.getqflist({ context = 1 }).context.kind, 'opened')
 
   child.cmd('P4 hunks')
