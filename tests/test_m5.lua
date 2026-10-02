@@ -177,7 +177,7 @@ T['timelapse']['view: info panel, stepping, highlights, the cursor stays on the 
     H.eq(table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n') .. '\n', contents[r])
   end
   -- r: go to a revision; d: diff it against the previous one
-  child.lua([[vim.ui.input = function(_, cb) cb('#5') end]])
+  child.lua([[require('perforated.ui.prompt').input = function(_, cb) cb('#5') end]])
   child.type_keys('r')
   H.neq(info():find('f%.txt#5%f[%D]'), nil)
   child.type_keys('d')

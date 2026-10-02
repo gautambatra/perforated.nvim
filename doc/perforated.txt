@@ -219,6 +219,7 @@ Client view (:P4)                                     *perforated-client-view*
   X               Revert if unchanged
   X               Revert unchanged files
   gm              Move to changelist
+  gm              Move all files to another changelist
   y               Copy CL number
   c <C-n>         New changelist
   <Del>           Delete changelist

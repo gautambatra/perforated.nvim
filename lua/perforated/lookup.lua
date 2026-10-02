@@ -8,11 +8,14 @@ local M = {}
 ---@param what string?  nil = prompt
 function M.run(ws, what)
   if not what or what == '' then
-    return vim.ui.input({ prompt = 'Go to (CL number, path or user): ' }, function(input)
-      if input and vim.trim(input) ~= '' then
-        M.run(ws, vim.trim(input))
+    return require('perforated.ui.prompt').input(
+      { prompt = 'Go to (CL number, path or user): ' },
+      function(input)
+        if input and vim.trim(input) ~= '' then
+          M.run(ws, vim.trim(input))
+        end
       end
-    end)
+    )
   end
   local cl = what:match('^@?(%d+)$')
   if cl then

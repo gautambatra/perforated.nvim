@@ -217,8 +217,10 @@ other layouts):
     (`<Space>` is left alone because many people use it as their leader key; remap with
     `keys = { menu = { '<your key>' } }`).
   - `K` on a changelist opens **View changelist**: a scrollable popup with the full
-    description, its files and its shelved files (`D` there opens the diff tab). It works in
-    `:P4 changes` too, so you can read other people's submitted changelists.
+    description, its files and its shelved files (`D` there opens the diff tab). `C` switches
+    the popup to edit mode: the same popup becomes the description editor (`:w` / `<C-s>`
+    saves, `q` goes back to the popup). It works in `:P4 changes` too, so you can read other
+    people's submitted changelists.
   - `d` is *Diff against have revision* on opened files and *Diff shelved vs base revision* on
     shelved files. `w` diffs a shelved file against your workspace file; on the "Shelved (N)"
     line it opens a diff tab of every shelved file against the workspace. `y` copies the
@@ -247,9 +249,11 @@ other layouts):
   it; its opened files move to the default changelist (or are reverted, if you choose that) and
   its shelved files are deleted, then the changelist is. The default changelist can't be
   deleted; another client's changelist needs `change.allow_force`.
-- **`gm`: move files between changelists.** Pick an existing changelist or create a new one.
+- **`gm`: move files between changelists.** Pick an existing changelist (the default one
+  included) or create a new one. On a file it moves that file (or the marked files); on a
+  changelist it moves **all** its opened files, and the list leaves that changelist out.
 - **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
-  diff on the right; moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
+  diff on the right ("Opening diff view…" shows until it's ready); moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
   window. It works for pending changelists, shelves and submitted changelists. Each file loads
   when you select it, and the next one is fetched ahead of time. `:P4 diff -a` opens the same
   view for every opened file.
@@ -386,8 +390,9 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   files that need attention (can't clobber, and *every* unresolved file in the workspace, not
   just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
   now (`sync.resolve_prompt = false` turns the offer off).
-- **Watch or stop long operations:** a sync or submit shows a live progress message (files so
-  far, last file, elapsed time). `:P4 jobs` lists running jobs in a float that updates live,
+- **Watch or stop long operations:** a sync or submit shows a pop-up when it starts and one
+  with the result. `:P4 jobs` shows the live progress (files so far, last file, elapsed time)
+  in a float that updates live,
   where `x` stops one; `:P4 cancel` stops them all. p4 is sent SIGTERM, then SIGKILL after 2 s.
   Stopping a sync midway is safe: p4 updates your have list file by file.
 - **Resolve (`R`, `:P4 resolve [file…]`):** `resolve -am` first, so p4 takes every clean merge.
@@ -418,8 +423,15 @@ nothing to diff", "nothing to resolve", …) appears as a small pop-up in the bo
 corner instead of the command line. It never takes focus, never triggers a "Press ENTER"
 prompt, and its dismissal countdown (`toast.timeout`, 8 s) starts only once you press a key.
 Errors have a red border. `:P4 notifications` shows the history and `:P4 dismiss` closes them.
+Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
+chooses, `<CR>` takes the default, `<Esc>` cancels) and text prompts (submit description,
+`g/`, integrate, time-lapse revision, reconcile paths) a one-line input float. Long jobs pop up
+when they start and when they finish; their live progress is in `:P4 jobs`.
 Prefer the command line or your own notifier (nvim-notify, snacks, fidget, …)? Set
-`toast = { backend = 'notify' }` and every message goes to `vim.notify` instead.
+`toast = { backend = 'notify' }`: every message goes to `vim.notify`, questions to
+`confirm()` and `vim.ui.input` (so snacks.input or dressing apply), and running jobs show
+Neovim's progress messages. The only prompt that always stays on the command line is the
+`p4 login` password.
 
 #### Stale-file detection
 

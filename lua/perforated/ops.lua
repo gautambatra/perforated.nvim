@@ -92,7 +92,7 @@ local function refresh(ws, paths)
 end
 
 local function confirm(msg, choices, default)
-  return vim.fn.confirm(msg, choices or '&Yes\n&No', default or 2) == 1
+  return require('perforated.ui.prompt').confirm(msg, choices or '&Yes\n&No', default or 2) == 1
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -324,7 +324,7 @@ function M.delete_change(ws, change, cb)
           or title
         local mode
         if #paths > 0 then
-          local choice = vim.fn.confirm(
+          local choice = require('perforated.ui.prompt').confirm(
             msg .. '\nIts opened files:',
             '&Move them to the default changelist\n&Revert them (edits are lost)\n&Cancel',
             3
@@ -539,12 +539,15 @@ function M.submit(ws, change, cb)
       return cb(false)
     end
     if change == 'default' then
-      return vim.ui.input({ prompt = 'Submit description: ' }, function(input)
-        if not input or vim.trim(input) == '' then
-          return cb(false)
+      return require('perforated.ui.prompt').input(
+        { prompt = 'Submit description: ' },
+        function(input)
+          if not input or vim.trim(input) == '' then
+            return cb(false)
+          end
+          M.run_submit(ws, change, input, cb, files)
         end
-        M.run_submit(ws, change, input, cb, files)
-      end)
+      )
     end
     M.run_submit(ws, change, nil, cb, files)
   end
@@ -625,7 +628,7 @@ function M.sync(ws, args, cb)
     M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
   end
   -- Preview on request: `p4 sync -n`, then the same question with the counts.
-  local choice = vim.fn.confirm(question, verb .. '\n&Preview\n&Cancel', 3)
+  local choice = require('perforated.ui.prompt').confirm(question, verb .. '\n&Preview\n&Cancel', 3)
   if choice == 2 then
     return M.preview_sync(ws, args, function(summary)
       if summary and confirm(question .. '\n\n' .. summary, verb .. '\n&Cancel') then

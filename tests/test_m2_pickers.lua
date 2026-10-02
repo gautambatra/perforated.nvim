@@ -201,7 +201,13 @@ T['changes'][':P4 changes -u bob shows only bob; D opens the CL diff'] = functio
     end
   end
   child.type_keys('D')
-  H.eq(H.wait(child, [[#vim.api.nvim_tabpage_list_wins(0) == 3]]), true)
+  H.eq(
+    H.wait(
+      child,
+      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and #vim.api.nvim_tabpage_list_wins(0) == 3]]
+    ),
+    true
+  )
   local names = child.lua_get(
     [[vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0))]]
   )
@@ -239,7 +245,13 @@ T['changes'][':P4 pick pending opens the chosen CL in the diff tab'] = function(
     cb(items[1])
   end]])
   child.cmd('P4 pick pending')
-  H.eq(H.wait(child, [[#vim.api.nvim_tabpage_list_wins(0) == 3]]), true)
+  H.eq(
+    H.wait(
+      child,
+      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and #vim.api.nvim_tabpage_list_wins(0) == 3]]
+    ),
+    true
+  )
   H.eq(child.lua_get('_G.labels')[1], 'default  (1 files)')
 end
 
@@ -251,7 +263,7 @@ T['changes']['quickfix window: x reverts and M moves the entry'] = function()
   )
   child.cmd('P4 opened')
   H.eq(H.wait(child, [[#vim.fn.getqflist() == 3]]), true)
-  child.lua([[vim.fn.confirm = function() return 1 end]])
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   child.lua([[vim.ui.select = function(items, _, cb)
     for _, it in ipairs(items) do if it.change ~= 'default' and it.change ~= 'new' then return cb(it) end end
   end]])

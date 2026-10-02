@@ -19,8 +19,9 @@ local function notify(msg, level)
   require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
---- Open the description float.
----@param opts { title: string, lines: string[], insert: boolean?, on_save: fun(desc: string, close: fun()), on_cancel: fun()?, on_full: fun()? }
+--- Open the description float, or turn an existing float into it (`opts.win`: the `K` popup's
+--- edit mode keeps its place and size).
+---@param opts { title: string, lines: string[], insert: boolean?, win: integer?, on_save: fun(desc: string, close: fun()), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
 ---@return integer buf, integer win
 local function open_float(opts)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -33,21 +34,36 @@ local function open_float(opts)
   vim.bo[buf].filetype = 'perforated-description'
   vim.bo[buf].textwidth = 0
 
-  local width = math.min(math.max(72, vim.fn.strdisplaywidth(opts.title) + 6), vim.o.columns - 6)
-  local height = math.min(math.max(#opts.lines + 2, 8), math.floor(vim.o.lines * 0.6))
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = 'editor',
-    row = math.floor((vim.o.lines - height) / 2) - 1,
-    col = math.floor((vim.o.columns - width) / 2),
-    width = width,
-    height = height,
-    style = 'minimal',
-    border = 'rounded',
+  local frame = {
     title = ' ' .. opts.title .. ' ',
     title_pos = 'left',
     footer = ' :w / <C-s> save · q cancel' .. (opts.on_full and ' · gS full spec ' or ' '),
     footer_pos = 'right',
-  })
+  }
+  local win = opts.win
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_win_set_buf(win, buf)
+    vim.api.nvim_win_set_config(win, frame)
+    vim.wo[win].cursorline = false
+    vim.api.nvim_win_set_cursor(win, { 1, 0 })
+  else
+    local width = math.min(math.max(72, vim.fn.strdisplaywidth(opts.title) + 6), vim.o.columns - 6)
+    local height = math.min(math.max(#opts.lines + 2, 8), math.floor(vim.o.lines * 0.6))
+    win = vim.api.nvim_open_win(
+      buf,
+      true,
+      vim.tbl_extend('force', frame, {
+        relative = 'editor',
+        row = math.floor((vim.o.lines - height) / 2) - 1,
+        col = math.floor((vim.o.columns - width) / 2),
+        width = width,
+        height = height,
+        style = 'minimal',
+        border = 'rounded',
+      })
+    )
+  end
   vim.wo[win].wrap = true
   vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
   -- Soft ruler where Swarm/P4V truncate the summary line.
@@ -76,7 +92,11 @@ local function open_float(opts)
   end
   local function cancel()
     if vim.bo[buf].modified then
-      local c = vim.fn.confirm('Discard the edited description?', '&Discard\n&Keep editing', 2)
+      local c = require('perforated.ui.prompt').confirm(
+        'Discard the edited description?',
+        '&Discard\n&Keep editing',
+        2
+      )
       if c ~= 1 then
         return
       end
@@ -84,7 +104,7 @@ local function open_float(opts)
     vim.bo[buf].modified = false
     close()
     if opts.on_cancel then
-      opts.on_cancel()
+      opts.on_cancel('cancel')
     end
   end
   vim.api.nvim_create_autocmd('BufWriteCmd', { buffer = buf, callback = save })
@@ -114,7 +134,7 @@ local function open_float(opts)
         then
           close()
           if opts.on_cancel then
-            opts.on_cancel()
+            opts.on_cancel('leave')
           end
         end
       end)
@@ -184,7 +204,10 @@ end
 --- Edit the description of a pending or submitted changelist.
 ---@param ws perforated.Workspace
 ---@param change string
----@param opts { submitted: boolean?, on_done: fun(ok: boolean)? }?
+--- `opts.win`: turn this float into the editor instead of opening one. `on_done(saved, how)`
+--- runs once: saved = true after a save; nil when dismissed, `how` = 'cancel' (q, <Esc>) or
+--- 'leave' (the cursor left the float).
+---@param opts { submitted: boolean?, win: integer?, on_done: fun(ok: boolean?, how: string?)? }?
 function M.edit(ws, change, opts)
   opts = opts or {}
   if change == 'default' then
@@ -202,17 +225,18 @@ function M.edit(ws, change, opts)
     local desc = cls.spec_get_description(spec)
     -- on_done fires once: true after a save, nil when the float is dismissed.
     local finished = false
-    local function done(saved)
+    local function done(saved, how)
       if not finished and opts.on_done then
         finished = true
-        opts.on_done(saved)
+        opts.on_done(saved, how)
       end
     end
     open_float({
       title = ('CL %s · %s · %s'):format(change, status, user),
       lines = vim.split(desc, '\n', { plain = true }),
-      on_cancel = function()
-        done(nil)
+      win = opts.win,
+      on_cancel = function(how)
+        done(nil, how)
       end,
       on_full = function()
         M.full(ws, change, opts)
@@ -229,7 +253,7 @@ function M.edit(ws, change, opts)
             return
           end
           if submitted and config.get().change.allow_force then
-            local c = vim.fn.confirm(
+            local c = require('perforated.ui.prompt').confirm(
               ('Saving failed:\n%s\n\nRetry with -f (admin force)?'):format(msg),
               '&Force\n&Cancel',
               2

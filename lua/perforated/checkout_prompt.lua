@@ -33,20 +33,27 @@ local function set_sticky(ws, cl, desc)
   end
 end
 
---- Pick a pending changelist, or create a new one (any installed picker).
+--- Pick a pending changelist (default included), or create a new one (any installed picker).
 ---@param ws perforated.Workspace
 ---@param cb fun(cl: string?, desc: string?)
-function M.pick_change(ws, cb)
+---@param opts { title: string?, exclude: table<string, boolean>? }?  exclude: changes not to offer
+function M.pick_change(ws, cb, opts)
+  opts = opts or {}
+  local exclude = opts.exclude or {}
   p4.pending_changes(ws, function(changes, err)
     if not changes then
       notify('could not list changelists: ' .. tostring(err), vim.log.levels.ERROR)
       return cb(nil)
     end
-    local items = { { change = 'default', desc = '' } }
-    vim.list_extend(items, changes)
+    local items = {}
+    for _, c in ipairs(vim.list_extend({ { change = 'default', desc = '' } }, changes)) do
+      if not exclude[c.change] then
+        items[#items + 1] = c
+      end
+    end
     items[#items + 1] = { change = 'new', desc = '' }
     require('perforated.picker').pick({
-      title = 'Changelist',
+      title = opts.title or 'Changelist',
       items = items,
       format = function(c)
         if c.change == 'default' then

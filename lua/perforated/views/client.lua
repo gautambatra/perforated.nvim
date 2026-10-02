@@ -1244,7 +1244,7 @@ local function actions(view)
         local what = #files == 1 and (files[1].clientFile or files[1].depotFile)
           or (#files .. ' files')
         if
-          vim.fn.confirm(
+          require('perforated.ui.prompt').confirm(
             ('Revert %s? Local changes will be lost.'):format(what),
             '&Revert\n&Cancel',
             2
@@ -1305,6 +1305,54 @@ local function actions(view)
             M.refresh(view)
           end)
         end)
+      end,
+    },
+    {
+      id = 'move_all',
+      desc = 'Move all files to another changelist',
+      keys = { 'gm' },
+      kinds = { change = true },
+      multi = true,
+      footer = 41,
+      when = function(item)
+        return item.files ~= nil and #item.files > 0
+      end,
+      run = function(items)
+        local files, from = {}, {}
+        for _, it in ipairs(items) do
+          if it.files and #it.files > 0 then
+            vim.list_extend(files, it.files)
+            from[it.change] = true
+          end
+        end
+        local names = vim.tbl_map(function(c)
+          return c == 'default' and 'default' or ('CL ' .. c)
+        end, vim.tbl_keys(from))
+        table.sort(names)
+        require('perforated.checkout').pick_change(ws, function(cl)
+          if not cl then
+            return
+          end
+          cls.reopen(ws, paths_of(files), cl, function(res)
+            if #res.errors > 0 then
+              notify('move failed: ' .. res.errors[1], vim.log.levels.ERROR)
+            else
+              notify(
+                ('moved %d file(s) from %s to %s'):format(
+                  #res.records,
+                  table.concat(names, ', '),
+                  cl == 'default' and 'default' or ('CL ' .. cl)
+                )
+              )
+            end
+            view.tree.marks = {}
+            require('perforated.checkout').changed(ws)
+            M.refresh(view)
+          end)
+        end, {
+          title = ('Move %d file(s) from %s to'):format(#files, table.concat(names, ', ')),
+          exclude = from,
+        })
       end,
     },
     {
@@ -1439,7 +1487,7 @@ local function actions(view)
       end,
       run = function()
         local cur = table.concat(M.reconcile_scope(ws), ' ')
-        vim.ui.input({
+        require('perforated.ui.prompt').input({
           prompt = 'Reconcile paths (relative to the client root, space-separated; empty = whole client): ',
           default = cur,
           completion = 'dir',

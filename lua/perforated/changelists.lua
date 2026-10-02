@@ -161,7 +161,8 @@ end
 
 --- Move opened files to another changelist.
 function M.reopen(ws, paths, change, cb)
-  ws:run({ 'reopen', '-c', change or 'default' }, { globals = { '-x', '-' }, stdin = paths }, cb)
+  local stdin = require('perforated.p4').escape_all(paths) -- `icon@2x.png` is a file, not a rev
+  ws:run({ 'reopen', '-c', change or 'default' }, { globals = { '-x', '-' }, stdin = stdin }, cb)
 end
 
 --- Workspace reconcile preview (`p4 status`): files to add / edit / delete. Can be slow on large

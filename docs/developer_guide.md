@@ -461,7 +461,8 @@ lua/perforated/
     footer.lua               key footer float anchored to a window
     float.lua                single-key modal menu
     qf.lua                   quickfix/location-list sink and qf-window keys
-    toast.lua                corner notifications (activity- and focus-gated)
+    toast.lua                corner notifications (activity- and focus-gated), busy pop-ups
+    prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
     icons.lua                file icons (mini.icons/devicons) and status glyphs
     progress.lua             progress messages (0.12) + final notification
   picker/
@@ -993,11 +994,12 @@ Cherry-pick: the source is the changelist's common directory; the target is a pa
 integrate, then resolve. Without a changelist, pick one from a source path's history.
 
 #### `jobs.lua`, `ui/progress.lua`
-Long-running operations register as jobs: a progress message that updates twice a second
-(file count, last file, elapsed), `:P4 jobs` (a live float; `x` stops a job) and
-`:P4 cancel`. `start(ws, title)` returns run options (`timeout = 0`, `on_spawn`, `on_record`)
-to pass to `ws:run`. Progress uses Neovim 0.12's progress messages (with `source`) while
-running, and always ends with a normal notification.
+Long-running operations register as jobs: `:P4 jobs` (a live float that updates twice a second
+with the file count, last file and elapsed time; `x` stops a job) and `:P4 cancel`.
+`start(ws, title)` returns run options (`timeout = 0`, `on_spawn`, `on_record`) to pass to
+`ws:run`. With pop-ups (the default) a job reports a pop-up when it starts and one with its
+result, and nothing in between; with `toast.backend = 'notify'` it also shows Neovim 0.12's
+progress messages (with `source`) while running.
 
 #### `tools.lua`, `p4vc.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
@@ -1032,9 +1034,19 @@ moves (per-window statuslines are hidden with `laststatus=3`, so a float is used
 
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep
-processing). Supports multi-key choices (`gY`: a prefix waits for the rest) and a *grace
-period* during which keys are captured for replay (for the check-out prompt, which can pop up
-mid-typing).
+processing). Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
+per item, and a *grace period* during which keys are captured for replay (for the check-out
+prompt, which can pop up mid-typing).
+
+#### `ui/prompt.lua`
+Questions, following `toast.backend` like messages do. `confirm(msg, choices, default)` has
+`vim.fn.confirm`'s signature and result: a centred `float.menu` (the `&` letter in either
+case, `<CR>` = default, `<Esc>` = 0), or `vim.fn.confirm` itself with the notify backend.
+`input(opts, on_confirm)` has `vim.ui.input`'s: a centred one-line float (`<CR>` accepts, `''`
+is an empty answer, `<Esc>`/`<C-c>`/leaving cancels with nil, `<Tab>` completes when
+`opts.completion` is set), or `vim.ui.input` with the notify backend. Never call
+`vim.fn.confirm` / `vim.ui.input` directly, and always call these through the module at call
+time: tests replace them (`require('perforated.ui.prompt').confirm = function() return 1 end`).
 
 #### `ui/qf.lua`
 The quickfix sink: `set(spec)` makes one `setqflist` call with a title and a
@@ -1050,6 +1062,8 @@ tells the user something (never `vim.notify` directly): a toast titled by level 
 `PerforatedToastErrorBorder`, info `PerforatedToastInfoBorder`), long lines wrapped, or
 `vim.notify` when `toast.backend = 'notify'`. Safe from fast (luv) callbacks. `show(title,
 lines, level, { detail })` is the lower-level call (stale-file toasts: a dimmed details line).
+`busy(msg)` is a "working on it" pop-up with no countdown and no history entry; it returns the
+function that closes it (the diff tab's "Opening diff view…").
 
 #### `ui/icons.lua`
 File icons from mini.icons or nvim-web-devicons (detected via runtime files, without loading
@@ -1120,7 +1134,8 @@ bisection so they never crowd. Windows are created with `nvim_open_win({ split =
 
 #### `views/changes.lua`, `views/change_info.lua`, `views/change_editor.lua`
 `:P4 changes` (submitted changelists, paged); the `K` popup (full description, files,
-shelved files); the description editor (a float with only the description; `:w`/`<C-s>` save;
+shelved files; `C` turns the same float into the description editor, and a save or cancel
+comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save;
 only the Description field of the spec is replaced, so the file list can't be edited by
 accident; submitted changelists use `change -u`, with an opt-in `-f` retry).
 
@@ -1210,7 +1225,9 @@ language; errors at
 quickfix with p4's reason as the entry text.
 
 **Confirmation.** Destructive or broad actions confirm first (revert, delete, sync, submit,
-delete shelved, replacing a shelf) with `vim.fn.confirm` (Cancel as default) or a float menu.
+delete shelved, replacing a shelf) with `require('perforated.ui.prompt').confirm` (Cancel as
+default) or a float menu; text questions use `ui.prompt.input`. Never `vim.fn.confirm` or
+`vim.ui.input` directly: they'd bypass `toast.backend`.
 
 **State after operations.** Operations call `checkout.changed(ws)` (fires `User
 PerforatedChanged`, which refreshes visible views) and refresh affected buffers.

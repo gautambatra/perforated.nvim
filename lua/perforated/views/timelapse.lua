@@ -524,24 +524,27 @@ local function actions(view)
       keys = { 'r' },
       footer = 3,
       run = function()
-        vim.ui.input({ prompt = 'Revision (#N, or @CL): ' }, function(input)
-          if not input or vim.trim(input) == '' then
-            return
-          end
-          input = vim.trim(input)
-          local cl = input:match('^@(%d+)$')
-          if cl then
-            -- the revision in effect at that changelist
-            local best
-            for n, r in pairs(view.tl.revs) do
-              if tonumber(r.change) <= tonumber(cl) and (not best or n > best) then
-                best = n
-              end
+        require('perforated.ui.prompt').input(
+          { prompt = 'Revision (#N, or @CL): ' },
+          function(input)
+            if not input or vim.trim(input) == '' then
+              return
             end
-            return go(view, best)
+            input = vim.trim(input)
+            local cl = input:match('^@(%d+)$')
+            if cl then
+              -- the revision in effect at that changelist
+              local best
+              for n, r in pairs(view.tl.revs) do
+                if tonumber(r.change) <= tonumber(cl) and (not best or n > best) then
+                  best = n
+                end
+              end
+              return go(view, best)
+            end
+            go(view, tonumber(input:match('^#?(%d+)$')))
           end
-          go(view, tonumber(input:match('^#?(%d+)$')))
-        end)
+        )
       end,
     },
     {

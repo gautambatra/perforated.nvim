@@ -89,7 +89,7 @@ local function go(ws, change, src, target, into, cb)
       kind = 'integrate_preview',
       items = items,
     })
-    local ok = vim.fn.confirm(
+    local ok = require('perforated.ui.prompt').confirm(
       ('Integrate CL %s (%d file(s)) from %s into %s?'):format(change, #items, src, target),
       '&Integrate\n&Cancel',
       2
@@ -124,7 +124,7 @@ end
 function M.run(ws, change, cb)
   cb = cb or function() end
   if not change then
-    return vim.ui.input(
+    return require('perforated.ui.prompt').input(
       { prompt = 'Integrate from (source path): ', default = ws.integrate_src or '' },
       function(src)
         if not src or vim.trim(src) == '' then
@@ -176,7 +176,7 @@ function M.run(ws, change, cb)
       notify('could not find a common source directory for CL ' .. change, vim.log.levels.ERROR)
       return cb(false)
     end
-    vim.ui.input({
+    require('perforated.ui.prompt').input({
       prompt = ('Integrate CL %s from %s/... into (path or -b branch): '):format(change, src),
       default = ws.integrate_target or '',
     }, function(target)

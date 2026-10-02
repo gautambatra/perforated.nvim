@@ -1,6 +1,7 @@
 --- "View changelist" popup (`K`): header, full description and files — opened files for
 --- pending changelists, shelved files, or the submitted files. Scrollable; `q`/`<Esc>` close,
---- `D` opens the diff tab for the changelist.
+--- `D` opens the diff tab for the changelist, `C` switches the popup to edit mode (the
+--- description editor in the same float; saving or cancelling comes back to the popup).
 
 local cls = require('perforated.changelists')
 
@@ -95,6 +96,10 @@ function M.show(ws, item, d, shelved)
     end
   end
 
+  -- Your own changelists (or anyone's with change.allow_force); never the default one.
+  local editable = rec.change ~= 'default'
+    and (rec.user == ws:user() or require('perforated.config').get().change.allow_force)
+
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -119,7 +124,7 @@ function M.show(ws, item, d, shelved)
     border = 'rounded',
     title = ' ' .. title .. ' ',
     title_pos = 'left',
-    footer = ' q close · <CR> describe · D diff all files ',
+    footer = ' q close · <CR> describe · D diff all files' .. (editable and ' · C edit ' or ' '),
     footer_pos = 'right',
   })
   vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
@@ -139,6 +144,21 @@ function M.show(ws, item, d, shelved)
     close()
     require('perforated.diff.tab').open_change(ws, item)
   end, { buffer = buf, nowait = true })
+  if editable then
+    vim.keymap.set('n', 'C', function()
+      require('perforated.views.change_editor').edit(ws, rec.change, {
+        submitted = rec.status == 'submitted',
+        win = win,
+        on_done = function(_, how)
+          -- Back to the popup (re-read, so a saved description shows), unless the cursor
+          -- simply left the editor.
+          if how ~= 'leave' then
+            M.open(ws, item)
+          end
+        end,
+      })
+    end, { buffer = buf, nowait = true })
+  end
   return buf, win
 end
 
