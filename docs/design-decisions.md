@@ -17,7 +17,9 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 
 ## Check-out / add
 - Trigger: **first modification** of an unopened depot file (keystroke not blocked).
-- Prompt: **small floating menu** near cursor: `<CR>` default/sticky CL, `c` existing CL (picker), `n` new CL (inline description), `A` always use this target for the rest of the session without asking (added in M1 for `:bufdo`/macro edits across many files), `s` skip for buffer, `S` never this session.
+- Prompt: **small floating menu** near cursor: `<CR>` default/sticky CL, `c` existing CL (picker), `n` new CL (inline description), `A` always use this target for the rest of the session without asking (added in M1 for `:bufdo`/macro edits across many files), `s` skip for buffer (in the **add** prompt: "don't ask again for this file", for the session, surviving close/reopen — 2026-10-02), `S` never this session.
+- While `p4 edit` / `p4 add` runs, a centred busy pop-up says so ("Checking out a.c…", "Opening a.c for add…").
+- `:w other.c` (the buffer keeps its name) offers to add `other.c`, the file actually written, not the buffer's file; check-out-on-write likewise acts only on writes to the buffer's own file.
 - **Keys typed right after the prompt appears are treated as text.** For `checkout.prompt_grace` (default 300 ms) keys aren't menu choices; they're replayed into the buffer afterwards, so typing `cat` can't select `n` by accident.
 - **No waiting on `:w`.** Choosing a target makes the file writable immediately (what `p4 edit` does anyway) and restores it if the edit fails. Neovim's read-only check (E505) runs before any write autocmd, so the write can't wait for the server.
 - **Sticky CL per session**: last chosen CL becomes the `<CR>` default; resets on submit/delete of that CL.
@@ -90,7 +92,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - Batched check **when a workspace activates** (idle), plus **manual `:P4 status` / `:P4 stale`**. Per-buffer fstat on open shows stale state for free.
 - **Background polling:** a cheap probe (`changes -m1 -s submitted <opened files>`) every **5 min** while Neovim has focus and files are opened (0 disables). It also runs on `FocusGained` (throttled), on entering a p4 buffer (throttled) and **always before submit**. The full fstat runs only when the probe sees a newer CL.
 - **Toast:** when an opened file *newly* becomes stale, a non-focusable popup at the bottom centre (stackable; *background* placement, see Feedback) lists `file #have→#head · CL · user` with `:P4 sync` / `:P4 stale` hints. It can be routed to `vim.notify`.
-  - **Activity-gated dismissal:** the 8 s timer starts only at the user's first keypress or cursor move after the toast appears. Toasts raised while Neovim is unfocused are queued and shown on `FocusGained`.
+  - **Activity-gated dismissal:** the 4 s timer (`toast.timeout`) starts only at the user's first keypress or cursor move after the toast appears. Toasts raised while Neovim is unfocused are queued and shown on `FocusGained`.
   - **Polling only while focused** means a background tmux pane or tab doesn't poll; it catches up on return. Health checks that focus events work (tmux `focus-events on`).
   - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 notifications` replays recent toasts, and submit always re-checks and warns.
   - **No OS or desktop notifications.**

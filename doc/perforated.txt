@@ -546,7 +546,7 @@ keys):
       toast = {
         backend = "float",
         history = 50,
-        timeout = 8000
+        timeout = 4000
       }
     }
 <

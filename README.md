@@ -135,7 +135,8 @@ The first change to an unopened (read-only) depot file opens a small menu next t
 - **Typing through the menu is safe.** Keys typed in the first 300 ms after the menu appears
   count as text and are replayed into the buffer (`checkout.prompt_grace`).
 - **Writes never wait on the server.** Choosing a target makes the file writable right away;
-  `p4 edit` runs in the background.
+  `p4 edit` runs in the background, with a "Checking out a.c…" pop-up in the middle of the
+  screen until it's done.
 - **Warnings in the menu.** It warns when a newer revision exists in the depot, or when another
   user has the file open.
 - **Silent mode.** `checkout = { prompt = false, on_write = true }` checks out silently when you
@@ -144,8 +145,10 @@ The first change to an unopened (read-only) depot file opens a small menu next t
 
 #### Add on write
 
-Saving a new file inside the workspace offers to `p4 add` it, using the same menu.
-`checkout.add_on_write = 'auto' | 'prompt' | false`.
+Saving a new file inside the workspace offers to `p4 add` it, using the same menu ("Opening
+a.c for add…" shows while p4 works). Its `s` is **don't ask again for this file**: for the rest
+of the session, even if you close and reopen it. `:w other.c` offers to add `other.c`, the
+file you wrote, not the buffer's own file. `checkout.add_on_write = 'auto' | 'prompt' | false`.
 
 #### Gutter signs and hunks
 
@@ -430,7 +433,8 @@ line, centred horizontally. Where it sits says what it is:
   prompts.
 
 A pop-up never takes focus, never triggers a "Press ENTER" prompt, and its dismissal
-countdown (`toast.timeout`, 8 s) starts only once you press a key. The check-out prompt is
+countdown (`toast.timeout`, 4 s; 0 keeps them until `:P4 dismiss`) starts only once you press
+a key. The check-out prompt is
 the exception to the placement: it opens at the cursor, where you were typing.
 Errors have a red border. `:P4 notifications` shows the history and `:P4 dismiss` closes them.
 Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
@@ -775,7 +779,7 @@ opts = {
   qf = { open = true }, -- open the quickfix window when a list has results
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
   poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
-  toast = { timeout = 8000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
+  toast = { timeout = 4000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
   statusline = {
     format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)
     stale = '↓',
@@ -830,9 +834,9 @@ The timing figures are the best of several runs, which filters out noise from ot
   plugin only activates when it finds your `P4CONFIG` file above the file, or when `P4CLIENT`
   is set; `PERFORATED_DEBUG=1 nvim <file>` logs why a file was or wasn't treated as a Perforce
   file (`:P4 debug open`).
-- **The check-out menu stopped appearing.** You may have pressed `s` (skip this buffer; `:e!`
-  resets it) or `S` (never ask this session), or the file is outside `checkout.dirs`.
-  `:P4 edit` always works.
+- **The check-out menu stopped appearing.** You may have pressed `s` (check-out: skip this
+  buffer, `:e!` resets it; add: don't ask again for this file this session) or `S` (never ask
+  this session), or the file is outside `checkout.dirs`. `:P4 edit` / `:P4 add` always work.
 - **Stale notifications don't arrive while I'm in tmux.** tmux needs `set -g focus-events on`;
   the health check tells you.
 - **Filing a bug?** `:P4 debug snapshot` writes the plugin's state to the log file; attach the

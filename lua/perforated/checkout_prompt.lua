@@ -91,17 +91,52 @@ function M.new_change(ws, cb)
   require('perforated.views.change_editor').new(ws, { on_done = cb })
 end
 
---- Show the check-out/add menu for a buffer and act on the choice.
----@param buf integer
+--- `:w other.c` to a new file in a workspace: offer to add *that* file (the buffer is still
+--- the one it was).
+---@param path string
+function M.add_other(path)
+  local ws = require('perforated.core.activation').for_dir(vim.fs.dirname(path))
+  local session = co._session
+  if not ws or session.never or session.skip_files[p4.key(ws, path)] or not co._allowed(path) then
+    return
+  end
+  local mode = config.get().checkout.add_on_write
+  if mode == false or mode == 'never' then
+    return
+  end
+  p4.fstat(ws, { path }, { priority = 1 }, function(r)
+    local k = p4.key(ws, path)
+    local missing = r.missing[k] or ((r.by_index or {})[1] or {}).missing
+    if r.files[k] or missing ~= 'nosuch' then
+      return -- in the depot already, or outside the client view
+    end
+    if mode == 'auto' then
+      return co.add(ws, { path }, ws.sticky_cl)
+    end
+    M.prompt(nil, 'add', { ws = ws, path = path })
+  end)
+end
+
+-- Prompts open for files that aren't a buffer's own (`:w other.c`), by key.
+local prompting_paths = {}
+
+--- Show the check-out/add menu for a buffer and act on the choice. `target` asks about another
+--- file instead (`:w other.c` wrote a new file the buffer isn't showing): `buf` is then nil.
+---@param buf integer?
 ---@param verb 'edit'|'add'
-function M.prompt(buf, verb)
-  local st = require('perforated.buffer').get(buf)
+---@param target { ws: perforated.Workspace, path: string, rec: table? }?
+function M.prompt(buf, verb, target)
+  local st = target or require('perforated.buffer').get(buf)
   if not st then
     return
   end
-  local c = co._state(buf)
-  if c.prompting then
+  local key = p4.key(st.ws, st.path)
+  local c = target and {} or co._state(buf)
+  if c.prompting or prompting_paths[key] then
     return
+  end
+  if target then
+    buf = nil
   end
   local ws = st.ws
   local op = verb == 'edit' and co.edit or co.add
@@ -151,7 +186,7 @@ function M.prompt(buf, verb)
   end
   local action = verb == 'edit' and 'Check out' or 'Add'
   local function not_now()
-    if verb == 'edit' and vim.api.nvim_buf_is_valid(buf) then
+    if verb == 'edit' and buf and vim.api.nvim_buf_is_valid(buf) then
       vim.bo[buf].readonly = true -- honest: the file is still not checked out
     end
     notify(
@@ -164,6 +199,7 @@ function M.prompt(buf, verb)
     )
   end
   c.prompting = true
+  prompting_paths[key] = true
   local choice, replay = require('perforated.ui.float').menu({
     title = verb == 'edit' and 'Perforce: check out?' or 'Perforce: add?',
     header = header,
@@ -173,16 +209,18 @@ function M.prompt(buf, verb)
       { key = 'c', label = 'choose changelist…', value = 'pick' },
       { key = 'n', label = 'new changelist…', value = 'new' },
       { key = 'A', label = 'always use this target (session, no prompt)', value = 'auto' },
-      { key = 's', label = 'skip (this buffer)', value = 'skip' },
+      verb == 'add' and { key = 's', label = "don't ask again for this file", value = 'skip' }
+        or { key = 's', label = 'skip (this buffer)', value = 'skip' },
       { key = 'S', label = 'never ask (this session)', value = 'never' },
     },
   })
   c.prompting = false
-  local v = choice and choice.value or 'dismiss' -- <Esc>/q: not now (only `s` skips the buffer)
+  prompting_paths[key] = nil
+  local v = choice and choice.value or 'dismiss' -- <Esc>/q: not now (only `s` skips)
   dbg.info(
     'checkout',
-    'buf %d %s prompt: choice=%s replayed=%d key(s) sticky=%s',
-    buf,
+    'buf %s %s prompt: choice=%s replayed=%d key(s) sticky=%s',
+    tostring(buf),
     verb,
     v,
     #replay,
@@ -198,7 +236,7 @@ function M.prompt(buf, verb)
       if cl then
         run(cl, desc)
       else
-        dbg.info('checkout', 'buf %d %s: target selection cancelled', buf, verb)
+        dbg.info('checkout', 'buf %s %s: target selection cancelled', tostring(buf), verb)
         not_now()
       end
     end
@@ -214,10 +252,13 @@ function M.prompt(buf, verb)
     not_now()
   else
     c.skip = true
+    if verb == 'add' then
+      co._session.skip_files[key] = true -- for the rest of the session, reopened or not
+    end
     if v == 'never' then
       co._session.never = true
     end
-    if verb == 'edit' and vim.api.nvim_buf_is_valid(buf) then
+    if verb == 'edit' and buf and vim.api.nvim_buf_is_valid(buf) then
       vim.bo[buf].readonly = true -- honest: the file is still not checked out
     end
   end
