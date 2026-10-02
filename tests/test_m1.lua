@@ -304,6 +304,41 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   H.eq(child.wo.diff, false)
 end
 
+T['ops'][':P4 diff: headers name each side; q in the user file closes, only in the tab'] = function()
+  local file_buf = child.api.nvim_get_current_buf()
+  child.cmd('P4 diff')
+  wait('#vim.api.nvim_list_tabpages() == 2')
+  local wins = child.api.nvim_tabpage_list_wins(0)
+  local bar = function(w)
+    return child.api.nvim_get_option_value('winbar', { win = w })
+  end
+  H.neq(bar(wins[1]):find('//depot/a.txt', 1, true), nil)
+  H.neq(bar(wins[1]):find('#1 (have)', 1, true), nil)
+  H.neq(bar(wins[2]):find('a.txt', 1, true), nil)
+  H.neq(bar(wins[2]):find('(workspace)', 1, true), nil)
+  -- In the original tab the same buffer's q still records a macro.
+  child.cmd('tabprevious')
+  H.eq(child.api.nvim_get_current_buf(), file_buf)
+  child.type_keys('q', 'a')
+  H.eq(child.fn.reg_recording(), 'a')
+  child.type_keys('q')
+  H.eq(child.fn.reg_recording(), '')
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+  -- In the diff tab, q in the user's file closes the diff.
+  child.cmd('tabnext')
+  child.api.nvim_set_current_win(wins[2])
+  H.eq(child.api.nvim_get_current_buf(), file_buf)
+  child.type_keys('q')
+  wait('#vim.api.nvim_list_tabpages() == 1')
+  H.eq(child.wo.diff, false)
+  -- Nothing stays behind in the user's file: no mapping, no header (even in a new window).
+  vim.uv.sleep(50)
+  H.neq(child.fn.maparg('q', 'n', false, true).buffer, 1)
+  H.eq(child.wo.winbar, '')
+  child.cmd('split | enew | buffer ' .. file_buf)
+  H.eq(child.wo.winbar, '')
+end
+
 T['ops'][':P4 diff fires User PerforatedDiffOpen / PerforatedDiffClose (once)'] = function()
   child.lua([[
     _G.events = {}

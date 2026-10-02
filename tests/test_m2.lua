@@ -640,6 +640,24 @@ T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function(
   H.neq(right_name(), first)
   child.type_keys('q')
   H.eq(#child.api.nvim_list_tabpages(), 2)
+  -- The workspace file that left a diff window doesn't take its header along.
+  child.cmd('tabnew | buffer ' .. child.fn.bufnr(first))
+  H.eq(child.wo.winbar, '')
+  child.cmd('tabclose')
+  -- q from the workspace file (the right side) closes the whole tab too, as does :q there.
+  for _, close in ipairs({ 'q', ':q<CR>' }) do
+    goto_line('default')
+    child.type_keys('D')
+    wait([[#vim.api.nvim_list_tabpages() == 3]])
+    wins = child.api.nvim_tabpage_list_wins(0)
+    child.api.nvim_set_current_win(wins[3])
+    H.neq(child.api.nvim_buf_get_name(0):find('^' .. vim.pesc(root)), nil)
+    H.neq(child.wo.winbar:find('(workspace)', 1, true), nil)
+    H.neq(child.api.nvim_get_option_value('winbar', { win = wins[2] }):find('(have)', 1, true), nil)
+    child.type_keys(close)
+    wait([[#vim.api.nvim_list_tabpages() == 2]])
+    wait([[vim.bo.filetype == 'perforated']])
+  end
 end
 
 T['client view']['reconcile scans on expand; a opens found files'] = function()

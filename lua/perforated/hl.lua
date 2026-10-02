@@ -32,6 +32,8 @@ local LINKS = {
   PerforatedDiffAdded = 'Added',
   PerforatedDiffRemoved = 'Removed',
   PerforatedDiffHunk = 'Title',
+  PerforatedDiffHeader = 'WinBar', -- diff window header: the file
+  PerforatedDiffHeaderKind = 'Title', -- … and which side it is: "@=12 (shelved)", "(workspace)"
   PerforatedAnnotateLocal = 'DiagnosticInfo',
   PerforatedBlame = 'Comment',
   PerforatedTimelapseAdd = 'DiffAdd', -- lines added in the shown revision

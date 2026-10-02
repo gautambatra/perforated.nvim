@@ -9,6 +9,7 @@ local M = {}
 ---@field spec string?
 ---@field path string?
 ---@field empty string?
+---@field label string?  what the side is, for diff headers (see diff.view.side_label)
 
 --- Content of a side, as lines.
 ---@param ws perforated.Workspace
@@ -41,9 +42,9 @@ local function diff_side(side)
   if side.path then
     local b = vim.fn.bufadd(side.path)
     vim.fn.bufload(b)
-    return { buf = b }
+    return { buf = b, label = side.label }
   end
-  return { spec = side.spec, empty = side.empty }
+  return { spec = side.spec, empty = side.empty, label = side.label }
 end
 
 --- Side-by-side diff in a new tab.

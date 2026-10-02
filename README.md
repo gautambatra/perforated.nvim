@@ -271,7 +271,9 @@ other layouts):
   revision-vs-workspace diffs.
 
 - `:P4 diff` opens the current file against its depot revision, side by side in a new tab, using
-  Neovim's diff mode (`]c`, `do`, `dp` all work). `q` closes the tab.
+  Neovim's diff mode (`]c`, `do`, `dp` all work). Each side has a header naming the file and
+  what it is: `#4 (have)`, `@=123 (shelved)`, `(workspace)`. `q` in either side, or `:q`,
+  closes the whole tab (in your own file `q` only acts inside the diff tab).
 - Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
 - `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
   environment. GUI tools run detached; terminal tools open in a terminal tab.

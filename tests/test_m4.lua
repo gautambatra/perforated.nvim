@@ -155,6 +155,17 @@ T['m4']['shelf vs workspace after a re-shelve shows the new shelved content'] = 
   )
   shelved_side()
   H.eq(child.lua_get(lines), { 'b2' })
+  -- The shelf on the left, the workspace file on the right, each named in its header.
+  local wins = child.api.nvim_tabpage_list_wins(0)
+  H.eq(#wins, 3) -- panel + pair
+  local bar = function(w)
+    return child.api.nvim_get_option_value('winbar', { win = w })
+  end
+  H.eq(child.api.nvim_buf_get_name(child.api.nvim_win_get_buf(wins[2])), 'perforated://' .. spec)
+  H.neq(bar(wins[2]):find('@=' .. cl .. ' (shelved)', 1, true), nil)
+  H.eq(child.api.nvim_buf_get_name(child.api.nvim_win_get_buf(wins[3])), root .. '/main/b.txt')
+  H.neq(bar(wins[3]):find(' main/b.txt ', 1, true), nil)
+  H.neq(bar(wins[3]):find('(workspace)', 1, true), nil)
   child.cmd('tabclose')
 
   -- Re-shelve, replacing the shelf (what the shelve action's "replace" does).

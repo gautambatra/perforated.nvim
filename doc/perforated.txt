@@ -567,6 +567,8 @@ can override them:
   PerforatedCount              PerforatedModified
   PerforatedDelete             Removed
   PerforatedDiffAdded          Added
+  PerforatedDiffHeader         WinBar
+  PerforatedDiffHeaderKind     Title
   PerforatedDiffHunk           Title
   PerforatedDiffRemoved        Removed
   PerforatedDim                Comment
