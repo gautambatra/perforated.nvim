@@ -10,12 +10,13 @@
 ---
 --- Files still unresolved at the end (tool cancelled, non-content resolves, no tool) go to
 --- quickfix, where `R` on an entry resumes.
+---
+--- It runs as a job (`:P4 jobs`, `:P4 cancel`): `resolve -am` merges on this machine after
+--- fetching each file's revisions, which can take far longer than the usual call timeout on a
+--- real server. The job's result pop-up always says what happened, including "N left
+--- unresolved".
 
 local M = {}
-
-local function notify(msg, level)
-  require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
-end
 
 ---@param file string
 ---@param rev string?
@@ -137,96 +138,123 @@ function M.run(ws, paths, cb)
       and { globals = { '-x', '-' }, stdin = require('perforated.p4').escape_all(paths) }
     or {}
   local co = require('perforated.checkout')
-  ws:run({ 'resolve', '-am' }, opts, function(res)
+  local jobs = require('perforated.jobs')
+  local what = paths and #paths == 1 and vim.fn.fnamemodify(paths[1], ':t')
+    or paths and ('%d files'):format(#paths)
+    or 'workspace'
+  local job, run_opts = jobs.start(ws, 'resolve ' .. what)
+  ws:run({ 'resolve', '-am' }, vim.tbl_extend('force', opts, run_opts), function(res)
+    if res.cancelled then
+      jobs.finish(job, 'resolve stopped', 'warn')
+      co.changed(ws)
+      return cb(0, 0)
+    end
+    if not res.ok and #res.records == 0 and #res.errors > 0 then
+      jobs.finish(job, 'resolve failed: ' .. res.errors[1], true)
+      return cb(0, 0)
+    end
     local attempted = {}
     for _, r in ipairs(res.records) do
       if r.clientFile then
         attempted[r.clientFile] = true
       end
     end
-    ws:run({ 'resolve', '-n', '-o' }, opts, function(pending)
-      local conflicts = {}
-      for _, r in ipairs(pending.records) do
-        if r.clientFile then
-          conflicts[#conflicts + 1] = r
+    ws:run(
+      { 'resolve', '-n', '-o' },
+      vim.tbl_extend('force', opts, { timeout = 0 }),
+      function(pending)
+        local conflicts = {}
+        for _, r in ipairs(pending.records) do
+          if r.clientFile then
+            conflicts[#conflicts + 1] = r
+          end
         end
-      end
-      local auto = vim.tbl_count(attempted) - #conflicts
-      local left = {} ---@type { path: string, reason: string, rec: table }[]
-      local merged = 0
-      local function finish()
-        if auto + merged > 0 then
-          notify(
-            ('resolved %d file(s)%s'):format(
+        local auto = vim.tbl_count(attempted) - #conflicts
+        local left = {} ---@type { path: string, reason: string, rec: table }[]
+        local merged = 0
+        local function finish()
+          local parts = {}
+          if auto + merged > 0 then
+            parts[#parts + 1] = ('resolved %d file(s)%s'):format(
               auto + merged,
               merged > 0 and (' (%d with the merge tool)'):format(merged) or ''
             )
+          end
+          if #left > 0 then
+            -- Never silent: the quickfix list is replaced, which is easy to miss.
+            parts[#parts + 1] = ('%d file(s) left unresolved (quickfix): %s'):format(
+              #left,
+              left[1].reason
+            )
+          end
+          jobs.finish(
+            job,
+            #parts > 0 and table.concat(parts, '; ') or 'nothing to resolve',
+            #left > 0 and 'warn' or nil
           )
-        elseif #left == 0 then
-          notify('nothing to resolve')
-        end
-        if #left > 0 then
-          local qf = require('perforated.ui.qf')
-          local items = {}
-          for _, l in ipairs(left) do
-            items[#items + 1] = qf.item(l.path, 'unresolved: ' .. l.reason, {
-              depotFile = l.rec.fromFile,
+          if #left > 0 then
+            local qf = require('perforated.ui.qf')
+            local items = {}
+            for _, l in ipairs(left) do
+              items[#items + 1] = qf.item(l.path, 'unresolved: ' .. l.reason, {
+                depotFile = l.rec.fromFile,
+                kind = 'unresolved',
+              })
+            end
+            qf.set({
+              title = ('P4 resolve · %d file(s) left unresolved (R resumes)'):format(#left),
               kind = 'unresolved',
+              items = items,
             })
           end
-          qf.set({
-            title = ('P4 resolve · %d file(s) left unresolved (R resumes)'):format(#left),
-            kind = 'unresolved',
-            items = items,
-          })
+          co.changed(ws)
+          -- p4 wrote merged content into the files: reload their (unmodified) buffers.
+          require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
+          for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
+            require('perforated.buffer').refresh(b)
+          end
+          cb(auto + merged, #left)
         end
-        co.changed(ws)
-        -- p4 wrote merged content into the files: reload their (unmodified) buffers.
-        require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
-        for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
-          require('perforated.buffer').refresh(b)
+        if #conflicts == 0 then
+          return finish()
         end
-        cb(auto + merged, #left)
-      end
-      if #conflicts == 0 then
-        return finish()
-      end
-      require('perforated.tools').merge_tool(ws, function(tool)
-        local i = 0
-        local function step()
-          i = i + 1
-          local rec = conflicts[i]
-          if not rec then
-            return finish()
-          end
-          if rec.resolveType ~= 'content' then
-            left[#left + 1] = {
-              path = rec.clientFile,
-              reason = (rec.resolveType or '?') .. ' resolve: use p4 resolve',
-              rec = rec,
-            }
-            return step()
-          end
-          if not tool then
-            left[#left + 1] = {
-              path = rec.clientFile,
-              reason = 'conflict; no merge tool (set P4MERGE or merge.tool)',
-              rec = rec,
-            }
-            return step()
-          end
-          merge_one(ws, rec, tool, function(ok, reason)
-            if ok then
-              merged = merged + 1
-            else
-              left[#left + 1] = { path = rec.clientFile, reason = reason or '?', rec = rec }
+        require('perforated.tools').merge_tool(ws, function(tool)
+          local i = 0
+          local function step()
+            i = i + 1
+            local rec = conflicts[i]
+            if not rec then
+              return finish()
             end
-            step()
-          end)
-        end
-        step()
-      end)
-    end)
+            if rec.resolveType ~= 'content' then
+              left[#left + 1] = {
+                path = rec.clientFile,
+                reason = (rec.resolveType or '?') .. ' resolve: use p4 resolve',
+                rec = rec,
+              }
+              return step()
+            end
+            if not tool then
+              left[#left + 1] = {
+                path = rec.clientFile,
+                reason = 'conflict; no merge tool (set P4MERGE or merge.tool)',
+                rec = rec,
+              }
+              return step()
+            end
+            merge_one(ws, rec, tool, function(ok, reason)
+              if ok then
+                merged = merged + 1
+              else
+                left[#left + 1] = { path = rec.clientFile, reason = reason or '?', rec = rec }
+              end
+              step()
+            end)
+          end
+          step()
+        end)
+      end
+    )
   end)
 end
 

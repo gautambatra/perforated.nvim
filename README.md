@@ -402,8 +402,10 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   Each remaining conflict opens your merge tool (`$P4MERGE`, or `merge.tool`) as
   `tool base theirs yours merged`, asynchronously. When it exits 0 with a changed result, the
   result is written (through the buffer if it's open) and accepted. Anything else stays
-  unresolved and goes to quickfix, where `R` on an entry tries again. There's no merge logic in
-  the plugin.
+  unresolved and goes to quickfix, where `R` on an entry tries again; a pop-up always says
+  how many were resolved and how many are left. It runs as a job (`:P4 jobs`, `:P4 cancel`)
+  without the usual call timeout, since `resolve -am` merges on your machine and can take a
+  while. There's no merge logic in the plugin.
 - **Delete and move:** `:P4 delete [file…]` (after a confirmation; the buffer is closed) and
   `:P4 move {new path}` (opens the file for edit if needed; the buffer follows the file and
   keeps any unsaved edits).
@@ -565,7 +567,9 @@ changelist or the one that last changed the line, history, annotate, time-lapse.
 - **Expired login:** exactly one password prompt, then the calls that failed are retried. If
   you cancel it, calls fail fast and the statusline shows `⊘login` until `:P4 login`.
 - **Unreachable server:** offline mode. Calls fail immediately with a clear message, and a
-  background retry backs off from 5 s to 5 min. The statusline shows `⊘`.
+  background retry backs off from 5 s to 5 min. The statusline shows `⊘`. A command that's
+  merely slow (it timed out without a connection error) doesn't count: the plugin checks the
+  server first (`p4 info -s`) and only goes offline if that fails too.
 - **Command log:** `:P4 log` lists every p4 command the plugin ran, with timings.
 
 #### Debug log

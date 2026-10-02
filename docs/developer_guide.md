@@ -644,9 +644,11 @@ why keys, menus and help never disagree.
 
 ### 18.5 A server outage
 
-1. A call fails to connect (or times out). `conn.classify` returns `'connect'`; the state goes
-   `offline` and a background probe (`p4 -ztag info -s`) runs with exponential backoff (5 s →
-   5 min).
+1. A call fails to connect. `conn.classify` returns `'connect'`; the state goes `offline` and a
+   background probe (`p4 -ztag info -s`) runs with exponential backoff (5 s → 5 min). A call
+   that only *timed out* (no connection error in its output) isn't proof: `observe` probes at
+   once instead (`conn.checking` while it runs) and only a failed probe goes offline. Heavy
+   commands (sync, submit, resolve, reconcile) run as jobs, without the call timeout.
 2. While offline, `ws:run` refuses new calls immediately with a clear message, instead of
    letting each one wait for a timeout.
 3. When a probe succeeds the state returns to `online`.
@@ -778,8 +780,9 @@ original client returns the original workspace.
 
 #### `core/conn.lua`
 The connection state machine (diagram in the file header). `classify(res)` maps a result to
-`'ok' | 'auth' | 'connect' | 'error'` by matching known p4 messages. `observe(res)` updates the
-state (a server-side *error* still proves the server is reachable). `refuse()` returns a
+`'ok' | 'auth' | 'connect' | 'error'` by matching known p4 messages. `observe(res, { probe })`
+updates the state (a server-side *error* still proves the server is reachable; a timeout
+without a connection error probes before going offline). `refuse()` returns a
 reason to fail fast (offline, cancelled login). `need_auth(retry)` coordinates a single login
 per workspace: queue group paused, `login_pending` set, one `inputsecret` prompt, `p4 login`
 via stdin, `epoch` bumped on success, waiters retried. `probe()` and the backoff timer handle
@@ -994,7 +997,10 @@ buffer), move (renames the buffer and keeps unsaved edits), delete a pending cha
 remaining conflicts; for each content conflict, base and theirs are printed to temp files and
 the merge tool (`merge.tool` or `$P4MERGE`) runs as `tool base theirs yours merged`; exit 0
 with a changed result → written through the buffer and accepted with `resolve -ay`.
-Everything else goes to quickfix, where `R` retries. No merge logic in the plugin.
+Everything else goes to quickfix, where `R` retries. It runs as a job (`resolve -am` has no
+call timeout: it fetches revisions and merges locally), and the job's result pop-up always
+reports the outcome — `jobs.finish(job, msg, 'warn')` when files are left. No merge logic in
+the plugin.
 
 #### `integrate.lua`
 Cherry-pick: the source is the changelist's common directory; the target is a path or

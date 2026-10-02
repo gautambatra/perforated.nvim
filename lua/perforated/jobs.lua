@@ -113,7 +113,7 @@ end
 --- Mark a job finished (and report through its progress item).
 ---@param job perforated.Job
 ---@param msg string
----@param failed boolean?
+---@param failed boolean|'warn'|nil  'warn': finished, but something needs attention
 function M.finish(job, msg, failed)
   job.done = true
   require('perforated.core.debug').timing(
