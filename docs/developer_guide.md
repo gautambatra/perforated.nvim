@@ -920,14 +920,21 @@ into `{ type, a_start, a_count, b_start, b_count }`, `summary` (added/changed/re
 
 #### `diff/view.lua`
 `:P4 diff`: `resolve_spec(rec, rev)` understands `#N`, `#head`, `@CL`, `@=CL` (shelved) and
-`prev`; `pair(ws, left, right)` opens a native side-by-side diff in a tab (`q` closes, fires
-`User PerforatedDiffOpen/Close`); `external` launches the user's `$P4DIFF` with their
+`prev`; `pair(ws, left, right)` opens a native side-by-side diff in a tab (`q` or `:q` in either
+side closes the whole tab; fires `User PerforatedDiffOpen/Close`). Every diff window gets a
+winbar header from `side_label` (a side's optional `label`, else derived: `@=N (shelved)`,
+`(workspace)`); `clear_header` drops it before the window shows another buffer or closes,
+because Neovim remembers window-local options per buffer and the user's file would keep it.
+`tab_key(tab, buf, lhs, fn)` maps keys that act only inside one diff tab, so `q` works in the
+user's own file there and does its usual job everywhere else; `external` launches the user's `$P4DIFF` with their
 environment (a terminal tab for terminal tools, detached for GUI tools). Identical sides give
 a message instead (`same.lua`).
 
 #### `diff/tab.lua`
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
-next one is prefetched); `<Tab>`/`<S-Tab>` step files. Before opening, every pair is checked
+next one is prefetched); `<Tab>`/`<S-Tab>` step files; `q` (any window) and `:q` (any of the
+three windows) close the whole tab. Shelf-vs-workspace puts the shelf left, the workspace file
+right. Before opening, every pair is checked
 with `same.check`: identical files go to an "Identical (N):" section; if all are identical,
 the tab doesn't open. Sources: `open_change` (pending, shelved, submitted), `open_opened`
 (`:P4 diff -a`), `open_shelf_vs_workspace`.

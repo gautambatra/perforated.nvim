@@ -146,12 +146,10 @@ open_tab = function(ws, title, entries, identical)
   vim.wo[panel].wrap = false
 
   local state = { current = nil }
-  local owned = {} -- buffers we created (q closes the tab there)
+  local keyed = {} -- buffers given this tab's keys (the user's files too, scoped to the tab)
 
   local function close_tab()
-    if vim.api.nvim_tabpage_is_valid(tab) and #vim.api.nvim_list_tabpages() > 1 then
-      pcall(vim.cmd, 'tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
-    end
+    dv.close_tab(tab)
   end
 
   local function prefetch(i)
@@ -165,7 +163,7 @@ open_tab = function(ws, title, entries, identical)
 
   local function side(s)
     if s.path then
-      return { buf = workspace_buf(s.path) }
+      return { buf = workspace_buf(s.path), label = s.label }
     end
     return s
   end
@@ -181,6 +179,7 @@ open_tab = function(ws, title, entries, identical)
         pcall(vim.api.nvim_win_call, w, function()
           vim.cmd('diffoff')
         end)
+        dv.clear_header(w) -- before the buffer changes: the old one must not keep it
       end
     end
     local l, r = side(e.left), side(e.right)
@@ -189,15 +188,16 @@ open_tab = function(ws, title, entries, identical)
       local w, b, sd = pair[1], pair[2], pair[3]
       if vim.api.nvim_win_is_valid(w) then
         vim.api.nvim_win_set_buf(w, b)
-        if not sd.buf and not owned[b] then
-          owned[b] = true
-          vim.keymap.set('n', 'q', close_tab, { buffer = b, nowait = true })
-          vim.keymap.set('n', '<Tab>', function()
+        dv.header(w, ws, sd)
+        if not keyed[b] then
+          keyed[b] = true
+          dv.tab_key(tab, b, 'q', close_tab, 'Close diff tab')
+          dv.tab_key(tab, b, '<Tab>', function()
             M._step(state, 1)
-          end, { buffer = b, nowait = true })
-          vim.keymap.set('n', '<S-Tab>', function()
+          end, 'Next file')
+          dv.tab_key(tab, b, '<S-Tab>', function()
             M._step(state, -1)
-          end, { buffer = b, nowait = true })
+          end, 'Previous file')
         end
       end
     end
@@ -232,14 +232,23 @@ open_tab = function(ws, title, entries, identical)
       end
     end,
   })
+  -- Closing any of the three windows (`:q` in a diff side too) closes the whole tab.
+  local closed = false
   vim.api.nvim_create_autocmd('WinClosed', {
     group = group,
-    pattern = tostring(panel),
+    pattern = { tostring(panel), tostring(lwin), tostring(rwin) },
     callback = function()
+      if closed then
+        return
+      end
+      closed = true
+      -- Now, while the windows exist: a closing window saves its options for its buffer.
+      dv.clear_header(lwin)
+      dv.clear_header(rwin)
       vim.schedule(function()
         pcall(vim.api.nvim_del_augroup_by_id, group)
-        -- Revision buffers outlive the tab (bufhidden=hide): drop the keys tied to it.
-        dv.unmap(vim.tbl_keys(owned), { 'q', '<Tab>', '<S-Tab>' })
+        -- Buffers outlive the tab (revisions: bufhidden=hide; the user's files): drop its keys.
+        dv.tab_keys_drop(tab, vim.tbl_keys(keyed))
         for _, w in ipairs({ lwin, rwin }) do
           if vim.api.nvim_win_is_valid(w) then
             pcall(vim.api.nvim_win_call, w, function()
@@ -297,7 +306,10 @@ local function opened_entries(ws, recs)
       out[#out + 1] = {
         label = label,
         action = r.action,
-        left = base and { spec = base } or { empty = 'new file' },
+        left = base and {
+          spec = base,
+          label = r.haveRev and base == r.depotFile .. '#' .. r.haveRev and 'have' or nil,
+        } or { empty = 'new file' },
         right = deleted and { empty = 'deleted' } or { path = r.clientFile },
       }
     end
@@ -357,7 +369,7 @@ function M.open_change(ws, item)
     entries[#entries + 1] = {
       label = f.depotFile,
       action = f.action,
-      left = base and { spec = base } or { empty = 'new file' },
+      left = base and { spec = base, label = 'base' } or { empty = 'new file' },
       right = f.action == 'delete' and { empty = 'deleted' }
         or { spec = f.depotFile .. '@=' .. item.change },
     }
@@ -365,7 +377,7 @@ function M.open_change(ws, item)
   M.open(ws, ('CL %s (shelved)'):format(item.change), entries)
 end
 
---- A shelf against the workspace: every shelved file (right) next to its workspace file (left).
+--- A shelf against the workspace: every shelved file (left) next to its workspace file (right).
 --- Files that aren't in the workspace (unmapped or not synced) show an empty side.
 ---@param ws perforated.Workspace
 ---@param change string
@@ -390,10 +402,10 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
       entries[#entries + 1] = {
         label = label,
         action = f.action,
-        left = (path and vim.uv.fs_stat(path)) and { path = path }
-          or { empty = 'not in workspace' },
-        right = (f.action == 'delete' or f.action == 'move/delete') and { empty = 'deleted' }
+        left = (f.action == 'delete' or f.action == 'move/delete') and { empty = 'deleted' }
           or { spec = f.depotFile .. '@=' .. change },
+        right = (path and vim.uv.fs_stat(path)) and { path = path }
+          or { empty = 'not in workspace' },
       }
     end
     table.sort(entries, function(a, b)

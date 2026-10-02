@@ -373,7 +373,7 @@ local function actions(view)
           if not side then
             return notify(f.depotFile .. ' is not in this workspace', vim.log.levels.WARN)
           end
-          revs.diff(ws, side, { spec = f.depotFile .. '@=' .. f.change })
+          revs.diff(ws, { spec = f.depotFile .. '@=' .. f.change }, side)
         end)
       end,
     },

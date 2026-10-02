@@ -36,6 +36,9 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 ## Diffs & gutter
 - Gutter base: **#have** (stale shown via separate indicator).
 - `:P4 diff` default: **side-by-side in a new tab**, native `:diffthis`, `q` closes.
+  - Every diff split (single file or changelist tab) has a winbar header naming the file and the side: `#4 (have)`, `@=123 (shelved)`, `(workspace)`. *(added 2026-10-02)*
+  - `q` closes the whole diff tab from any of its windows, including the user's own file. There the mapping only acts inside that tab, and `q` keeps its normal meaning everywhere else. `:q` in any diff window also closes the whole tab.
+  - The workspace file is always on the **right**: shelf vs workspace shows the shelf on the left.
 - Option to open diffs in the user's external tool from **$P4DIFF** (`:P4 diff!` or `diff.tool = 'external'`). The plugin launches it itself as `$P4DIFF <depot copy> <workspace file>`, with the user's environment, because `p4 diff` skips identical files and `p4 diff2` ignores P4DIFF.
 - Shelved file default diff: **shelved vs its base rev**; menu offers vs workspace / vs head.
 - Hunk ops: preview hunk (float), reset hunk to #have, current-line blame virtual text. Hunk navigation `]h`/`[h`.

@@ -907,7 +907,7 @@ local function actions(view)
       run = function(items)
         local it = items[1]
         local base = it.rev and (it.depotFile .. '#' .. it.rev) or nil
-        local left = base and { spec = base } or { empty = 'new file' }
+        local left = base and { spec = base, label = 'base' } or { empty = 'new file' }
         local right = { spec = it.depotFile .. '@=' .. it.change }
         require('perforated.same').or_open(ws, left, right, function()
           require('perforated.diff.view').pair(
@@ -1192,9 +1192,9 @@ local function actions(view)
         local revs = require('perforated.revs')
         revs.where(ws, { it.depotFile }, function(map)
           local path = map[it.depotFile]
-          local left = (path and vim.uv.fs_stat(path)) and { path = path }
+          local right = (path and vim.uv.fs_stat(path)) and { path = path }
             or { empty = 'not in workspace' }
-          revs.diff(ws, left, { spec = it.depotFile .. '@=' .. it.change })
+          revs.diff(ws, { spec = it.depotFile .. '@=' .. it.change }, right)
         end)
       end,
     },
