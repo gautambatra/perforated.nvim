@@ -1069,7 +1069,7 @@ result of what they just did, stacking down, and `background` above the statusli
 polling news and finished jobs, stacking up; `_restack` lays out each group. The dismissal
 countdown starts at
 the user's first keypress (so a toast can't vanish unseen), toasts raised while unfocused wait
-for `FocusGained`; history for `:P4 notifications`. `notify(msg, level, { place })` is how every module
+for `FocusGained`; history for `:P4 messages`. `notify(msg, level, { place })` is how every module
 tells the user something (never `vim.notify` directly): a toast titled by level (errors get
 `PerforatedToastErrorBorder`, info `PerforatedToastInfoBorder`), long lines wrapped, or
 `vim.notify` when `toast.backend = 'notify'`. Safe from fast (luv) callbacks. `show(title,
@@ -1087,7 +1087,8 @@ them) and status glyphs in Nerd Font or ASCII style (overridable via `icons.glyp
 `pick({ title, items, format, preview, multi, on_choice })` over telescope, fzf-lua,
 snacks.picker, mini.pick or `vim.ui.select` (auto-detected, or `picker = '…'`); `once()`
 guarantees `on_choice` runs exactly once, even with backends that report cancel and choice
-in odd orders. Sources for `:P4 pick {pending|opened|submitted|users}`.
+in odd orders. `picker_mode` (default `'normal'`) opens telescope (`initial_mode`) and snacks
+(`focus = 'list'`) with the list focused. Sources for `:P4 pick {pending|opened|submitted|users}`.
 
 ### Views
 

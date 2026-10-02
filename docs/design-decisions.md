@@ -94,7 +94,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - **Toast:** when an opened file *newly* becomes stale, a non-focusable popup at the bottom centre (stackable; *background* placement, see Feedback) lists `file #have→#head · CL · user` with `:P4 sync` / `:P4 stale` hints. It can be routed to `vim.notify`.
   - **Activity-gated dismissal:** the 3 s timer (`toast.timeout`) starts only at the user's first keypress or cursor move after the toast appears. Toasts raised while Neovim is unfocused are queued and shown on `FocusGained`.
   - **Polling only while focused** means a background tmux pane or tab doesn't poll; it catches up on return. Health checks that focus events work (tmux `focus-events on`).
-  - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 notifications` replays recent toasts, and submit always re-checks and warns.
+  - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 messages` (`<leader>pm`; was `:P4 notifications`) replays recent messages, and submit always re-checks and warns.
   - **No OS or desktop notifications.**
 - **Statusline markers** stay until you sync or resolve, with configurable glyphs:
   - **Per file:** `#8 ↓#9` (`vim.b.perforated_status`, `vim.b.perforated_status_dict.stale`), within the file part: client, action@CL, a modified marker, the have revision, then stale / unresolved when they apply (`statusline.format`, a template of tokens; line counts are the optional `{diff}`).
@@ -178,6 +178,7 @@ Where it's used:
 
 ## Pickers
 - Telescope is the author's primary, but a **picker-agnostic adapter** (telescope, fzf-lua, snacks, mini.pick, fallback `vim.ui.select`).
+- Pickers open in **normal mode** (`picker_mode = 'normal'`, the default; `'insert'` starts in the prompt) *(2026-10-02)*: telescope `initial_mode`, snacks `focus = 'list'`. fzf-lua and mini.pick have no normal mode.
 
 ## Extras (roadmap)
 - Swarm links (open/copy review URL).

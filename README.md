@@ -436,7 +436,7 @@ A pop-up never takes focus, never triggers a "Press ENTER" prompt, and its dismi
 countdown (`toast.timeout`, 3 s; 0 keeps them until `:P4 dismiss`) starts only once you press
 a key. The check-out prompt is
 the exception to the placement: it opens at the cursor, where you were typing.
-Errors have a red border. `:P4 notifications` shows the history and `:P4 dismiss` closes them.
+Errors have a red border. `:P4 messages` (`<leader>pm`) shows the recent ones and `:P4 dismiss` closes them.
 Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
 chooses, `<CR>` takes the default, `<Esc>` cancels) and text prompts (submit description,
 `g/`, integrate, time-lapse revision, reconcile paths) a one-line input float. Long jobs pop up
@@ -456,7 +456,7 @@ Neovim's progress messages. The only prompt that always stays on the command lin
   revision, the CL and who submitted it. It never takes focus.
   - Its dismissal timer starts only once you press a key.
   - Notifications raised while Neovim was unfocused wait until you come back.
-  - `:P4 notifications` shows the history, and `:P4 dismiss` closes them.
+  - `:P4 messages` shows the history, and `:P4 dismiss` closes them.
 - **The stale marker stays in the statusline and sign column** until you sync.
 
 #### Quickfix integration
@@ -518,7 +518,9 @@ A `User PerforatedStatus` event fires whenever they change.
 Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
 use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**,
 detected in that order, falling back to `vim.ui.select`. Set `picker = 'telescope'` (etc.) to
-choose one explicitly.
+choose one explicitly. Pickers open in **normal mode** (move with `j`/`k`, `i` to type a
+filter); `picker_mode = 'insert'` starts in the prompt instead. That applies to telescope and
+snacks.picker: fzf-lua and mini.pick have no normal mode.
 
 #### Icons
 
@@ -641,8 +643,8 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 opened` | Opened files → quickfix |
 | `:P4 status` | Stale / unresolved opened files → quickfix |
 | `:P4 hunks [%]` | Hunks → quickfix (`%`: this file → location list) |
-| `:P4 notifications` | Notification history |
-| `:P4 dismiss` | Close notifications |
+| `:P4 messages` | Show recent messages |
+| `:P4 dismiss` | Close the visible pop-ups |
 | `:P4 info` | Workspace, client, root, user, server, connection state |
 | `:P4 log` | Every p4 command the plugin ran, with timings |
 | `:P4 debug [on [level]\|off\|open\|clear\|snapshot]` | Diagnostic log file (see Debug log) |
@@ -673,7 +675,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-hunks)          <Plug>(perforated-hunks-file)
 <Plug>(perforated-opened)         <Plug>(perforated-status)
 <Plug>(perforated-info)           <Plug>(perforated-log)
-<Plug>(perforated-notifications)  <Plug>(perforated-history)
+<Plug>(perforated-messages)       <Plug>(perforated-history)
 <Plug>(perforated-annotate)       <Plug>(perforated-blame-line)
 <Plug>(perforated-describe)       <Plug>(perforated-lookup)
 <Plug>(perforated-sync)           <Plug>(perforated-sync-file)
@@ -693,7 +695,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pd` / `<leader>pD` | Diff / diff with `$P4DIFF` |
 | `<leader>pq` / `<leader>pQ` | All hunks → quickfix / this file's hunks → location list |
 | `<leader>po` / `<leader>ps` | Opened files / stale & unresolved |
-| `<leader>pi` / `<leader>pl` / `<leader>pn` | Info / command log / notifications |
+| `<leader>pi` / `<leader>pl` / `<leader>pm` | Info / command log / recent messages |
 | `<leader>ph` / `<leader>pA` / `<leader>pb` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
 | `<leader>pt` / `<leader>pG` | Time-lapse / revision graph (p4vc) |
@@ -749,6 +751,7 @@ opts = {
   change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
   merge = { tool = nil }, -- merge tool command (default: $P4MERGE), run as `tool base theirs yours merged`
   picker = 'auto', -- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'
+  picker_mode = 'normal', -- open pickers in normal mode ('insert' to start typing); telescope, snacks
   client_view = {
     kind = 'tab', -- 'tab' | 'float' | 'split'
     submitted_limit = 20,

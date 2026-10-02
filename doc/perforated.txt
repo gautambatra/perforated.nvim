@@ -72,7 +72,7 @@ bang goes on the subcommand: `:P4 revert!`.
     -a = all opened
 
 :P4 dismiss                                                      *:P4-dismiss*
-    Dismiss visible notifications
+    Dismiss visible messages
 
 :P4 edit                                                            *:P4-edit*
     Open files for edit: :P4 edit [-c CL] [file…] (default: sticky CL or
@@ -109,11 +109,11 @@ bang goes on the subcommand: `:P4 revert!`.
     Go to a changelist (number), a file or directory history (path) or a user:
     :P4 lookup [what]
 
+:P4 messages                                                    *:P4-messages*
+    Show recent messages
+
 :P4 move                                                            *:P4-move*
     Move/rename the current file: :P4 move {new path}
-
-:P4 notifications                                          *:P4-notifications*
-    Show recent notifications (stale files, …)
 
 :P4 opened                                                        *:P4-opened*
     Opened files, grouped by changelist, in the quickfix list
@@ -376,8 +376,8 @@ only (your buffer-local mappings win).
   <Plug>(perforated-info)
   <Plug>(perforated-log)
   <Plug>(perforated-lookup)
+  <Plug>(perforated-messages)
   <Plug>(perforated-next-hunk)
-  <Plug>(perforated-notifications)
   <Plug>(perforated-opened)
   <Plug>(perforated-prev-hunk)
   <Plug>(perforated-preview-hunk)
@@ -411,7 +411,7 @@ Preset (keymaps = "default"):
   <leader>ph     history
   <leader>pi     info
   <leader>pl     log
-  <leader>pn     notifications
+  <leader>pm     messages
   <leader>po     opened
   <leader>pq     hunks
   <leader>pr     revert
@@ -499,6 +499,7 @@ keys):
       p4 = "p4",
       p4vc = "p4vc",
       picker = "auto",
+      picker_mode = "normal",
       poll = {
         bufenter_throttle = 60,
         focus_throttle = 30,

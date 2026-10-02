@@ -11,6 +11,10 @@
 ---
 --- Backend: `picker = 'auto'` (telescope → fzf-lua → snacks → mini.pick → vim.ui.select) or
 --- one of 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'.
+---
+--- `picker_mode = 'normal'` (the default) opens telescope and snacks with the list focused in
+--- normal mode (j/k move, i types a filter); 'insert' starts in the prompt. fzf-lua (a terminal
+--- program) and mini.pick (a key loop) have no normal mode.
 
 local M = {}
 
@@ -27,6 +31,10 @@ local function has(mod)
 end
 
 local backends = {}
+
+local function normal_mode()
+  return require('perforated.config').get().picker_mode ~= 'insert'
+end
 
 --- Call on_choice exactly once.
 local function once(spec)
@@ -68,6 +76,7 @@ backends.telescope = function(spec)
   pickers
     .new({}, {
       prompt_title = spec.title,
+      initial_mode = normal_mode() and 'normal' or 'insert',
       finder = finders.new_table({
         results = spec.items,
         entry_maker = function(item)
@@ -152,6 +161,7 @@ backends.snacks = function(spec)
   end
   require('snacks').picker.pick({
     title = spec.title,
+    focus = normal_mode() and 'list' or 'input',
     items = items,
     format = 'text',
     preview = spec.preview and 'preview' or 'none',

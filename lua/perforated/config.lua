@@ -60,6 +60,7 @@ local defaults = {
   change = { template = nil, allow_force = false },
   merge = { tool = nil },
   picker = 'auto',
+  picker_mode = 'normal', -- pickers open in 'normal' mode (move with j/k, i to type) or 'insert'
   keymaps = false,
   keys = { p4v = true },
   commands = { aliases = true },

@@ -9,7 +9,7 @@
 --- * Activity-gated: the dismissal countdown starts at the user's first keypress after the toast
 ---   is shown, so a toast can't vanish while nobody is looking.
 --- * Focus-gated: toasts raised while Neovim is unfocused are queued until FocusGained.
---- * History (`:P4 notifications`); `toast.timeout = 0` = sticky until `:P4 dismiss`;
+--- * History (`:P4 messages`); `toast.timeout = 0` = sticky until `:P4 dismiss`;
 ---   `toast.backend = 'notify'` routes to vim.notify instead.
 --- * Every plugin message goes through `M.notify` (a toast by default), not only stale files.
 
@@ -359,7 +359,7 @@ function M.open_history()
     end
   end
   if #lines == 0 then
-    lines = { '(no notifications)' }
+    lines = { '(no messages)' }
   end
   vim.cmd('botright new')
   local buf = vim.api.nvim_get_current_buf()
@@ -367,7 +367,7 @@ function M.open_history()
   vim.bo[buf].bufhidden = 'wipe'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
-  vim.bo[buf].filetype = 'perforated-notifications'
+  vim.bo[buf].filetype = 'perforated-messages'
   vim.api.nvim_win_set_height(0, math.min(15, #lines))
   vim.keymap.set('n', 'q', '<cmd>close<cr>', { buffer = buf, nowait = true })
 end

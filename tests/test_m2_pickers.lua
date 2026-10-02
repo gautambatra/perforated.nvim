@@ -70,24 +70,32 @@ T['picker']['telescope backend: choose and cancel'] = function()
       H.root .. '/.deps/plenary.nvim'
     )
   )
+  local function opened()
+    H.eq(
+      vim.wait(5000, function()
+        return child.bo.filetype == 'TelescopePrompt'
+      end, 30),
+      true
+    )
+    vim.uv.sleep(100)
+  end
+  -- Opens in normal mode (picker_mode = 'normal'): i to type a filter.
   start_pick('telescope')
-  H.eq(
-    vim.wait(5000, function()
-      return child.bo.filetype == 'TelescopePrompt'
-    end, 30),
-    true
-  )
-  child.type_keys('bra')
+  opened()
+  H.eq(child.api.nvim_get_mode().mode, 'n')
+  child.type_keys('i', 'bra')
   vim.uv.sleep(300)
   child.type_keys('<CR>')
   wait_choice('bravo')
   start_pick('telescope')
-  H.eq(
-    vim.wait(5000, function()
-      return child.bo.filetype == 'TelescopePrompt'
-    end, 30),
-    true
-  )
+  opened()
+  child.type_keys('<Esc>') -- in normal mode, <Esc> closes
+  wait_choice(vim.NIL)
+  -- picker_mode = 'insert': straight into the prompt.
+  child.lua([[require('perforated.config').set({ picker_mode = 'insert' })]])
+  start_pick('telescope')
+  opened()
+  H.eq(child.api.nvim_get_mode().mode, 'i')
   child.type_keys('<C-c>') -- (<Esc> only leaves insert mode in telescope's prompt)
   wait_choice(vim.NIL)
 end
