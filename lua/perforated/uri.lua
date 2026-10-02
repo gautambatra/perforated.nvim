@@ -24,11 +24,22 @@ function M.parse(name)
   return spec
 end
 
+--- Whether a spec always names the same content. Only numbered revisions do: a shelf (`@=N`)
+--- is replaced by every re-shelve, and `#head`, labels and dates move.
+---@param spec string
+---@return boolean
+function M.immutable(spec)
+  return spec:match('#%d+$') ~= nil
+end
+
 --- Create (or reuse) the buffer for a spec, bound to a workspace. Loading starts immediately.
 ---
 --- Loads the content directly rather than relying on BufReadCmd: autocmds don't fire from
 --- inside another autocmd (unless it is `nested`), so a `bufload` from e.g. a CursorMoved
 --- handler would otherwise produce an empty buffer.
+---
+--- Revision buffers outlive the views that show them (`bufhidden=hide`), so a reused buffer of
+--- a mutable spec is read again: its old content stays until the new content arrives.
 ---@param ws perforated.Workspace
 ---@param spec string
 ---@return integer buf
@@ -36,23 +47,34 @@ function M.buffer(ws, spec)
   local name = M.name(spec)
   local buf = vim.fn.bufadd(name)
   vim.b[buf].perforated_ws = ws.key
-  if not vim.api.nvim_buf_is_loaded(buf) then
+  local reuse = vim.api.nvim_buf_is_loaded(buf)
+  if not reuse then
     vim.fn.bufload(buf)
   end
   if vim.b[buf].perforated_spec ~= spec then
     M.read(buf) -- BufReadCmd didn't run (nested autocmd) or an earlier load was lost
+  elseif reuse and not M.immutable(spec) then
+    M.read(buf, { keep = true })
   end
   return buf
 end
 
 --- BufReadCmd handler.
 ---@param buf integer
-function M.read(buf)
+---@param opts? { keep: boolean }  keep the current content until the new content arrives
+function M.read(buf, opts)
   local spec = M.parse(vim.api.nvim_buf_get_name(buf))
   if not spec then
     return
   end
+  local keep = opts and opts.keep and vim.b[buf].perforated_loaded
+  -- Reads can overlap (a re-read while the first is in flight): only the newest one fills.
+  local gen = (vim.b[buf].perforated_read_gen or 0) + 1
+  vim.b[buf].perforated_read_gen = gen
   vim.b[buf].perforated_spec = spec
+  if keep then
+    return M._fetch(buf, spec, gen)
+  end
   vim.b[buf].perforated_loaded = false
   local wsmod = require('perforated.core.workspace')
   -- Workspace: set by whoever created the buffer, else the buffer the user came from, else
@@ -73,15 +95,23 @@ function M.read(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ('loading %s …'):format(spec) })
   vim.bo[buf].modifiable = false
   vim.bo[buf].readonly = true
-  local t0 = vim.uv.hrtime()
   local path = spec:gsub('[#@].*$', '')
   local ft = vim.filetype.match({ filename = path })
   if ft then
     vim.bo[buf].filetype = ft
   end
+  M._fetch(buf, spec, gen)
+end
 
+---@param buf integer
+---@param spec string
+---@param gen integer
+function M._fetch(buf, spec, gen)
+  local wsmod = require('perforated.core.workspace')
+  local ws = wsmod.get(vim.b[buf].perforated_ws) or wsmod.connection()
+  local t0 = vim.uv.hrtime()
   require('perforated.p4').print(ws, spec, {}, function(lines, err)
-    if not vim.api.nvim_buf_is_valid(buf) then
+    if not vim.api.nvim_buf_is_valid(buf) or vim.b[buf].perforated_read_gen ~= gen then
       return
     end
     require('perforated.core.debug').log(
