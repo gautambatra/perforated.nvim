@@ -677,6 +677,17 @@ T['stale']['a submit elsewhere raises one toast and statusline markers'] = funct
   H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
 end
 
+T['stale']['no polling while unfocused, even before any toast was shown'] = function()
+  H.eq(child.lua_get([[package.loaded['perforated.ui.toast'] == nil]]), true)
+  bob_submits()
+  child.cmd('doautocmd FocusLost')
+  child.lua([[require('perforated.poll').probe(require('perforated').workspace())]])
+  vim.uv.sleep(800)
+  H.eq(child.lua_get([[vim.g.perforated_status.stale or 0]]), 0) -- not polled
+  child.cmd('doautocmd FocusGained') -- catches up on return
+  wait([[vim.g.perforated_status.stale == 1]])
+end
+
 T['stale']['toast countdown starts only with user activity; unfocused toasts wait'] = function()
   child.lua([[require('perforated.ui.toast').show('t', { 'x' })]])
   vim.uv.sleep(600)
