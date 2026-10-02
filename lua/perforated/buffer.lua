@@ -198,7 +198,7 @@ function M.load_base(buf)
       local msg = 'could not load base for diff: ' .. tostring(err)
       if not warned[msg] then -- once per reason, like vim.notify_once
         warned[msg] = true
-        require('perforated.ui.toast').notify(msg, vim.log.levels.WARN)
+        require('perforated.ui.toast').notify(msg, vim.log.levels.WARN, { place = 'background' })
       end
       return
     end

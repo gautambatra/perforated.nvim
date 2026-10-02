@@ -89,7 +89,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 ## Stale / unresolved checks
 - Batched check **when a workspace activates** (idle), plus **manual `:P4 status` / `:P4 stale`**. Per-buffer fstat on open shows stale state for free.
 - **Background polling:** a cheap probe (`changes -m1 -s submitted <opened files>`) every **5 min** while Neovim has focus and files are opened (0 disables). It also runs on `FocusGained` (throttled), on entering a p4 buffer (throttled) and **always before submit**. The full fstat runs only when the probe sees a newer CL.
-- **Toast:** when an opened file *newly* becomes stale, a non-focusable bottom-right popup (stackable) lists `file #have→#head · CL · user` with `:P4 sync` / `:P4 stale` hints. It can be routed to `vim.notify`.
+- **Toast:** when an opened file *newly* becomes stale, a non-focusable popup at the bottom centre (stackable; *background* placement, see Feedback) lists `file #have→#head · CL · user` with `:P4 sync` / `:P4 stale` hints. It can be routed to `vim.notify`.
   - **Activity-gated dismissal:** the 8 s timer starts only at the user's first keypress or cursor move after the toast appears. Toasts raised while Neovim is unfocused are queued and shown on `FocusGained`.
   - **Polling only while focused** means a background tmux pane or tab doesn't poll; it catches up on return. Health checks that focus events work (tmux `focus-events on`).
   - **Nothing is lost if a toast is missed.** The persistent stale sign, the statusline markers and the `:P4 stale` quickfix list stay until you sync. `:P4 notifications` replays recent toasts, and submit always re-checks and warns.
@@ -125,6 +125,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 ## Feedback
 - Minimal notifications; `vim.b`/`vim.g` statusline vars + lualine component; `:P4 log` of every p4 command with timings.
 - **Everything follows `toast.backend`** *(2026-10-02)*: with pop-ups (the default) messages, confirmations (a centred single-key menu) and text prompts (a one-line input float) never use the command line. Long jobs show a pop-up when they start and when they finish, and live progress only in `:P4 jobs`. Slow-to-open views show a busy pop-up ("Opening diff view…") until they're ready. With `backend = 'notify'`: `vim.notify`, `confirm()`, `vim.ui.input` and 0.12 native progress messages. The `p4 login` password prompt always stays on the command line.
+- **Pop-up placement** *(2026-10-02)*: all centred horizontally; vertically by kind. **Centre:** blocking (busy "Opening diff view…", confirmations, text input, submit confirmation, "resolve now?" after sync). **Top** (two lines down, stacking downward): results of the action just taken, including a long job's *start* and its *failure*. **Bottom** (above the statusline, stacking upward): background news (newly stale files, diff base load failure, a long job's *successful* finish). Context menus stay where the context is: the check-out prompt and the `.` menu open at the cursor.
 
 ## Quickfix / location list
 Principle: **any list of files, revisions or lines can go to quickfix.** Workspace-wide lists go to the **quickfix list**. Lists about one file (its hunks, its history, lines from one CL) go to the **location list** of that window. Each entry can be switched to the other list.

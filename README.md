@@ -419,9 +419,19 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 #### Messages
 
 Everything the plugin tells you (results such as "created CL 123", p4 errors, "identical,
-nothing to diff", "nothing to resolve", …) appears as a small pop-up in the bottom-right
-corner instead of the command line. It never takes focus, never triggers a "Press ENTER"
-prompt, and its dismissal countdown (`toast.timeout`, 8 s) starts only once you press a key.
+nothing to diff", "nothing to resolve", …) appears as a small pop-up instead of the command
+line, centred horizontally. Where it sits says what it is:
+
+- **Near the top:** the result of something you just did ("created CL 123", "moved 2 files",
+  p4 errors from your command, a job that failed).
+- **At the bottom**, above the statusline: news you didn't ask for just then (newly stale
+  files, a job that finished successfully).
+- **In the middle:** things you're waiting on ("Opening diff view…"), confirmations and text
+  prompts.
+
+A pop-up never takes focus, never triggers a "Press ENTER" prompt, and its dismissal
+countdown (`toast.timeout`, 8 s) starts only once you press a key. The check-out prompt is
+the exception to the placement: it opens at the cursor, where you were typing.
 Errors have a red border. `:P4 notifications` shows the history and `:P4 dismiss` closes them.
 Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
 chooses, `<CR>` takes the default, `<Esc>` cancels) and text prompts (submit description,
@@ -438,7 +448,7 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 - **A cheap background check** runs every 5 minutes, only while Neovim has focus and you have
   files open. It also runs when focus returns and when you enter a Perforce buffer. The full
   status query only runs when the check sees a newer submit.
-- **When an opened file becomes stale**, a small corner notification lists the file, the new
+- **When an opened file becomes stale**, a small pop-up at the bottom lists the file, the new
   revision, the CL and who submitted it. It never takes focus.
   - Its dismissal timer starts only once you press a key.
   - Notifications raised while Neovim was unfocused wait until you come back.

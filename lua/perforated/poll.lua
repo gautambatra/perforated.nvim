@@ -106,7 +106,12 @@ local function toast_for(ws, recs, initial)
     else
       title = ('Perforce: %d opened file(s) now stale'):format(nstale)
     end
-    require('perforated.ui.toast').show(title, lines, vim.log.levels.WARN, { detail = true })
+    require('perforated.ui.toast').show(
+      title,
+      lines,
+      vim.log.levels.WARN,
+      { detail = true, place = 'background' }
+    )
   end)
 end
 

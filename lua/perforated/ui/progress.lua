@@ -69,9 +69,12 @@ function M.finish(p, msg, failed)
       source = 'perforated',
     })
   end
+  -- A failure needs attention like an action's result; success is background news (the job
+  -- may finish long after it was started).
   require('perforated.ui.toast').notify(
     ('[perforated] %s: %s'):format(p.title, msg),
-    failed and vim.log.levels.ERROR or vim.log.levels.INFO
+    failed and vim.log.levels.ERROR or vim.log.levels.INFO,
+    { place = failed and 'action' or 'background' }
   )
 end
 
