@@ -633,7 +633,8 @@ why keys, menus and help never disagree.
    `FileChangedRO` (for `allwrite` workspaces the plugin watches the `modified` flag instead).
 2. `checkout.on_first_change` clears `readonly` (so Vim doesn't show W10), lets the keystroke
    through, and schedules the **check-out menu** (`checkout_prompt.lua`): `<CR>` the sticky or
-   default changelist, `c` pick one, `n` new, `A` always, `s` skip, `S` never. Keys typed
+   default changelist, `c` pick one, `n` new, `A` always, `s` skip (for add: this file, for
+   the session), `S` never. Keys typed
    during the first 300 ms (`checkout.prompt_grace`) are treated as typing, not choices, and
    replayed.
 3. The choice runs `p4 edit` asynchronously. If you `:w` while it's in flight, `BufWritePre`
@@ -882,8 +883,13 @@ The check-out flow in [§18.4](#184-you-start-typing-in-an-unopened-file), add-o
 (`checkout.add_on_write`), and the `edit`/`add`/`revert` operations used by every view and
 command (each reports errors, refreshes affected buffers and emits `Changed`). Global hooks
 are installed once and look up tracked buffers. `checkout.dirs` restricts automatic
-behaviour to some directories. The prompt and changelist picker live in `checkout_prompt.lua`
-so the activation path doesn't load UI code.
+behaviour to some directories. `edit` and `add` show a centred `toast.busy` pop-up while p4
+runs. The write hooks compare the file written (`ev.match`) with the buffer's path: `:w
+other.c` doesn't touch the buffer's file, and offers to add `other.c` instead
+(`checkout_prompt.add_other`, which fstats it first). `M._session.skip_files` holds the files
+the add prompt's `s` silenced for the session. The prompt (which can ask about a buffer or a
+bare path) and changelist picker live in `checkout_prompt.lua` so the activation path doesn't
+load UI code.
 
 #### `poll.lua`
 Stale/unresolved detection ([§18.6](#186-stale-files)). It tracks focus itself

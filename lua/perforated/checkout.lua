@@ -3,7 +3,8 @@
 --- Flow for an unopened depot file (read-only on disk with `noallwrite`):
 ---   first change → FileChangedRO (or the 'modified' flag for allwrite) → clear 'readonly' so Vim
 ---   doesn't warn → the change goes through → menu: <CR> sticky/default CL · c pick · n new ·
----   A always (session) · s skip (buffer) · S never (session) → async `p4 edit` → refresh.
+---   A always (session) · s skip (buffer; for add: this file, session) · S never (session) →
+---   async `p4 edit` → refresh.
 ---   BufWritePre waits (bounded) for an in-flight edit so the write never races it.
 
 local p4 = require('perforated.p4')
@@ -21,7 +22,9 @@ local M = {}
 ---@field restore fun()?     undo an optimistic chmod (on_write mode) if the edit fails
 
 local cs = {} ---@type table<integer, perforated.CheckoutState>
-local session = { never = false, auto = false } -- per Neovim session
+-- Per Neovim session: never ask, always use the target, and files not to ask about again
+-- (key → true; "don't ask again for this file" in the add prompt).
+local session = { never = false, auto = false, skip_files = {} }
 local group = vim.api.nvim_create_augroup('perforated.checkout', { clear = true })
 
 local function notify(msg, level)
@@ -142,6 +145,18 @@ local function optimistic_writable(paths)
   end
 end
 
+--- "Checking out a.c…" in the middle of the screen while p4 works (it can take a moment, and
+--- nothing else shows that something is happening). Returns the closer.
+---@param fmt_one string   e.g. 'Checking out %s…'
+---@param fmt_many string  e.g. 'Checking out %d files…'
+---@param paths string[]
+---@return fun()
+local function busy(fmt_one, fmt_many, paths)
+  local msg = #paths == 1 and fmt_one:format(vim.fn.fnamemodify(paths[1], ':t'))
+    or fmt_many:format(#paths)
+  return require('perforated.ui.toast').busy(msg)
+end
+
 --- p4 edit files into a changelist (nil/'default' = default CL).
 ---@param ws perforated.Workspace
 ---@param paths string[]
@@ -153,7 +168,9 @@ function M.edit(ws, paths, cl, cb)
     state(b).pending = true
   end
   local restore = optimistic_writable(paths)
+  local done = busy('Checking out %s…', 'Checking out %d files…', paths)
   p4.edit(ws, paths, cl, function(res)
+    done()
     for _, b in ipairs(bufs) do
       state(b).pending = false
     end
@@ -196,7 +213,9 @@ end
 ---@param cb fun(ok: boolean)?
 function M.add(ws, paths, cl, cb)
   local bufs = bufs_for(ws, paths)
+  local done = busy('Opening %s for add…', 'Opening %d files for add…', paths)
   p4.add(ws, paths, cl, function(res)
+    done()
     local ok = #res.records > 0 and #res.errors == 0
     report('add', res, #res.records)
     changed(ws)
@@ -355,12 +374,25 @@ function M.on_status(buf, prev, new)
   end
 end
 
+--- The file a write goes to, when it isn't the buffer's own (`:w other.c` writes there but
+--- the buffer keeps its name).
+---@param st perforated.BufState
+---@param ev table  autocmd event (`match` is the full name of the file written)
+---@return string?
+local function other_target(st, ev)
+  local target = ev and ev.match and ev.match ~= '' and vim.fs.normalize(ev.match)
+  if target and target ~= vim.fs.normalize(st.path) then
+    return target
+  end
+end
+
 --- Block (bounded) until an in-flight edit finishes; check out on write when configured.
 ---@param buf integer
-local function before_write(buf)
+---@param ev table
+local function before_write(buf, ev)
   local st = require('perforated.buffer').get(buf)
   local c = state(buf)
-  if not st then
+  if not st or other_target(st, ev) then
     return
   end
   local cfg = config.get().checkout
@@ -396,10 +428,24 @@ local function before_write(buf)
 end
 
 ---@param buf integer
-local function after_write(buf)
+---@param ev table
+local function after_write(buf, ev)
   local st = require('perforated.buffer').get(buf)
+  if not st then
+    return
+  end
+  local other = other_target(st, ev)
+  if other then
+    return require('perforated.checkout_prompt').add_other(other)
+  end
   local c = state(buf)
-  if not st or st.status ~= 'new' or c.skip or session.never or not allowed(st.path) then
+  if
+    st.status ~= 'new'
+    or c.skip
+    or session.never
+    or session.skip_files[st.key]
+    or not allowed(st.path)
+  then
     return
   end
   local mode = config.get().checkout.add_on_write
@@ -431,7 +477,7 @@ function M.attach(_)
       group = group,
       callback = function(ev)
         if tracked(ev.buf) then
-          fn(ev.buf)
+          fn(ev.buf, ev)
         end
       end,
     })
@@ -494,8 +540,9 @@ function M.attach(_)
   })
 end
 
---- Session-wide prompt switches (never ask / always use the target).
+--- Session-wide prompt switches (never ask / always use the target / files not to ask about).
 M._session = session
+M._allowed = allowed
 
 --- A buffer's check-out state (also used by checkout_prompt).
 function M._state(buf)
@@ -505,7 +552,7 @@ end
 --- Test helper.
 function M._reset()
   cs = {}
-  session.never, session.auto = false, false
+  session.never, session.auto, session.skip_files = false, false, {}
 end
 
 return M

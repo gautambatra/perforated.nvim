@@ -247,6 +247,86 @@ T['checkout']['new file: add prompt on write'] = function()
   )
 end
 
+T['checkout']['add prompt: s = do not ask again for this file, even after reopening'] = function()
+  edit('new.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'fresh' })
+  child.cmd('write')
+  wait_prompt()
+  child.type_keys('s')
+  H.eq(child.lua_get([[require('perforated.ui.float').active]]), vim.NIL)
+  -- Wiped and opened again (a new buffer): still not asked.
+  child.cmd('bwipeout!')
+  edit('new.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'fresh', 'er' })
+  child.cmd('write')
+  vim.uv.sleep(500)
+  H.eq(child.lua_get([[require('perforated.ui.float').active]]), vim.NIL)
+  H.eq(opened()['//depot/new.txt'], nil)
+  -- Another new file is still asked about.
+  edit('other.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'x' })
+  child.cmd('write')
+  wait_prompt()
+  child.type_keys('<Esc>')
+end
+
+T['checkout'][':w <new name> offers to add the new file, not the buffer'] = function()
+  edit('new.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'fresh' })
+  child.cmd('write ' .. root .. '/copy.txt')
+  wait_prompt()
+  child.type_keys('<CR>')
+  H.eq(H.wait(child, 'false', 1500), false)
+  local o = opened()
+  H.eq(o['//depot/copy.txt'], 'default')
+  H.eq(o['//depot/new.txt'], nil)
+  H.eq(child.api.nvim_buf_get_name(0), root .. '/new.txt') -- the buffer is still new.txt
+
+  -- From a depot file too (it isn't 'new' itself): the written copy is offered.
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.cmd('write ' .. root .. '/copy2.txt')
+  wait_prompt()
+  child.type_keys('<CR>')
+  H.eq(H.wait(child, 'false', 1500), false)
+  H.eq(opened()['//depot/copy2.txt'], 'default')
+  H.eq(opened()['//depot/a.txt'], nil)
+end
+
+T['checkout']['check-out and add show a centred busy pop-up while p4 works'] = function()
+  child.lua([[
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    _G.busy = {}
+    toast.busy = function(msg)
+      local close = busy(msg)
+      local entry = { msg = msg, open = true }
+      table.insert(_G.busy, entry)
+      return function() entry.open = false; close() end
+    end
+  ]])
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('<CR>')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  edit('new.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.cmd('write')
+  wait_prompt()
+  child.type_keys('<CR>')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(child.lua_get('_G.busy'), {
+    { msg = 'Checking out a.txt…', open = false },
+    { msg = 'Opening new.txt for add…', open = false },
+  })
+end
+
 T['ops'] = MiniTest.new_set({
   hooks = {
     pre_case = function()
