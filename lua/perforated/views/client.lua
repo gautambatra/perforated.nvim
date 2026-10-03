@@ -56,6 +56,7 @@ local function file_node(view, rec, prefix)
     changed = require('perforated.modified').is_changed(ws, rec, d.modified, d.overlay)
   end
   local marker, row_hl = require('perforated.modified').marker(changed)
+  local stale = require('perforated.status').is_stale(rec)
   local text = {
     marker or { '' },
     {
@@ -66,13 +67,14 @@ local function file_node(view, rec, prefix)
       row_hl == 'PerforatedUnchanged' and row_hl or 'PerforatedAction',
     },
     { icon ~= '' and (icon .. ' ') or '', row_hl == 'PerforatedUnchanged' and row_hl or icon_hl },
-    { shown, row_hl or 'PerforatedPath' },
+    -- A stale file's path takes the colour of its "stale" badge, whatever its changed state.
+    { shown, stale and 'PerforatedStale' or row_hl or 'PerforatedPath' },
   }
   if rec.haveRev or rec.headRev then
     text[#text + 1] =
       { ('  #%s/#%s'):format(rec.haveRev or '-', rec.headRev or '-'), 'PerforatedRev' }
   end
-  if require('perforated.status').is_stale(rec) then
+  if stale then
     text[#text + 1] = { '  ' .. icons.glyph('stale') .. ' stale', 'PerforatedStale' }
   end
   if rec.unresolved then

@@ -204,6 +204,25 @@ T['client view']['a non-zero opened-file count uses PerforatedCount'] = function
   H.eq(groups['  (1)'], 'PerforatedCount')
 end
 
+T['client view']['the path of a stale file uses PerforatedStale; others keep their colour'] = function()
+  open_view()
+  local function groups(text)
+    local row = goto_line(text)
+    return child.lua_get(([[(function()
+      local v = require('perforated.views.client')._get(vim.b.perforated_ws)
+      local hls, line = v.tree.row_hls[%d], vim.api.nvim_buf_get_lines(0, %d, %d + 1, false)[1]
+      local out = {}
+      for i = 1, #hls, 3 do
+        out[line:sub(hls[i] + 1, hls[i + 1])] = hls[i + 2]
+      end
+      return out
+    end)()]]):format(row - 1, row - 1, row - 1))
+  end
+  wait([[(]] .. view_expr(root) .. [[).data.modified ~= nil]])
+  H.eq(groups('c.txt')['c.txt'], 'PerforatedStale') -- stale (bob submitted c.txt)
+  H.neq(groups('b.txt')['b.txt'], 'PerforatedStale')
+end
+
 T['client view']['Pending: default first, then the newest changelists'] = function()
   server:p4({ 'change', '-i' }, {
     client = 'alice_ws',
