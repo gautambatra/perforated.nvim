@@ -668,6 +668,9 @@ why keys, menus and help never disagree.
    unshelved elsewhere), does `poll.refresh` run the full `fstat -Ro //client/...` over opened
    files, update buffers and statuslines, raise a toast for newly stale files and emit
    `PerforatedChanged` (a visible client view refreshes).
+3. A third query, `p4 changes -s pending -l -c <client>`, is compared with the previous probe
+   (`change|desc|shelved`): a changelist created, deleted, described or shelved elsewhere only
+   emits `PerforatedChanged` (no fstat needed).
 
 ### 18.7 You open the client view (`:P4`)
 
