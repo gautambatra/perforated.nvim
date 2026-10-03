@@ -678,6 +678,9 @@ why keys, menus and help never disagree.
    Until then a section shows what the previous refresh found, or "loading…" the first time.
 3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop.
 4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view.
+   `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
+   revision, action, changelist, unresolved) differs from its previous refresh, so background
+   news reaches the view and the quickfix resolve lists without a timer of their own.
 
 ### 18.8 You step through a time-lapse
 

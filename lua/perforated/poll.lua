@@ -182,6 +182,25 @@ function M.refresh(ws, opts, cb)
     if opts.notify ~= false and #fresh > 0 then
       toast_for(ws, fresh, opts.initial)
     end
+    -- News for views and lists (a visible client view refreshes, resolve lists re-check): only
+    -- when the opened files' state really differs from the last refresh, never on the first.
+    local sig = {}
+    for _, r in ipairs(recs) do
+      sig[#sig + 1] = table.concat({
+        r.depotFile,
+        r.haveRev or '',
+        r.headRev or '',
+        r.action or '',
+        r.change or '',
+        r.unresolved and 'u' or '',
+      }, '|')
+    end
+    table.sort(sig)
+    local key = table.concat(sig, '\n')
+    if ws.poll_sig and ws.poll_sig ~= key then
+      require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
+    end
+    ws.poll_sig = key
     if cb then
       cb()
     end

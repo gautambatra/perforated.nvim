@@ -34,6 +34,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - On-demand (not default sections): lookup CL by number, submitted CLs of another user.
 - Actions: **direct single keys** + `?` floating help; **always-visible footer** with the most common keys for the item under cursor.
 - Freshness: **always fresh** (loading skeleton until data arrives; no stale-while-revalidate).
+- Refresh: after every plugin action (`PerforatedChanged`) and when the background poll's refresh sees the opened files change *(2026-10-03)*; no timer of its own; `gr` forces one. Stale files' paths use the stale colour.
 
 ## Diffs & gutter
 - Gutter base: **#have** (stale shown via separate indicator).
