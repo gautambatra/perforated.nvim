@@ -455,9 +455,11 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 
 #### Stale-file detection
 
-- **A cheap background check** runs every 30 seconds, only while Neovim has focus and you have
-  files open. It also runs when focus returns and when you enter a Perforce buffer. The full
-  status query only runs when the check sees a newer submit.
+- **A cheap background check** runs every 30 seconds, only while Neovim has focus. It also runs
+  when focus returns and when you enter a Perforce buffer. It asks two small questions: was a
+  newer revision of your files submitted, and did your opened files change elsewhere (opened,
+  reverted, moved or unshelved from another terminal or P4V)? Only then does the full status
+  query run and the client view refresh.
 - **When an opened file becomes stale**, a small pop-up at the bottom lists the file, the new
   revision, the CL and who submitted it. It never takes focus.
   - Its dismissal timer starts only once you press a key.

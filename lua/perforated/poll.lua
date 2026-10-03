@@ -1,8 +1,11 @@
 --- Stale / unresolved detection.
 ---
---- Perforce can't push notifications, so we poll cheaply:
----   probe = `changes -m1 -s submitted <opened + loaded files>` (one indexed query); only when
----   it reports a newer change than last time do we run the full `fstat -Ro //client/...`.
+--- Perforce can't push notifications, so we poll cheaply. A probe is two small queries:
+---   * `changes -m1 -s submitted <opened + loaded files>` (one indexed query): someone submitted
+---     a newer revision of a file we care about;
+---   * `opened` (this client's opened-file records): files were opened, reverted, moved or
+---     unshelved from elsewhere (another terminal, P4V), which no submit would reveal.
+--- Only when either shows news do we run the full `fstat -Ro //client/...`.
 --- Triggers: workspace activation (idle), a timer while focused (poll.interval, 0 = off),
 --- FocusGained (throttled) and BufEnter of a p4 buffer (per-buffer fstat, throttled).
 --- Newly stale opened files raise a toast (once per head revision).
@@ -220,6 +223,30 @@ function M.probe(ws)
       tostring(M.focused)
     )
     return
+  end
+  -- Opened files changed elsewhere (unshelve, edit, revert, reopen from another terminal)?
+  -- Compared with the last full refresh; works with nothing opened yet, too.
+  if ws.opened then
+    ws:run({ 'opened' }, { priority = 3, key = 'probe-opened:' .. ws.key }, function(res)
+      if #res.errors > 0 and #res.records == 0 then
+        return -- ("file(s) not opened" is a warning: an empty client is a valid answer)
+      end
+      local now, before = {}, {}
+      for _, r in ipairs(res.records) do
+        if r.depotFile then
+          now[#now + 1] = r.depotFile .. '|' .. (r.action or '') .. '|' .. (r.change or '')
+        end
+      end
+      for depot, r in pairs(ws.opened or {}) do
+        before[#before + 1] = depot .. '|' .. (r.action or '') .. '|' .. (r.change or '')
+      end
+      table.sort(now)
+      table.sort(before)
+      if table.concat(now, '\n') ~= table.concat(before, '\n') then
+        dbg.debug('poll', '%s probe: opened files changed elsewhere', ws.key)
+        M.refresh(ws)
+      end
+    end)
   end
   local files = watched_files(ws)
   if #files == 0 then

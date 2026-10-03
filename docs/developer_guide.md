@@ -660,11 +660,14 @@ why keys, menus and help never disagree.
 ### 18.6 Stale files
 
 1. `poll.probe` runs `p4 changes -m1 -s submitted <opened + loaded files>` — one indexed query
-   — on a timer while Neovim is focused (default 30 seconds), on `FocusGained` (throttled) and
-   when entering a Perforce buffer (throttled).
-2. Only when it reports a newer changelist than last time does `poll.refresh` run the full
-   `fstat -Ro //client/...` over opened files, update buffers and statuslines, and raise a
-   toast for newly stale files.
+   — and `p4 opened` (the client's opened-file records) on a timer while Neovim is focused
+   (default 30 seconds), on `FocusGained` (throttled) and when entering a Perforce buffer
+   (throttled).
+2. Only when the first reports a newer changelist than last time, or the second differs from
+   the last refresh's opened files (`depotFile|action|change`: opened, reverted, moved or
+   unshelved elsewhere), does `poll.refresh` run the full `fstat -Ro //client/...` over opened
+   files, update buffers and statuslines, raise a toast for newly stale files and emit
+   `PerforatedChanged` (a visible client view refreshes).
 
 ### 18.7 You open the client view (`:P4`)
 
