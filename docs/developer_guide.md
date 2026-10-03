@@ -1068,6 +1068,11 @@ The quickfix sink: `set(spec)` makes one `setqflist` call with a title and a
 `context = { perforated = true, kind }`; entries carry `user_data`; a `quickfixtextfunc`
 aligns columns; perforated lists get buffer-local keys in the qf window (`d` diff, `x` revert,
 `gm` move, `R` resolve, `gr` re-run the producer) plus syntax for the changed-file markers.
+Entries of kind `unresolved` end with a dimmed `RESOLVE_HINT` ("· R resolves", added by the
+text function, not stored). `prune_resolved()` runs 300 ms after the last `User
+PerforatedChanged`: for every list of kind `unresolved` / `sync_attention` in the quickfix
+history it fstats the entries' files (one call per workspace) and drops those no longer
+unresolved, matching entries by buffer.
 
 #### `ui/toast.lua`
 Pop-up notifications, non-focusable, centred horizontally, placed by kind (`place`):
