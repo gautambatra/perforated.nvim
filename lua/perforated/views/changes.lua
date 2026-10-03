@@ -223,6 +223,7 @@ local function actions(view)
       id = 'refresh',
       desc = 'Refresh',
       keys = { 'gr' },
+      p4v = { '<F5>' }, -- P4V's refresh key
       nomenu = true,
       run = function()
         reload(view)
