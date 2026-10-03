@@ -193,6 +193,10 @@ other layouts):
  d diff against have revision  D diff all files  …  . actions  ? help
 ```
 
+- **Staying current:** the view refreshes itself after every plugin action on the workspace
+  (check-out, revert, resolve, submit, sync…) and when the background check finds news (a file
+  became stale, someone resolved one…). There's no timer; `gr` (or `:P4` again) refreshes on
+  demand. A stale file's path is drawn in the stale colour.
 - **Sync CL:** the newest changelist your workspace has synced (`p4 -c <client> changes -m1
   #have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists (the default changelist first, then the newest) with their

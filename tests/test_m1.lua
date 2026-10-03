@@ -759,6 +759,20 @@ T['stale']['a submit elsewhere raises one toast and statusline markers'] = funct
   H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
 end
 
+T['stale']['a visible client view refreshes when the background check finds news'] = function()
+  child.cmd('P4')
+  local view =
+    [[require('perforated.views.client')._get(require('perforated.core.workspace').list()[1].key)]]
+  wait(('(%s or {}).data ~= nil and not (%s).loading'):format(view, view))
+  local text = ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n")'):format(
+    view
+  )
+  H.eq(child.lua_get(text .. ':find(" stale", 1, true)'), vim.NIL)
+  bob_submits()
+  child.lua([[require('perforated.poll').probe(require('perforated.core.workspace').list()[1])]])
+  wait(text .. ':find(" stale", 1, true) ~= nil')
+end
+
 T['stale']['no polling while unfocused, even before any toast was shown'] = function()
   H.eq(child.lua_get([[package.loaded['perforated.ui.toast'] == nil]]), true)
   bob_submits()
