@@ -983,7 +983,8 @@ one pass), `anchor`, `step`.
 
 #### `ops.lua`
 Shelve (`shelve -f`, confirmation before replacing), delete shelved files, unshelve (into the
-shelf's own changelist when it's yours, else a picked one; `-f` only after confirming),
+shelf's own changelist when it's yours, else a picked one; `-f` only after confirming) — each
+with a centred busy pop-up; shelve and unshelve move file content, so they have no call timeout;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
 quickfix), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
 reloads unmodified buffers without prompts; afterwards every unresolved file goes to quickfix

@@ -91,6 +91,13 @@ local function refresh(ws, paths)
   end
 end
 
+--- A centred busy pop-up while p4 works; returns the closer.
+---@param msg string
+---@return fun()
+local function busy(msg)
+  return require('perforated.ui.toast').busy(msg)
+end
+
 local function confirm(msg, choices, default)
   return require('perforated.ui.prompt').confirm(msg, choices or '&Yes\n&No', default or 2) == 1
 end
@@ -132,11 +139,17 @@ function M.shelve(ws, change, paths, cb)
       end
     end
     local args = { 'shelve', '-f', '-c', change }
-    local opts = {}
+    -- No call timeout: shelving uploads every file's content.
+    local opts = { timeout = 0 }
     if paths then
-      opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
+      opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths), timeout = 0 }
     end
+    local done = busy(
+      paths and ('Shelving %d file(s) in CL %s…'):format(#paths, change)
+        or ('Shelving CL %s…'):format(change)
+    )
     ws:run(args, opts, function(res)
+      done()
       co.report('shelve', res, #res.records)
       co.changed(ws)
       cb(#res.errors == 0 and #res.records > 0)
@@ -157,7 +170,9 @@ function M.delete_shelved(ws, change, depot_files, cb)
     return cb(false)
   end
   local args = vim.list_extend({ 'shelve', '-d', '-c', change }, depot_files or {})
+  local done = busy(('Deleting shelved files of CL %s…'):format(change))
   ws:run(args, {}, function(res)
+    done()
     if #res.errors > 0 then
       notify('delete shelved failed: ' .. res.errors[1], vim.log.levels.ERROR)
     else
@@ -183,7 +198,10 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       table.insert(args, 2, '-f')
     end
     vim.list_extend(args, depot_files or {})
-    ws:run(args, {}, function(res)
+    -- No call timeout: unshelving downloads every file's content.
+    local done = busy(('Unshelving CL %s…'):format(shelf))
+    ws:run(args, { timeout = 0 }, function(res)
+      done()
       local texts = messages(res)
       if #clobbered(res.errors) > 0 and not force then
         if

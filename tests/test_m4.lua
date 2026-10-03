@@ -88,6 +88,7 @@ T['m4'] = MiniTest.new_set({
 
 T['m4']['shelve (replace after confirm), delete shelved, unshelve into the same CL'] = function()
   setup()
+  H.record_busy(child)
   local cl = new_change('shelf work')
   p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
   H.write(root .. '/main/b.txt', 'b2\n')
@@ -127,6 +128,13 @@ T['m4']['shelve (replace after confirm), delete shelved, unshelve into the same 
   )
   wait('_G.r == true')
   H.eq(p4({ 'describe', '-S', '-s', cl }):find('//depot/main/b.txt#', 1, true), nil)
+  -- Each step showed a busy pop-up, closed when p4 was done.
+  H.eq(child.lua_get('_G.busy'), {
+    { msg = ('Shelving CL %s…'):format(cl), open = false },
+    { msg = ('Shelving CL %s…'):format(cl), open = false },
+    { msg = ('Unshelving CL %s…'):format(cl), open = false },
+    { msg = ('Deleting shelved files of CL %s…'):format(cl), open = false },
+  })
 end
 
 T['m4']['shelf vs workspace after a re-shelve shows the new shelved content'] = function()

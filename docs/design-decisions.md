@@ -18,7 +18,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 ## Check-out / add
 - Trigger: **first modification** of an unopened depot file (keystroke not blocked).
 - Prompt: **small floating menu** near cursor: `<CR>` default/sticky CL, `c` existing CL (picker), `n` new CL (inline description), `A` always use this target for the rest of the session without asking (added in M1 for `:bufdo`/macro edits across many files), `s` skip for buffer (in the **add** prompt: "don't ask again for this file", for the session, surviving close/reopen — 2026-10-02), `S` "don't ask for any file (this session)" — check-out and add prompts both stop.
-- While `p4 edit` / `p4 add` runs, a centred busy pop-up says so ("Checking out a.c…", "Opening a.c for add…").
+- While `p4 edit` / `p4 add` runs, a centred busy pop-up says so ("Checking out a.c…", "Opening a.c for add…"); likewise revert, deleting a changelist, shelve, unshelve and deleting shelved files.
 - `:w other.c` (the buffer keeps its name) offers to add `other.c`, the file actually written, not the buffer's file; check-out-on-write likewise acts only on writes to the buffer's own file.
 - **Keys typed right after the prompt appears are treated as text.** For `checkout.prompt_grace` (default 300 ms) keys aren't menu choices; they're replayed into the buffer afterwards, so typing `cat` can't select `n` by accident.
 - **No waiting on `:w`.** Choosing a target makes the file writable immediately (what `p4 edit` does anyway) and restores it if the edit fails. Neovim's read-only check (E505) runs before any write autocmd, so the write can't wait for the server.
