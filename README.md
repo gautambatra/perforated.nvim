@@ -455,7 +455,7 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 
 #### Stale-file detection
 
-- **A cheap background check** runs every 5 minutes, only while Neovim has focus and you have
+- **A cheap background check** runs every 30 seconds, only while Neovim has focus and you have
   files open. It also runs when focus returns and when you enter a Perforce buffer. The full
   status query only runs when the check sees a newer submit.
 - **When an opened file becomes stale**, a small pop-up at the bottom lists the file, the new
@@ -792,7 +792,7 @@ opts = {
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
   qf = { open = true }, -- open the quickfix window when a list has results
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
-  poll = { interval = 300, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
+  poll = { interval = 30, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
   toast = { timeout = 3000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
   statusline = {
     format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)
