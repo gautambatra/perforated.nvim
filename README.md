@@ -477,7 +477,8 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cursor. Files
 that need resolving end with "· R resolves": `R` resolves that file. Lists of files to resolve
 keep up with you: once a file is resolved (from the list, the client view, `:P4 resolve`, or
-reverted), its entry disappears, and the title says "all resolved" when none are left.
+reverted), its entry disappears; when none are left the title says "all resolved" and the
+quickfix window closes.
 
 #### Statusline
 

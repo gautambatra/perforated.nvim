@@ -398,6 +398,8 @@ T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = fu
   child.lua([[require('perforated.core.events').emit('Changed', {})]])
   wait([[#vim.fn.getqflist() == 0]])
   H.neq(child.lua_get([[vim.fn.getqflist({ title = 1 }).title]]):find('all resolved$'), nil)
+  -- Empty now: its window closes (it would keep the focus and the space).
+  wait([[vim.fn.getqflist({ winid = 0 }).winid == 0]])
 end
 
 T['m4']['reconcile scans only the configured paths; p changes them'] = function()

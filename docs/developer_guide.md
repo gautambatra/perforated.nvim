@@ -1075,7 +1075,8 @@ Entries of kind `unresolved` end with a dimmed `RESOLVE_HINT` ("· R resolves", 
 text function, not stored). `prune_resolved()` runs 300 ms after the last `User
 PerforatedChanged`: for every list of kind `unresolved` / `sync_attention` in the quickfix
 history it fstats the entries' files (one call per workspace) and drops those no longer
-unresolved, matching entries by buffer.
+unresolved, matching entries by buffer; when the current list is left with no entries its
+window is closed (`cclose`), so an empty window doesn't keep the focus and the space.
 
 #### `ui/toast.lua`
 Pop-up notifications, non-focusable, centred horizontally, placed by kind (`place`):
