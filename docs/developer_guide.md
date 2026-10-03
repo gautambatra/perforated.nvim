@@ -1412,7 +1412,8 @@ fstat cache — the first time it ran.
 | Time-lapse step, 20k lines × 200 revisions | 5 ms |
 
 Timings take the **best of several runs** (and, for pure-Lua loops, the best of three fresh
-Neovim processes) to filter out machine noise; budgets are about the plugin's cost, not the
+Neovim processes) to filter out machine noise; the memory figures are the best of three fresh
+Neovims too (a single sample also counts whatever async work is still alive); budgets are about the plugin's cost, not the
 CI machine's mood. The time-lapse benchmark also prints a breakdown (transition / edits /
 decorate).
 
