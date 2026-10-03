@@ -91,7 +91,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 
 ## Stale / unresolved checks
 - Batched check **when a workspace activates** (idle), plus **manual `:P4 status` / `:P4 stale`**. Per-buffer fstat on open shows stale state for free.
-- **Background polling:** a cheap probe (`changes -m1 -s submitted <opened files>`) every **5 min** while Neovim has focus and files are opened (0 disables). It also runs on `FocusGained` (throttled), on entering a p4 buffer (throttled) and **always before submit**. The full fstat runs only when the probe sees a newer CL.
+- **Background polling:** a cheap probe (`changes -m1 -s submitted <opened files>`) every **30 s** (was 5 min until 2026-10-03; it's one indexed query) while Neovim has focus and files are opened (0 disables). It also runs on `FocusGained` (throttled), on entering a p4 buffer (throttled) and **always before submit**. The full fstat runs only when the probe sees a newer CL.
 - **Toast:** when an opened file *newly* becomes stale, a non-focusable popup at the bottom centre (stackable; *background* placement, see Feedback) lists `file #have→#head · CL · user` with `:P4 sync` / `:P4 stale` hints. It can be routed to `vim.notify`.
   - **Activity-gated dismissal:** the 3 s timer (`toast.timeout`) starts only at the user's first keypress or cursor move after the toast appears. Toasts raised while Neovim is unfocused are queued and shown on `FocusGained`.
   - **Polling only while focused** means a background tmux pane or tab doesn't poll; it catches up on return. Health checks that focus events work (tmux `focus-events on`).
