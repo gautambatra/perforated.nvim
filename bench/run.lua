@@ -109,8 +109,15 @@ do
     c.stop()
     return one - before, (many - one) / 100
   end
-  local d_one, d_per = measure(false)
-  local a_one, a_per = measure(true)
+  -- Best of 3 fresh Neovims each: a single sample also catches whatever async work (p4 output
+  -- buffers, pending callbacks) happens to be alive, which swings it by ±15 KB.
+  local d_one, d_per, a_one, a_per = math.huge, math.huge, math.huge, math.huge
+  for _ = 1, 3 do
+    local one, per = measure(false)
+    d_one, d_per = math.min(d_one, one), math.min(d_per, per)
+    one, per = measure(true)
+    a_one, a_per = math.min(a_one, one), math.min(a_per, per)
+  end
   record('Lua memory: active workspace (code+state)', a_one - d_one, 'KB', 250)
   record('Lua memory: per attached buffer', math.max(a_per - d_per, 0), 'KB', 2)
 end
