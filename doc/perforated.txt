@@ -183,7 +183,7 @@ Client view (:P4)                                     *perforated-client-view*
   [[              Previous section
   g1 <C-1>        Go to Pending
   g2 <C-2>        Go to Submitted
-  gr              Refresh
+  gr <F5>         Refresh
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu
@@ -236,7 +236,7 @@ Describe buffer (:P4 describe)                           *perforated-describe*
 
   l <Tab>         Expand / toggle
   h <S-Tab>       Collapse
-  gr              Refresh
+  gr <F5>         Refresh
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu
@@ -267,7 +267,7 @@ File history (:P4 filelog)                                *perforated-history*
 
   l <Tab>              Expand / toggle
   h <S-Tab>            Collapse
-  gr                   Refresh
+  gr <F5>              Refresh
   q <C-w>              Close
   ?                    Help
   . <RightMouse> <CR>  Action menu
@@ -340,7 +340,7 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
   K               View changelist
   y               Copy CL number
   gn              Load more
-  gr              Refresh
+  gr <F5>         Refresh
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu

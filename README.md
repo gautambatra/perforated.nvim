@@ -219,7 +219,7 @@ other layouts):
   in Neovim.
 - **Keys:**
   - Vim-style keys, plus P4V's shortcuts (`<C-d>` diff, `<C-r>` revert, `<C-n>` new CL,
-    `<C-w>` close, `<C-1>`/`<C-2>` jump to a section).
+    `<C-w>` close, `<F5>` refresh, `<C-1>`/`<C-2>` jump to a section).
   - `.` or right-click opens a menu of what you can do with the line under the cursor
     (`<Space>` is left alone because many people use it as their leader key; remap with
     `keys = { menu = { '<your key>' } }`).

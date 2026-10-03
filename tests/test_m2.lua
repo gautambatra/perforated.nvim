@@ -297,6 +297,21 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.expect.no_equality(footer:find('x revert', 1, true), nil)
 end
 
+T['client view']['<F5> refreshes the view (like gr)'] = function()
+  open_view()
+  H.eq(has_line('b.txt'), true)
+  -- Reverted outside the plugin: nothing tells the view, until <F5>.
+  server:p4({ 'revert', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  vim.uv.sleep(300)
+  H.eq(has_line('b.txt'), true)
+  child.type_keys('<F5>')
+  wait(
+    ('not table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("b.txt", 1, true)'):format(
+      view_expr(root)
+    )
+  )
+end
+
 T['client view']['h/l fold, and folds survive refresh'] = function()
   open_view()
   goto_line('CL 2  Fix parser')
