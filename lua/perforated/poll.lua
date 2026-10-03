@@ -4,8 +4,11 @@
 ---   * `changes -m1 -s submitted <opened + loaded files>` (one indexed query): someone submitted
 ---     a newer revision of a file we care about;
 ---   * `opened` (this client's opened-file records): files were opened, reverted, moved or
----     unshelved from elsewhere (another terminal, P4V), which no submit would reveal.
---- Only when either shows news do we run the full `fstat -Ro //client/...`.
+---     unshelved from elsewhere (another terminal, P4V), which no submit would reveal;
+---   * `changes -s pending -l -c <client>` (this client's pending changelists): a changelist
+---     created, deleted, described or shelved elsewhere, with the opened files unchanged.
+--- A newer submit or different opened files run the full `fstat -Ro //client/...`; different
+--- pending changelists only announce a change (a visible client view refreshes).
 --- Triggers: workspace activation (idle), a timer while focused (poll.interval, 0 = off),
 --- FocusGained (throttled) and BufEnter of a p4 buffer (per-buffer fstat, throttled).
 --- Newly stale opened files raise a toast (once per head revision).
@@ -247,6 +250,32 @@ function M.probe(ws)
         M.refresh(ws)
       end
     end)
+  end
+  -- Pending changelists changed elsewhere (new, deleted, description, shelf)?
+  local client = ws:client()
+  if client then
+    ws:run(
+      { 'changes', '-s', 'pending', '-l', '-c', client },
+      { priority = 3, key = 'probe-pending:' .. ws.key },
+      function(res)
+        if not res.ok then
+          return
+        end
+        local sig = {}
+        for _, r in ipairs(res.records) do
+          if r.change then
+            sig[#sig + 1] = table.concat({ r.change, r.desc or '', r.shelved and 's' or '' }, '|')
+          end
+        end
+        table.sort(sig)
+        local key = table.concat(sig, '\n')
+        if ws.pending_sig and ws.pending_sig ~= key then
+          dbg.debug('poll', '%s probe: pending changelists changed elsewhere', ws.key)
+          require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
+        end
+        ws.pending_sig = key
+      end
+    )
   end
   local files = watched_files(ws)
   if #files == 0 then
