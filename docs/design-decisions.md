@@ -21,6 +21,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - While `p4 edit` / `p4 add` runs, a centred busy pop-up says so ("Checking out a.c…", "Opening a.c for add…"); likewise revert, deleting a changelist, shelve, unshelve and deleting shelved files.
 - `:w other.c` (the buffer keeps its name) offers to add `other.c`, the file actually written, not the buffer's file; check-out-on-write likewise acts only on writes to the buffer's own file.
 - **Keys typed right after the prompt appears are treated as text.** For `checkout.prompt_grace` (default 300 ms) keys aren't menu choices; they're replayed into the buffer afterwards, so typing `cat` can't select `n` by accident.
+- **No permission warnings.** A check-out only changes the file's permissions; Neovim's "file changed" warnings for that (W16, and W12 when there are unsaved edits) are silenced. A change of the file's modification time or size still warns. *(W12 case fixed 2026-10-04.)*
 - **No waiting on `:w`.** Choosing a target makes the file writable immediately (what `p4 edit` does anyway) and restores it if the edit fails. Neovim's read-only check (E505) runs before any write autocmd, so the write can't wait for the server.
 - **Sticky CL per session**: last chosen CL becomes the `<CR>` default; resets on submit/delete of that CL.
 - Option: auto-checkout on write (uses sticky CL).

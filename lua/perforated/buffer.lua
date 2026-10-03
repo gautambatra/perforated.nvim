@@ -29,6 +29,8 @@ local M = {}
 ---@field gen integer         diff generation (drops stale async results)
 ---@field timer uv.uv_timer_t?
 ---@field status_sig string? what the statusline last showed (status.lua skips no-op updates)
+---@field disk { sec: integer, nsec: integer, size: integer }? the file's mtime and size when last
+---  read or written (checkout.lua: tells a permission-only change from a real one)
 
 local states = {} ---@type table<integer, perforated.BufState>
 local warned = {} ---@type table<string, true>  messages shown once per session

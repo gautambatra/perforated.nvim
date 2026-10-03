@@ -640,7 +640,11 @@ why keys, menus and help never disagree.
 3. The choice runs `p4 edit` asynchronously. If you `:w` while it's in flight, `BufWritePre`
    waits (bounded) for it. The file is made writable optimistically because Neovim checks
    write permission before any write autocmd runs.
-4. `FileChangedShell` for a mode-only change (p4 flipped the permission bit) is silenced.
+4. `FileChangedShell` for a permission-only change (p4 flipped the permission bit) is
+   silenced. Neovim reports it as `mode`, but as `conflict` (W12) when the buffer has unsaved
+   edits — the usual case right after a check-out — so the plugin compares the file's mtime and
+   size with what it recorded when the buffer was read or written (`BufState.disk`, one
+   `stat`): unchanged means only the permissions moved. A real change still asks.
 
 ### 18.5 A server outage
 

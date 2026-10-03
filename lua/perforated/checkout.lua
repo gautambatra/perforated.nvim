@@ -465,12 +465,51 @@ local function after_write(buf, ev)
   end)
 end
 
+--- Remember the file's modification time and size as of now (read or written): the same moment
+--- Neovim records its own, so a later "file changed" event can be checked against it.
+---@param buf integer
+local function remember_disk(buf)
+  local st = require('perforated.buffer').get(buf)
+  local s = st and vim.uv.fs_stat(st.path)
+  if st then
+    st.disk = s and { sec = s.mtime.sec, nsec = s.mtime.nsec, size = s.size } or nil
+  end
+end
+
+--- Is a "file changed" event for this buffer only about the file's permissions?
+--- `p4 edit` / `revert` flip them. Neovim reports that as `mode`, but as `conflict` (W12, "the
+--- buffer was changed in Vim as well") when the buffer has unsaved edits, which is the usual
+--- case right after a check-out. So: same modification time and size as when the buffer was
+--- read or last written → only the permissions changed. One stat; the file isn't read.
+---@param buf integer
+---@param reason string  v:fcs_reason
+---@return boolean
+function M._metadata_only(buf, reason)
+  local st = require('perforated.buffer').get(buf)
+  if not st then
+    return false
+  end
+  if reason == 'mode' then
+    return true
+  end
+  if reason ~= 'conflict' and reason ~= 'changed' then
+    return false
+  end
+  local was, s = st.disk, vim.uv.fs_stat(st.path)
+  return was ~= nil
+    and s ~= nil
+    and s.size == was.size
+    and s.mtime.sec == was.sec
+    and s.mtime.nsec == was.nsec
+end
+
 local did_autocmds = false
 
 --- Install the (global) hooks once; they only act on buffers perforated tracks, so the
 --- per-buffer cost is a table lookup rather than six autocmds and closures per buffer.
----@param _ integer buffer (kept for the call site; hooks are global)
-function M.attach(_)
+---@param attached integer the buffer being attached
+function M.attach(attached)
+  remember_disk(attached) -- attached right after Neovim read the file
   if did_autocmds then
     return
   end
@@ -518,11 +557,14 @@ function M.attach(_)
     group = group,
     callback = function(ev)
       -- `p4 edit` flips the file's mode bit: never bother the user about that.
-      vim.v.fcs_choice = (tracked(ev.buf) and vim.v.fcs_reason == 'mode') and '' or 'ask'
+      vim.v.fcs_choice = M._metadata_only(ev.buf, vim.v.fcs_reason) and '' or 'ask'
     end,
   })
   on('BufWritePre', before_write)
-  on('BufWritePost', after_write)
+  on('BufWritePost', function(b, ev)
+    remember_disk(b)
+    after_write(b, ev)
+  end)
   -- Re-reading the file (:e!) starts over: a skipped/cancelled buffer prompts again.
   -- A file made writable for check-out on write, but never written, goes back to read-only.
   local function drop(buf)
@@ -534,7 +576,10 @@ function M.attach(_)
       cs[buf] = nil
     end
   end
-  on('BufReadPost', drop)
+  on('BufReadPost', function(b)
+    remember_disk(b)
+    drop(b)
+  end)
   vim.api.nvim_create_autocmd('BufWipeout', {
     group = group,
     callback = function(ev)
