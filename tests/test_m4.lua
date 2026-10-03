@@ -375,8 +375,15 @@ T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = fu
   )
   table.sort(qf)
   H.eq(qf, { root .. '/main/a.txt', root .. '/main/b.txt' })
-  -- R on an entry resolves it (clean merge for a.txt)
+  -- Each entry says R resolves it.
   child.cmd('copen')
+  H.eq(
+    vim.tbl_map(function(l)
+      return vim.endswith(l, ' · R resolves')
+    end, child.api.nvim_buf_get_lines(0, 0, -1, false)),
+    { true, true }
+  )
+  -- R on an entry resolves it (clean merge for a.txt) and the entry leaves the list.
   child.api.nvim_win_set_cursor(0, { 1, 0 })
   child.type_keys('R')
   H.eq(
@@ -385,6 +392,12 @@ T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = fu
     end, 100),
     true
   )
+  wait([[#vim.fn.getqflist() == 1]])
+  -- Resolved elsewhere (here: outside the plugin, then any change event): the list follows.
+  p4({ 'resolve', '-ay', root .. '/main/b.txt' })
+  child.lua([[require('perforated.core.events').emit('Changed', {})]])
+  wait([[#vim.fn.getqflist() == 0]])
+  H.neq(child.lua_get([[vim.fn.getqflist({ title = 1 }).title]]):find('all resolved$'), nil)
 end
 
 T['m4']['reconcile scans only the configured paths; p changes them'] = function()

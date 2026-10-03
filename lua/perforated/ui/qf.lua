@@ -3,7 +3,11 @@
 --- * One `setqflist` call per list; `title` + `context = { perforated = true, kind }`.
 --- * Entries carry `user_data = { depotFile, rev, change, action, kind }`.
 --- * `quickfixtextfunc` aligns columns without enlarging stored entries.
---- * In a perforated list's window: `gr` re-runs the producer; `d` diff; `x` revert.
+--- * In a perforated list's window: `gr` re-runs the producer; `d` diff; `x` revert; `R`
+---   resolve (entries that need it end with a dimmed "· R resolves").
+--- * Lists of files to resolve stay current: after any change (`User PerforatedChanged`, e.g. a
+---   resolve from the client view) their files are re-checked with one fstat per workspace
+---   and entries that no longer need resolving are dropped.
 --- * Opening policy: open when non-empty and `qf.open` (default); otherwise a count is shown.
 
 local M = {}
@@ -91,7 +95,10 @@ function M.header(text)
   return { text = text, valid = 0, user_data = { kind = 'header' } }
 end
 
---- quickfixtextfunc: `relative/path:lnum │ text`, headers verbatim.
+M.RESOLVE_HINT = ' · R resolves'
+
+--- quickfixtextfunc: `relative/path:lnum │ text`, headers verbatim; entries to resolve end with
+--- the `R` hint.
 function M.textfunc(info)
   local list = info.quickfix == 1 and vim.fn.getqflist({ id = info.id, items = 1 }).items
     or vim.fn.getloclist(info.winid, { id = info.id, items = 1 }).items
@@ -113,10 +120,12 @@ function M.textfunc(info)
   for i = info.start_idx, info.end_idx do
     local it = list[i]
     if names[i] then
-      out[#out + 1] = ('%s%s │ %s'):format(
+      local ud = it.user_data
+      out[#out + 1] = ('%s%s │ %s%s'):format(
         names[i],
         (' '):rep(math.max(width - vim.fn.strdisplaywidth(names[i]), 0)),
-        it.text
+        it.text,
+        type(ud) == 'table' and ud.kind == 'unresolved' and M.RESOLVE_HINT or ''
       )
     else
       out[#out + 1] = it.text
@@ -187,6 +196,7 @@ on_qf_buf = function(buf)
     local g = require('perforated.ui.icons').glyph('modified')
     vim.cmd(('syntax match PerforatedModified /│ \\zs%s/'):format(vim.fn.escape(g, '/\\*')))
     vim.cmd([[syntax match PerforatedUnchanged /^.*│ · .*$/]])
+    vim.cmd(([[syntax match PerforatedDim /%s$/]]):format(M.RESOLVE_HINT))
   end)
   local function entry_ws()
     local it = entry_under_cursor()
@@ -251,6 +261,72 @@ on_qf_buf = function(buf)
   end, 'perforated: diff entry')
 end
 
+-- List kinds whose `unresolved` entries are pruned once the file no longer needs resolving.
+local RESOLVE_KINDS = { unresolved = true, sync_attention = true }
+
+--- Re-check the files of every quickfix list of files to resolve (the whole quickfix history)
+--- and drop entries that no longer need resolving (resolved elsewhere, reverted…). One fstat
+--- per workspace and list; entries whose state is unknown are kept.
+function M.prune_resolved()
+  local p4 = require('perforated.p4')
+  local last = vim.fn.getqflist({ nr = '$' }).nr
+  for nr = 1, last do
+    local l = vim.fn.getqflist({ nr = nr, id = 0, context = 1, items = 1 })
+    local ctx = l.context
+    if type(ctx) == 'table' and ctx.perforated and RESOLVE_KINDS[ctx.kind] then
+      local by_ws = {} ---@type table<perforated.Workspace, string[]>
+      local buf_of = {} ---@type table<string, integer>  path → the entry's buffer
+      for _, it in ipairs(l.items) do
+        local ud = it.user_data
+        if type(ud) == 'table' and ud.kind == 'unresolved' and it.bufnr > 0 then
+          local path = vim.api.nvim_buf_get_name(it.bufnr)
+          local ws = require('perforated.core.activation').for_dir(vim.fs.dirname(path))
+          if ws then
+            by_ws[ws] = by_ws[ws] or {}
+            table.insert(by_ws[ws], path)
+            buf_of[path] = it.bufnr
+          end
+        end
+      end
+      for ws, paths in pairs(by_ws) do
+        p4.fstat(ws, paths, { priority = 3 }, function(r)
+          local done = {} -- bufnr → true: no longer needs resolving
+          for _, path in ipairs(paths) do
+            local rec = r.files[p4.key(ws, path)]
+            if rec and not rec.unresolved then
+              done[buf_of[path]] = true
+            end
+          end
+          if next(done) == nil then
+            return
+          end
+          -- Read the list again: it may have changed meanwhile (match entries by buffer).
+          local cur = vim.fn.getqflist({ id = l.id, items = 1, title = 1 })
+          if not cur.items then
+            return -- the list is gone
+          end
+          local keep, left = {}, 0
+          for _, it in ipairs(cur.items) do
+            local ud = it.user_data
+            local resolvable = type(ud) == 'table' and ud.kind == 'unresolved'
+            if not (resolvable and done[it.bufnr]) then
+              keep[#keep + 1] = it
+              left = left + (resolvable and 1 or 0)
+            end
+          end
+          local title = cur.title
+          if left == 0 and not title:find(' · all resolved$') then
+            title = title .. ' · all resolved'
+          end
+          vim.fn.setqflist({}, 'r', { id = l.id, items = keep, title = title })
+        end)
+      end
+    end
+  end
+end
+
+local prune_timer ---@type uv.uv_timer_t?
+
 local did_setup = false
 
 function M.setup()
@@ -261,8 +337,19 @@ function M.setup()
   -- 'quickfixtextfunc' can only name a function reachable from Vimscript (v:lua.<global>).
   -- selene: allow(global_usage)
   _G.PerforatedQfText = M.textfunc
+  local group = vim.api.nvim_create_augroup('perforated.qf', { clear = true })
+  -- Changes come in bursts (resolve, refresh, revert…): re-check once things settle.
+  vim.api.nvim_create_autocmd('User', {
+    group = group,
+    pattern = 'PerforatedChanged',
+    callback = function()
+      prune_timer = prune_timer or vim.uv.new_timer()
+      prune_timer:stop()
+      prune_timer:start(300, 0, vim.schedule_wrap(M.prune_resolved))
+    end,
+  })
   vim.api.nvim_create_autocmd('FileType', {
-    group = vim.api.nvim_create_augroup('perforated.qf', { clear = true }),
+    group = group,
     pattern = 'qf',
     callback = function(ev)
       vim.schedule(function()

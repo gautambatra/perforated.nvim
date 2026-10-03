@@ -234,7 +234,7 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       end
       if #resolve > 0 then
         require('perforated.ui.qf').set({
-          title = 'P4 unshelve · must resolve',
+          title = 'P4 unshelve · must resolve (R resolves)',
           kind = 'unresolved',
           items = resolve,
         })

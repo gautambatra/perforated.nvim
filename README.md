@@ -470,7 +470,10 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 | `:P4 hunks` | Every hunk across all opened files, found with one batched `p4 print` |
 | `:P4 hunks %` | Hunks of the current file, in the location list |
 
-Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cursor.
+Inside these lists, `gr` re-runs the query and `d` diffs the entry under the cursor. Files
+that need resolving end with "· R resolves": `R` resolves that file. Lists of files to resolve
+keep up with you: once a file is resolved (from the list, the client view, `:P4 resolve`, or
+reverted), its entry disappears, and the title says "all resolved" when none are left.
 
 #### Statusline
 
