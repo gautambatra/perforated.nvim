@@ -224,13 +224,26 @@ end
 T['checkout']['p4 edit flipping the mode bit does not trigger a file-changed prompt'] = function()
   edit('a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  -- What the plugin answers Neovim (over RPC a dialog doesn't block, so ask the answer).
+  child.lua([[_G.fcs = {}
+    vim.api.nvim_create_autocmd('FileChangedShell', { callback = function()
+      table.insert(_G.fcs, vim.v.fcs_reason .. '/' .. vim.v.fcs_choice)
+    end })]])
   child.type_keys('x')
   wait_prompt()
   child.type_keys('<CR>')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(child.bo.modified, true)
+  -- Unsaved edits + only the permissions changed: Neovim says "conflict" (W12); not asked.
   child.cmd('checktime')
-  H.eq(child.api.nvim_get_mode().blocking, false)
-  H.eq(child.cmd_capture('messages'):find('W16', 1, true), nil)
+  H.eq(child.lua_get('_G.fcs'), { 'conflict/' })
+  H.eq(child.cmd_capture('messages'):find('W1[26]', 1), nil)
+  -- A real change (newer modification time) still asks.
+  child.lua('_G.fcs = {}')
+  local t = os.time() + 5
+  vim.uv.fs_utime(root .. '/a.txt', t, t)
+  child.cmd('checktime')
+  H.eq(child.lua_get('_G.fcs'), { 'conflict/ask' })
 end
 
 T['checkout']['new file: add prompt on write'] = function()
