@@ -7,7 +7,8 @@
 ---   resolve (entries that need it end with a dimmed "· R resolves").
 --- * Lists of files to resolve stay current: after any change (`User PerforatedChanged`, e.g. a
 ---   resolve from the client view) their files are re-checked with one fstat per workspace
----   and entries that no longer need resolving are dropped.
+---   and entries that no longer need resolving are dropped; once the current list is empty,
+---   its window closes.
 --- * Opening policy: open when non-empty and `qf.open` (default); otherwise a count is shown.
 
 local M = {}
@@ -305,13 +306,14 @@ function M.prune_resolved()
           if not cur.items then
             return -- the list is gone
           end
-          local keep, left = {}, 0
+          local keep, left, entries = {}, 0, 0
           for _, it in ipairs(cur.items) do
             local ud = it.user_data
             local resolvable = type(ud) == 'table' and ud.kind == 'unresolved'
             if not (resolvable and done[it.bufnr]) then
               keep[#keep + 1] = it
               left = left + (resolvable and 1 or 0)
+              entries = entries + (it.valid == 1 and 1 or 0)
             end
           end
           local title = cur.title
@@ -319,6 +321,11 @@ function M.prune_resolved()
             title = title .. ' · all resolved'
           end
           vim.fn.setqflist({}, 'r', { id = l.id, items = keep, title = title })
+          -- Nothing left to look at: close the window if it's showing this list (an empty
+          -- window would otherwise keep the focus and the space). Older lists stay in history.
+          if entries == 0 and vim.fn.getqflist({ id = 0 }).id == l.id then
+            vim.cmd('cclose')
+          end
         end)
       end
     end
