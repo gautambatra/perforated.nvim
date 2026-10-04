@@ -1121,6 +1121,7 @@ local function actions(view)
       desc = 'Describe changelist',
       keys = { 'gd' },
       kinds = { change = true, submitted = true, shelf = true, have_cl = true },
+      nomenu = true, -- `K` (View changelist) is the menu's entry; `gd` and `?` keep this
       run = function(items)
         require('perforated.views.describe').open(ws, items[1].change)
       end,
@@ -1540,7 +1541,8 @@ local function actions(view)
 end
 
 --- The `.` menu of a changelist, in this order (`'-'` separates groups). Actions not listed
---- (describe, send to location list) keep their keys but aren't offered here.
+--- (send to location list) keep their keys but aren't offered here; describe (`gd`) is in no
+--- menu of this view.
 M.MENU_LAYOUT = {
   change = {
     { 'submit', 'Submit…' },

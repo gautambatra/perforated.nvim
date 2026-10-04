@@ -664,6 +664,11 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     'Sync entire workspace',
     'Switch client',
   })
+  -- describe stays on `gd`, in no menu of the view (submitted rows included)
+  local sub = menu_labels('initial import')
+  H.eq(vim.tbl_contains(sub, 'View changelist'), true) -- really a submitted row
+  H.eq(vim.tbl_contains(sub, 'Describe changelist'), false)
+  H.eq(child.lua_get([[vim.fn.maparg('gd', 'n', false, true).buffer]]), 1)
   -- an empty CL can be deleted; one with files can't
   local empty = menu_labels('Empty one')
   H.eq(vim.tbl_contains(empty, 'Delete changelist'), true)
