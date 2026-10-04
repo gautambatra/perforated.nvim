@@ -1,8 +1,21 @@
---- Small floating UI helpers: the single-key modal menu (check-out / add prompts).
+--- Small floating UI helpers: the single-key modal menu (check-out / add prompts, `.` menus).
+--- Items are chosen by key or by a left click; a click outside the menu cancels it.
 
 local M = {}
 
 M.ns = vim.api.nvim_create_namespace('perforated.float')
+
+--- Mouse keys other than a left click, which the menu ignores (keytrans names, without <>).
+local MOUSE = {}
+for _, b in ipairs({ 'Left', 'Right', 'Middle', 'X1', 'X2' }) do
+  for _, ev in ipairs({ 'Mouse', 'Drag', 'Release' }) do
+    MOUSE[b .. ev] = true
+  end
+end
+for _, d in ipairs({ 'Up', 'Down', 'Left', 'Right' }) do
+  MOUSE['ScrollWheel' .. d] = true
+end
+MOUSE.MouseMove = true
 
 ---@class perforated.MenuItem
 ---@field key string    keytrans() form, e.g. '<CR>', 'c', 'S'
@@ -34,7 +47,7 @@ function M.menu(opts)
   if #lines > 0 then
     lines[#lines + 1] = ''
   end
-  local seps, hint_hls = {}, {}
+  local seps, hint_hls, by_line = {}, {}, {}
   local label_w = 0
   for _, it in ipairs(opts.items) do
     if it.hint then
@@ -55,6 +68,7 @@ function M.menu(opts)
       end
       lines[#lines + 1] = line
       key_hls[#lines] = #key
+      by_line[#lines] = it
     end
   end
   local width = vim.fn.strdisplaywidth(opts.title) + 4
@@ -153,9 +167,25 @@ function M.menu(opts)
     local key = vim.fn.keytrans(raw)
     if vim.uv.now() - opened < grace then
       replay[#replay + 1] = raw
+    elseif key == '<LeftMouse>' then
+      -- A click chooses the item under it; a click anywhere else cancels. Hit-tested against
+      -- the menu's own screen rectangle (inside its 1-cell border): getmousepos() only knows
+      -- focusable floats, and this one must never take focus.
+      local pos = vim.fn.getmousepos()
+      local at = vim.api.nvim_win_get_position(win)
+      local line = pos.screenrow - at[1] - 1
+      local col = pos.screencol - at[2] - 1
+      if line < 1 or line > #lines or col < 1 or col > width then
+        break
+      end
+      if by_line[line] then
+        choice = by_line[line]
+        break
+      end
     elseif key == '<Esc>' or key == '<C-C>' or (key == 'q' and typed == '' and not by_key.q) then
       break
-    else
+    elseif not MOUSE[key:match('(%w+)>$') or ''] then
+      -- (Other mouse events — release, drag, wheel, right click — do nothing.)
       typed = typed .. key
       if by_key[typed] then
         choice = by_key[typed]

@@ -851,6 +851,49 @@ T['client view']['g@ syncs a file to a picked revision; gD diffs against one'] =
   end)]])
 end
 
+T['client view']['action menu: a click chooses an item; a click outside cancels'] = function()
+  child.o.mouse = 'a'
+  open_view()
+  -- Click the screen cell of the menu row containing `text` (or `row, col` when given).
+  local function click(text, row, col)
+    if text then
+      row, col = unpack(child.lua_get(([[(function()
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          local b = vim.api.nvim_win_get_buf(w)
+          if vim.api.nvim_win_get_config(w).relative ~= '' then
+            for i, l in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+              if l:find(%q, 1, true) then
+                local p = vim.fn.screenpos(w, i, 3)
+                return { p.row, p.col }
+              end
+            end
+          end
+        end
+      end)()]]):format(text)))
+    end
+    child.api.nvim_input_mouse('left', 'press', '', 0, row - 1, col - 1)
+    child.api.nvim_input_mouse('left', 'release', '', 0, row - 1, col - 1)
+  end
+  local menu_open = [[require('perforated.ui.float').active ~= nil]]
+  goto_line('CL 2  Fix parser')
+  child.type_keys('.')
+  wait(menu_open)
+  click('View changelist')
+  wait(FLOAT_LINES .. ' ~= nil') -- the K popup
+  H.expect.no_equality(
+    table.concat(child.lua_get(FLOAT_LINES), '\n'):find('second line', 1, true),
+    nil
+  )
+  child.type_keys('q')
+  -- outside the menu: closes it, runs nothing
+  goto_line('CL 2  Fix parser')
+  child.type_keys('.')
+  wait(menu_open)
+  click(nil, child.o.lines - 2, child.o.columns - 2)
+  wait('not (' .. menu_open .. ')')
+  H.eq(child.lua_get(FLOAT_LINES), vim.NIL)
+end
+
 T['client view']['a changelist resolves only with unresolved files; S, g<Del> act on its shelf'] = function()
   open_view()
   H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Resolve'), false)
