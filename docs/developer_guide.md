@@ -1039,7 +1039,8 @@ user's changelists.
 The tree renderer. `set(roots)` replaces content; `render()` walks visible nodes (fold state is
 tree state by node id, not Vim folds), builds all lines and one `set_lines`, keeps the cursor
 on the same node, and records per-row highlight ranges that a **decoration provider** turns
-into ephemeral extmarks for visible rows only. Prefixes (indent + `▸`/`▾` + mark) are built
+into ephemeral extmarks for visible rows only. Prefixes (`M.INDENT`, 4 columns per level, + `▶`/`▼` + mark; a leaf
+has no placeholder, so its text starts where a sibling folder's triangle does) are built
 once per distinct combination. `on_open` supports lazy children (inline diffs, reconcile).
 Also: `node_at`, `row_of`, `open`/`close`/`toggle`, `collapse_at_cursor`, `jump_section`
 (skipping spacer rows), marks for multi-item actions.

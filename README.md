@@ -173,23 +173,23 @@ A p4v-style overview of your workspace in a tab (`:P4 view float` or `:P4 view s
 other layouts):
 
 ```
-  Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
-      Sync CL: 123501  Nightly integration  bob 2026-09-26
+Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
+    Sync CL: 123501  Nightly integration  bob 2026-09-26
 
-▾ Pending  (3)
-  ▾ default  (2)
-    ● edit      src/lexer.cpp  #3/#3
-      edit      src/util.cpp  #7/#7                  ← dimmed: opened, unchanged
-  ▾ CL 123470  Fix crash in parser  (1)  S 1
-    ● edit      src/parser.cpp  #4/#5  ↓ stale
-    ▸ S Shelved (1)
+▼ Pending  (3)
+    ▼ default  (2)
+        ● edit      src/lexer.cpp  #3/#3
+          edit      src/util.cpp  #7/#7              ← dimmed: opened, unchanged
+    ▼ CL 123470  Fix crash in parser  (1)  S 1
+        ● edit      src/parser.cpp  #4/#5  ↓ stale
+        ▶ S Shelved (1)
 
-▾ Needs attention  (1)
+▼ Needs attention  (1)
     ● edit (123470)  src/parser.cpp  #4/#5  ↓ stale
 
-▸ Workspace reconcile  · src/myteam  (not scanned)
+▶ Workspace reconcile  · src/myteam  (not scanned)
 
-▸ Recent submitted  (20)
+▶ Recent submitted  (20)
  d diff against have revision  D diff all files  …  . actions  ? help
 ```
 

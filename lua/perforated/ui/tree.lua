@@ -85,13 +85,17 @@ function Tree:is_open(node)
   return o
 end
 
--- Triangles exist in every common font, nerd or not.
+-- Triangles exist in every common font, nerd or not. A leaf has no placeholder: its text
+-- starts where a sibling's triangle does, so a folder ("Shelved") lines up with the files
+-- beside it.
 local function glyphs()
   if require('perforated.ui.icons').style() == 'nerd' then
-    return { open = '▾ ', closed = '▸ ', leaf = '  ', mark = '● ' }
+    return { open = '▼ ', closed = '▶ ', leaf = '', mark = '● ' }
   end
-  return { open = '▾ ', closed = '▸ ', leaf = '  ', mark = '* ' }
+  return { open = '▼ ', closed = '▶ ', leaf = '', mark = '* ' }
 end
+
+M.INDENT = '    ' -- per level
 
 --- Replace the tree content and redraw (keeps folds, marks and the cursor's node).
 ---@param roots perforated.TreeNode[]
@@ -111,7 +115,7 @@ function Tree:_liner()
     local p = prefixes[k]
     if not p then
       local glyph = state == 0 and g.leaf or (state == 1 and g.open or g.closed)
-      p = ('  '):rep(depth) .. glyph .. (marked and g.mark or '')
+      p = M.INDENT:rep(depth) .. glyph .. (marked and g.mark or '')
       prefixes[k] = p
     end
     return p
