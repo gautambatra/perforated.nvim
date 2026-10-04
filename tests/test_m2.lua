@@ -223,6 +223,61 @@ T['client view']['the path of a stale file uses PerforatedStale; others keep the
   H.neq(groups('b.txt')['b.txt'], 'PerforatedStale')
 end
 
+--- Text → highlight group of the client view row containing `text`.
+local function row_groups(text)
+  local row = goto_line(text)
+  return child.lua_get(([[(function()
+    local v = require('perforated.views.client')._get(vim.b.perforated_ws)
+    local hls, line = v.tree.row_hls[%d], vim.api.nvim_buf_get_lines(0, %d, %d + 1, false)[1]
+    local out = {}
+    for i = 1, #hls, 3 do
+      out[line:sub(hls[i] + 1, hls[i + 1])] = hls[i + 2]
+    end
+    return out
+  end)()]]):format(row - 1, row - 1, row - 1))
+end
+
+T['client view']['changelist numbers: bold white (dark), bold black (light); overrides kept'] = function()
+  child.cmd('set background=dark')
+  open_view()
+  H.eq(row_groups('CL 2  Fix parser')['CL 2'], 'PerforatedClientChangelist')
+  H.eq(row_groups('initial import  alice')['1'], 'PerforatedClientChangelist') -- Sync CL
+  local hl = [[(function()
+    local h = vim.api.nvim_get_hl(0, { name = 'PerforatedClientChangelist' })
+    return { fg = h.fg, bold = h.bold }
+  end)()]]
+  H.eq(child.lua_get(hl), { fg = 0xffffff, bold = true })
+  child.cmd('set background=light')
+  H.eq(child.lua_get(hl), { fg = 0x000000, bold = true })
+  -- a user's own colour survives a background switch
+  child.cmd('highlight PerforatedClientChangelist guifg=#ff0000')
+  child.cmd('set background=dark')
+  H.eq(child.lua_get(hl).fg, 0xff0000)
+end
+
+T['client view']['stale / unresolved files: their ● and path take the badge colour'] = function()
+  H.write(root .. '/c.txt', 'c-local\n') -- changed, so c.txt gets a ●
+  open_view()
+  wait([[(]] .. view_expr(root) .. [[).data.modified ~= nil]])
+  local g = row_groups('c.txt')
+  H.eq(g['c.txt'], 'PerforatedStale')
+  H.eq(g['● '], 'PerforatedStale')
+  -- syncing the opened file schedules a resolve: unresolved outranks stale
+  server:p4({ 'sync', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  child.type_keys('gr')
+  wait(
+    ([[vim.iter((%s).data.opened or {}):any(function(f) return f.unresolved ~= nil end)]]):format(
+      view_expr(root)
+    )
+  )
+  wait([[(]] .. view_expr(root) .. [[).data.modified ~= nil]])
+  goto_line('Pending')
+  g = row_groups('c.txt')
+  H.eq(g['c.txt'], 'PerforatedUnresolved')
+  H.eq(g['● '], 'PerforatedUnresolved')
+  H.eq(row_groups('a.txt')['● '], 'PerforatedModified') -- neither: unchanged colour
+end
+
 T['client view']['Pending: default first, then the newest changelists'] = function()
   server:p4({ 'change', '-i' }, {
     client = 'alice_ws',
