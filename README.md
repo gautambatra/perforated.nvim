@@ -222,18 +222,18 @@ other layouts):
     `<C-w>` close, `<F5>` refresh, `<C-1>`/`<C-2>` jump to a section).
   - `.` or right-click opens a menu of what you can do with the line under the cursor
     (`<Space>` is left alone because many people use it as their leader key; remap with
-    `keys = { menu = { '<your key>' } }`). On a changelist the menu has a fixed order in
-    groups separated by rules: submit; viewing, diffing, editing the description, copying the
-    number or Swarm URL, quickfix, getting the latest revisions (only when files are stale) and
-    deleting (only when no files are opened in it); reverting, resolving (only with unresolved
-    files) and moving files; the shelf; then new changelist, sync and switch client. On an
-    opened file: open, get latest (only when stale) or **get a revision** (`g@`, picked from the
-    file's history); revert, move, shelve; diff against the have revision or **against a
-    revision** (`gD`, picked the same way); history, annotate, time-lapse; then the same last
-    group. `<C-d>` on a
-    changelist diffs all its files. Every action menu shows an action's Ctrl shortcut in an
-    aligned column on the right, e.g. `Diff all files … Ctrl+D` (not with `keys.p4v = false`). Describe (`gd`)
-    isn't in the menu; `K` is its quick counterpart there.
+    `keys = { menu = { '<your key>' } }`). Menus list only what applies, in groups separated
+    by rules, with each action's Ctrl shortcut in an aligned column on the right (none with
+    `keys.p4v = false`):
+    - **On a changelist:** submit; view, diff all (`<C-d>` too), edit the description, copy
+      the number or Swarm URL, quickfix, get latest (only when a file is stale), delete (only
+      when no files are opened in it); revert unchanged, revert, resolve (only with unresolved
+      files), move all files; shelve, unshelve, delete shelved files; new changelist, sync,
+      switch client. Describe (`gd`) isn't offered; `K` is its quick counterpart.
+    - **On an opened file:** open, get latest (only when stale), **get revision…** (`g@`: pick
+      one from the file's history, then sync the file to it); revert if unchanged, revert,
+      move, shelve; diff against the have revision, **diff against revision…** (`gD`, picked
+      the same way); history, annotate, time-lapse; new changelist, sync, switch client.
   - `K` on a changelist opens **View changelist**: a scrollable popup with the full
     description, its files and its shelved files (`D` there opens the diff tab). `C` switches
     the popup to edit mode: the same popup becomes the description editor (`:w` / `<C-s>`
@@ -251,7 +251,8 @@ other layouts):
     their root, host and stream) and the view shows it in the same window. If Perforce refuses
     (e.g. a client bound to another host), its message is shown and the view keeps its client.
     Your open files are unaffected: each keeps the workspace it lives in.
-  - `Q`/`gQ` send the line, the marked lines or a whole changelist to quickfix / the location list.
+  - `Q`/`gQ` send the line, the marked lines or a whole changelist to quickfix / the location
+    list. An opened file's menu offers neither, and a changelist's menu only quickfix.
 
 #### Changelists
 
@@ -391,8 +392,8 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 <summary><b>🚀 Shelve, submit, sync, resolve, integrate</b></summary>
 
 - **Shelve (`s`), unshelve (`S`), delete shelved files (`<Del>` on a shelf or shelved file,
-  `g<Del>` on a changelist)** on a changelist or on marked files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
-  [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
+  `g<Del>` on a changelist)** on a changelist or on marked files in the client view;
+  `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
   shelf's own changelist when it's yours, otherwise you pick one; files that need a resolve are
   listed in quickfix.
 - **Submit (`P` / `<C-s>`, `:P4 submit [CL]`):** a confirmation float shows the description and

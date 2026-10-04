@@ -981,7 +981,7 @@ including the "branched from" source), `annotate(ws, spec, opts)` (`annotate -c 
 call gives each line's changelist, user and date; with `descriptions = true` it also runs
 `filelog -l -i` for descriptions; results for numbered revisions are cached, 8 entries, with
 in-flight sharing), and the Swarm URL (`swarm.url` or the `P4.Swarm.URL` server property)
-with `swarm(ws, change, copy)`.
+with `swarm(ws, change)`, which copies a changelist's review URL.
 
 #### `timelapse.lua`
 The time-lapse engine ([§18.8](#188-you-step-through-a-time-lapse)): `load` (filelog +
@@ -1052,7 +1052,8 @@ checks `kinds` and `when`. `attach(buf, actions, view)` creates one raw keymap p
 dispatch to the first that applies to the node under the cursor (so `x` reverts a file but
 stops a reconcile scan). `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
 footer). `menu_items` builds the `.` menu: valid actions in definition order, unless the view
-has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change`). A layout
+has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change` and
+`.opened_file`). A layout
 lists action ids, `'-'` separators and `{ id, label }` renames; it's authoritative (actions it
 leaves out keep their keys but aren't offered), invalid entries are skipped and separators
 never lead, trail or double up. Each item's `hint` is the action's Ctrl keys in words
@@ -1118,7 +1119,9 @@ them) and status glyphs in Nerd Font or ASCII style (overridable via `icons.glyp
 snacks.picker, mini.pick or `vim.ui.select` (auto-detected, or `picker = '…'`); `once()`
 guarantees `on_choice` runs exactly once, even with backends that report cancel and choice
 in odd orders. `picker_mode` (default `'normal'`) opens telescope (`initial_mode`) and snacks
-(`focus = 'list'`) with the list focused. Sources for `:P4 pick {pending|opened|submitted|users}`.
+(`focus = 'list'`) with the list focused. Sources for `:P4 pick {pending|opened|submitted|users}`, and `revision(ws, rec, title, on_rev)`:
+one file's history (`filelog`, have revision marked), used by the client view's "Get revision…"
+and "Diff against revision…".
 
 ### Views
 
@@ -1141,7 +1144,8 @@ scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted
 spacer rows between sections. `refresh(view)` runs the queries in parallel and redraws as each
 answers (coalescing refreshes: one in flight, one queued). `switch_client(view)` (`W`) picks
 another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's message on
-failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view. A `BufWritePost`
+failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view, and `M.MENU_LAYOUT` the order and grouping
+of the `.` menu on changelists and opened files. A `BufWritePost`
 hook updates one file's changed marker; a `PerforatedChanged` hook refreshes the visible view.
 
 #### `views/describe.lua`
@@ -1149,7 +1153,7 @@ hook updates one file's changed marker; a `PerforatedChanged` hook refreshes the
 unified diff inline (two prints, computed only when expanded; files above 20k lines say "use
 `d`"). Pending changelists of this client diff against the workspace file; shelved files
 against their base (`w` workspace, `gh` head). Actions include submit, delete, integrate,
-sync-to-CL, Swarm, quickfix of the files.
+sync-to-CL, copy the Swarm URL, quickfix of the files.
 
 #### `views/history.lua`
 `:P4 filelog`: a float listing revisions (with a "branched from" section), paged (`gn` or
