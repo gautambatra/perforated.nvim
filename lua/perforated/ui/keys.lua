@@ -151,7 +151,27 @@ function M.valid(actions, node)
   end, actions)
 end
 
---- Menu entries for a node: the valid actions, in definition order — or, when the view has a
+--- A Ctrl shortcut as people write it: `<C-d>` → `Ctrl+D`, `<C-S-t>` → `Ctrl+Shift+T`.
+---@param lhs string
+---@return string? nil when `lhs` isn't a Ctrl key
+function M.ctrl_label(lhs)
+  local mods, key = lhs:match('^<(.-%-)([^-]+)>$')
+  if not mods or not mods:find('C-', 1, true) then
+    return nil
+  end
+  local out = { 'Ctrl' }
+  if mods:find('S-', 1, true) then
+    out[#out + 1] = 'Shift'
+  end
+  if mods:find('[AM]%-') then
+    out[#out + 1] = 'Alt'
+  end
+  out[#out + 1] = #key == 1 and key:upper() or key
+  return table.concat(out, '+')
+end
+
+--- Menu entries for a node (labels end with the action's Ctrl shortcuts, `Diff all files
+--- (Ctrl+D)`): the valid actions, in definition order — or, when the view has a
 --- `menu_layout` for the node's kind, in that order. A layout lists action ids, `'-'` for a
 --- separator, or `{ id, label }` to rename an entry in that menu only; it is authoritative, so
 --- actions it leaves out stay on their keys but aren't offered. Invalid entries are skipped and
@@ -163,7 +183,16 @@ end
 function M.menu_items(actions, node, layouts)
   local function item(a, label)
     local keys = M.keys_of(a)
-    return { key = keys[1] or a.id, label = label or a.desc, value = a }
+    label = label or a.desc
+    -- Ctrl shortcuts (P4V's) after the label, unless one is already the key column's key.
+    local ctrl = {}
+    for i = 2, #keys do
+      ctrl[#ctrl + 1] = M.ctrl_label(keys[i])
+    end
+    if #ctrl > 0 and not M.ctrl_label(keys[1]) then
+      label = ('%s (%s)'):format(label, table.concat(ctrl, ', '))
+    end
+    return { key = keys[1] or a.id, label = label, value = a }
   end
   local layout = node and layouts and layouts[node.kind]
   local items = {}

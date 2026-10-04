@@ -626,16 +626,16 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   })
   open_view()
   H.eq(menu_labels('CL 2  Fix parser'), {
-    'Submit…',
+    'Submit… (Ctrl+S)',
     '-',
     'View changelist',
-    'Diff all files',
+    'Diff all files (Ctrl+D)',
     'Copy CL number',
     'Edit description',
     'Send to quickfix',
     '-',
     'Revert unchanged files',
-    'Revert files',
+    'Revert files (Ctrl+R)',
     'Move all files to another changelist',
     '-',
     'Shelve files',
@@ -643,25 +643,25 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     'Delete shelved files',
     'Copy Swarm URL',
     '-',
-    'Create new changelist',
-    'Sync entire workspace',
+    'Create new changelist (Ctrl+N)',
+    'Sync entire workspace (Ctrl+Shift+G)',
     'Switch client',
   })
   -- default: stale c.txt → get latest; no CL number, description, shelf or Swarm
   H.eq(menu_labels('default'), {
-    'Submit…',
+    'Submit… (Ctrl+S)',
     '-',
     'View changelist',
-    'Diff all files',
+    'Diff all files (Ctrl+D)',
     'Get latest file revisions',
     'Send to quickfix',
     '-',
     'Revert unchanged files',
-    'Revert files',
+    'Revert files (Ctrl+R)',
     'Move all files to another changelist',
     '-',
-    'Create new changelist',
-    'Sync entire workspace',
+    'Create new changelist (Ctrl+N)',
+    'Sync entire workspace (Ctrl+Shift+G)',
     'Switch client',
   })
   -- describe stays on `gd`, in no menu of the view (submitted rows included)
@@ -672,7 +672,7 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   -- an empty CL can be deleted; one with files can't
   local empty = menu_labels('Empty one')
   H.eq(vim.tbl_contains(empty, 'Delete changelist'), true)
-  H.eq(vim.tbl_contains(empty, 'Submit…'), false)
+  H.eq(vim.tbl_contains(empty, 'Submit… (Ctrl+S)'), false)
   H.eq(empty[1], 'View changelist') -- no leading separator
   -- `.` draws the groups with rules, and the keys still choose
   goto_line('CL 2  Fix parser')
@@ -687,7 +687,7 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   end)()]]
   wait(menu .. ' ~= nil')
   local shown = child.lua_get(menu)
-  H.eq(shown[1]:match('^%s+P%s+Submit…$') ~= nil, true)
+  H.eq(shown[1]:match('^%s+P%s+Submit… %(Ctrl%+S%)$') ~= nil, true)
   H.eq(#shown[2] > 0 and shown[2]:gsub('─', '') == '', true)
   child.type_keys('K')
   wait(FLOAT_LINES .. ' ~= nil')
@@ -950,12 +950,25 @@ end
 
 T['client view']['P4V keys are mapped; keys.p4v = false removes them'] = function()
   open_view()
-  H.eq(child.lua_get([[vim.fn.maparg('<C-d>', 'n', false, true).buffer]]), 1)
+  for _, k in ipairs({ '<C-d>', '<C-r>', '<C-n>' }) do
+    H.eq(child.lua_get(([[vim.fn.maparg('%s', 'n', false, true).buffer]]):format(k)), 1)
+  end
+  -- …and the action menu shows them after the label
+  local labels = menu_labels('CL 2  Fix parser')
+  H.eq(vim.tbl_contains(labels, 'Revert files (Ctrl+R)'), true)
+  H.eq(vim.tbl_contains(labels, 'Create new changelist (Ctrl+N)'), true)
+  H.eq(
+    child.lua_get(
+      [[vim.tbl_map(require('perforated.ui.keys').ctrl_label, { '<C-S-t>', '<C-1>', '<F5>', 'gd' })]]
+    ),
+    { 'Ctrl+Shift+T', 'Ctrl+1' }
+  )
   child.cmd('tabclose')
   child.lua([[require('perforated.config').set({ keys = { p4v = false } })]])
   child.cmd('bwipeout! ' .. child.lua_get(view_expr(root) .. '.buf'))
   open_view()
   H.eq(child.fn.maparg('<C-d>', 'n'), '')
+  H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Diff all files'), true) -- no (Ctrl+D)
   H.eq(child.lua_get([[vim.fn.maparg('d', 'n', false, true).buffer]]), 1)
 end
 
