@@ -612,12 +612,6 @@ function M.open_buf(buf)
   set_bind(win, true)
   set_bind(src_win, true)
   view.actions = actions(view)
-  vim.list_extend(
-    view.actions,
-    require('perforated.p4vc').actions(ws, nil, function()
-      return view.ann and view.ann.depotFile
-    end)
-  )
   require('perforated.ui.keys').attach(abuf, view.actions, view)
   M._views[src_win] = view
 

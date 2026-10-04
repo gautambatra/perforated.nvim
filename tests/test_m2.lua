@@ -583,7 +583,7 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   end
   goto_line('b.txt')
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), true)
-  H.eq(vim.tbl_contains(ids(), 'Get latest revision'), true)
+  H.eq(vim.tbl_contains(ids(), 'Get latest revision'), false) -- b.txt isn't stale
   H.eq(vim.tbl_contains(ids(), 'Revert if unchanged'), true)
   H.eq(vim.tbl_contains(ids(), 'Sync workspace'), true)
   H.eq(vim.tbl_contains(ids(), 'Copy CL number'), false)
@@ -695,6 +695,73 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     table.concat(child.lua_get(FLOAT_LINES), '\n'):find('second line', 1, true),
     nil
   )
+end
+
+T['client view']['file menu: fixed order, groups, only what applies'] = function()
+  open_view()
+  local tail = {
+    '-',
+    'Diff against have revision (Ctrl+D)',
+    'Diff against revision…',
+    '-',
+    'File history (Ctrl+T)',
+    'Annotate',
+    'Time-lapse view (Ctrl+Shift+T)',
+    '-',
+    'Create new changelist (Ctrl+N)',
+    'Sync entire workspace (Ctrl+Shift+G)',
+    'Switch client',
+  }
+  local function with_tail(head)
+    return vim.list_extend(head, tail)
+  end
+  -- b.txt: default CL (no shelve), not stale (no get latest)
+  H.eq(
+    menu_labels('b.txt'),
+    with_tail({
+      'Open file',
+      'Get revision…',
+      '-',
+      'Revert if unchanged',
+      'Revert (Ctrl+R)',
+      'Move to another changelist',
+    })
+  )
+  -- c.txt is stale; a.txt (CL 2) can be shelved
+  H.eq(
+    vim.list_slice(menu_labels('c.txt'), 1, 3),
+    { 'Open file', 'Get latest revision', 'Get revision…' }
+  )
+  H.eq(vim.tbl_contains(menu_labels('a.txt'), 'Shelve'), true)
+end
+
+T['client view']['g@ syncs a file to a picked revision; gD diffs against one'] = function()
+  open_view()
+  child.lua([[
+    require('perforated.picker').pick = function(spec)
+      _G.picked = vim.tbl_map(spec.format, spec.items)
+      _G.title = spec.title
+      spec.on_choice({ spec.items[#spec.items] }) -- the oldest: #1
+    end
+    require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 1 end
+  ]])
+  goto_line('c.txt')
+  child.type_keys('g@')
+  wait('_G.asked ~= nil')
+  H.eq(child.lua_get('_G.title'), 'Get revision of c.txt')
+  local picked = child.lua_get('_G.picked')
+  H.eq(#picked, 2)
+  H.eq(picked[1]:match('^#2 ') ~= nil, true)
+  H.eq(picked[2]:find('(have)', 1, true) ~= nil, true) -- c.txt has #1, head is #2
+  H.eq(child.lua_get('_G.asked'):find('c.txt#1', 1, true) ~= nil, true)
+  child.lua('_G.picked = nil')
+  goto_line('a.txt')
+  child.type_keys('gD')
+  wait('_G.picked ~= nil')
+  H.eq(child.lua_get('_G.title'), 'Diff a.txt against')
+  wait([[vim.iter(vim.api.nvim_tabpage_list_wins(0)):any(function(w)
+    return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)):find('a.txt#1', 1, true) ~= nil
+  end)]])
 end
 
 T['client view']['a changelist resolves only with unresolved files; S, g<Del> act on its shelf'] = function()

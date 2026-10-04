@@ -416,38 +416,6 @@ M.commands = {
     end,
   },
 
-  p4vc = {
-    scope = 'connection',
-    desc = 'P4V tools: :P4 p4vc {revgraph|timelapse|streamgraph} [file]  (default: the current file)',
-    complete = function()
-      return { 'revgraph', 'timelapse', 'streamgraph' }
-    end,
-    run = function(ws, _, args)
-      local cmd = args[1] or 'revgraph'
-      if cmd ~= 'revgraph' and cmd ~= 'timelapse' and cmd ~= 'streamgraph' then
-        return notify(
-          'usage: :P4 p4vc {revgraph|timelapse|streamgraph} [file]',
-          vim.log.levels.WARN
-        )
-      end
-      local path = args[2]
-      if path and not path:match('^//') then
-        path = expand_path(path)
-      end
-      if not path and cmd ~= 'streamgraph' then
-        local buf = vim.api.nvim_get_current_buf()
-        local spec = vim.b[buf].perforated_spec
-        local st = require('perforated.buffer').get(buf)
-        path = spec and spec:gsub('[#@].*$', '')
-          or (st and (st.rec and st.rec.depotFile or st.path))
-        if not path then
-          return notify('no file: open one or pass a path', vim.log.levels.WARN)
-        end
-      end
-      require('perforated.p4vc').run(ws, cmd, path)
-    end,
-  },
-
   timelapse = {
     scope = 'connection',
     desc = 'Time-lapse: step through every revision of the current file (or a depot path)',

@@ -744,12 +744,6 @@ function M.open(ws, path, opts)
     end,
   }
   view.actions = actions(view)
-  vim.list_extend(
-    view.actions,
-    require('perforated.p4vc').actions(ws, nil, function()
-      return view.tl and view.tl.depotFile
-    end)
-  )
   M._last = view
   engine.load(ws, path, function(tl, err)
     if not vim.api.nvim_buf_is_valid(buf) then

@@ -714,8 +714,9 @@ local function shelved_by_change(nodes)
   return out
 end
 
---- Open a workspace file for diffing: load its buffer, then :P4 diff.
-local function diff_file(rec)
+--- Open a workspace file for diffing: load its buffer, then :P4 diff (against `rev`, default
+--- the have revision).
+local function diff_file(rec, rev)
   local path = rec.clientFile
   if not path or not path:match('^/') then
     return notify('no local file for ' .. (rec.depotFile or '?'), vim.log.levels.WARN)
@@ -735,7 +736,12 @@ local function diff_file(rec)
     local s = require('perforated.buffer').get(buf)
     return s ~= nil and s.rec ~= nil
   end, 10)
-  require('perforated.diff.view').open(buf)
+  require('perforated.diff.view').open(buf, rev)
+end
+
+--- A workspace file with depot history (not another client's file, not a new add).
+local function local_with_history(item)
+  return item.haveRev ~= nil and (item.clientFile or ''):match('^/[^/]') ~= nil
 end
 
 ---@param view table
@@ -901,6 +907,24 @@ local function actions(view)
       end,
     },
     {
+      id = 'diff_revision',
+      desc = 'Diff against revision…',
+      keys = { 'gD' },
+      kinds = { opened_file = true },
+      when = local_with_history,
+      run = function(items)
+        local it = items[1]
+        require('perforated.picker.sources').revision(
+          ws,
+          it,
+          'Diff ' .. vim.fn.fnamemodify(it.clientFile, ':t') .. ' against',
+          function(r)
+            diff_file(it, '#' .. r.rev)
+          end
+        )
+      end,
+    },
+    {
       id = 'diff_shelved',
       desc = 'Diff shelved vs base revision',
       keys = { 'd' },
@@ -1054,8 +1078,29 @@ local function actions(view)
       kinds = { opened_file = true },
       multi = true,
       footer = 43,
+      when = function(item)
+        return require('perforated.status').is_stale(item)
+      end,
       run = function(items)
         require('perforated.ops').sync(ws, paths_of(files_of(items)))
+      end,
+    },
+    {
+      id = 'get_revision',
+      desc = 'Get revision…',
+      keys = { 'g@' },
+      kinds = { opened_file = true },
+      when = local_with_history,
+      run = function(items)
+        local it = items[1]
+        require('perforated.picker.sources').revision(
+          ws,
+          it,
+          'Get revision of ' .. vim.fn.fnamemodify(it.clientFile, ':t'),
+          function(r)
+            require('perforated.ops').sync(ws, { p4.escape(it.clientFile) .. '#' .. r.rev })
+          end
+        )
       end,
     },
     {
@@ -1540,9 +1585,9 @@ local function actions(view)
   }
 end
 
---- The `.` menu of a changelist, in this order (`'-'` separates groups). Actions not listed
---- (send to location list) keep their keys but aren't offered here; describe (`gd`) is in no
---- menu of this view.
+--- The `.` menus of a changelist and of an opened file, in this order (`'-'` separates
+--- groups). Actions not listed (send to quickfix / location list on a file) keep their keys
+--- but aren't offered there; describe (`gd`) is in no menu of this view.
 M.MENU_LAYOUT = {
   change = {
     { 'submit', 'Submit…' },
@@ -1569,6 +1614,28 @@ M.MENU_LAYOUT = {
     { 'sync', 'Sync entire workspace' },
     { 'switch_client', 'Switch client' },
   },
+}
+
+M.MENU_LAYOUT.opened_file = {
+  'open',
+  'get_latest',
+  'get_revision',
+  '-',
+  'revert_if_unchanged',
+  'revert',
+  { 'move', 'Move to another changelist' },
+  'shelve',
+  '-',
+  'diff',
+  'diff_revision',
+  '-',
+  'history',
+  'annotate',
+  { 'timelapse', 'Time-lapse view' },
+  '-',
+  { 'new_change', 'Create new changelist' },
+  { 'sync', 'Sync entire workspace' },
+  { 'switch_client', 'Switch client' },
 }
 
 --- Send nodes (files, CLs, sections) to the quickfix / location list.
@@ -1854,13 +1921,6 @@ function M.open(ws, opts)
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = actions(view)
   view.menu_layout = M.MENU_LAYOUT
-  -- P4V tools (p4vc, when installed)
-  vim.list_extend(
-    view.actions,
-    require('perforated.p4vc').actions(ws, { opened_file = true, shelved_file = true }, function(it)
-      return it and (it.depotFile or it.clientFile)
-    end)
-  )
   if opts and opts.win and vim.api.nvim_win_is_valid(opts.win) then
     vim.api.nvim_win_set_buf(opts.win, buf)
     vim.api.nvim_set_current_win(opts.win)

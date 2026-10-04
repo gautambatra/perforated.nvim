@@ -51,7 +51,6 @@ M.actions = {
   submit = cmd('submit'),
   shelve = cmd('shelve'),
   timelapse = cmd('timelapse'),
-  revgraph = cmd('p4vc', { 'revgraph' }),
 }
 
 --- Preset: lhs → action name.
@@ -83,7 +82,6 @@ M.PRESET = {
   ['<leader>pP'] = 'submit',
   ['<leader>pS'] = 'shelve',
   ['<leader>pt'] = 'timelapse',
-  ['<leader>pG'] = 'revgraph',
 }
 
 ---@param name string

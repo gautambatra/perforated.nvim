@@ -226,7 +226,11 @@ other layouts):
     groups separated by rules: submit; viewing, diffing, editing the description, copying the
     number or Swarm URL, quickfix, getting the latest revisions (only when files are stale) and
     deleting (only when no files are opened in it); reverting, resolving (only with unresolved
-    files) and moving files; the shelf; then new changelist, sync and switch client. `<C-d>` on a
+    files) and moving files; the shelf; then new changelist, sync and switch client. On an
+    opened file: open, get latest (only when stale) or **get a revision** (`g@`, picked from the
+    file's history); revert, move, shelve; diff against the have revision or **against a
+    revision** (`gD`, picked the same way); history, annotate, time-lapse; then the same last
+    group. `<C-d>` on a
     changelist diffs all its files. Every action menu shows an action's Ctrl shortcut after
     its label, e.g. `Diff all files (Ctrl+D)` (not with `keys.p4v = false`). Describe (`gd`)
     isn't in the menu; `K` is its quick counterpart there.
@@ -549,14 +553,6 @@ snacks.picker: fzf-lua and mini.pick have no normal mode.
 - File-type icons come from mini.icons or nvim-web-devicons, when installed.
 - Status glyphs use Nerd Font symbols, with an ASCII fallback. Both are configurable.
 
-#### P4V tools (p4vc)
-
-When `p4vc` is installed: `gR` / `<C-S-r>` opens the **revision graph** of the file under the
-cursor (client view, describe, history, annotate, time-lapse), the `.` menu adds **P4V's
-time-lapse**, and `:P4 p4vc {revgraph|timelapse|streamgraph} [file]` runs them directly (the
-current file by default). `:checkhealth perforated` shows whether it was found; set
-`p4vc = '/path/to/p4vc'` if it isn't on your `PATH`.
-
 #### 🧪 Code actions (experimental)
 
 `lsp = { enabled = true }` attaches a small in-process language server to Perforce buffers
@@ -647,7 +643,6 @@ it. A bang goes on the subcommand (`:P4 revert!`).
 | `:P4 filelog [path]` / `:P4 history` | File history (a directory: its changelists) |
 | `:P4 annotate [//depot/path#rev]` | Annotate split for the current file (or a depot revision) |
 | `:P4 timelapse [path]` | Time-lapse: step through every revision of a file |
-| `:P4 p4vc {revgraph\|timelapse\|streamgraph} [file]` | P4V's revision graph, time-lapse or stream graph (needs p4vc) |
 | `:P4 blame [on\|off]` | Toggle current-line blame |
 | `:P4 lookup [what]` | Go to a changelist number, a path's history or a user's changelists |
 | `:P4 shelve [-c CL] [-d] [file…]` | Shelve a changelist (or files); `-d` deletes the shelf |
@@ -705,7 +700,6 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-sync)           <Plug>(perforated-sync-file)
 <Plug>(perforated-resolve)        <Plug>(perforated-submit)
 <Plug>(perforated-shelve)         <Plug>(perforated-timelapse)
-<Plug>(perforated-revgraph)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
@@ -722,7 +716,7 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 | `<leader>pi` / `<leader>pl` / `<leader>pm` | Info / command log / recent messages |
 | `<leader>ph` / `<leader>pA` / `<leader>pb` | History / annotate / toggle current-line blame |
 | `<leader>pc` / `<leader>pg` | Describe the file's changelist / lookup |
-| `<leader>pt` / `<leader>pG` | Time-lapse / revision graph (p4vc) |
+| `<leader>pt` | Time-lapse |
 | `<leader>py` / `<leader>pY` | Sync this file / the workspace |
 | `<leader>pR` / `<leader>pP` / `<leader>pS` | Resolve this file / submit its changelist / shelve its changelist |
 
@@ -751,7 +745,6 @@ opts = {
 ```lua
 {
   p4 = 'p4', -- executable name or absolute path
-  p4vc = 'p4vc', -- for the revision graph / P4V time-lapse / stream graph, when installed
   checkout = {
     prompt = true, -- menu on first modification
     on_write = false, -- with prompt = false: check out silently on :w

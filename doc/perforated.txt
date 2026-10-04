@@ -118,10 +118,6 @@ bang goes on the subcommand: `:P4 revert!`.
 :P4 opened                                                        *:P4-opened*
     Opened files, grouped by changelist, in the quickfix list
 
-:P4 p4vc                                                            *:P4-p4vc*
-    P4V tools: :P4 p4vc {revgraph|timelapse|streamgraph} [file] (default: the
-    current file)
-
 :P4 pick                                                            *:P4-pick*
     Picker: :P4 pick {pending|opened|submitted|users}
 
@@ -192,6 +188,7 @@ Client view (:P4)                                     *perforated-client-view*
   A               Toggle scope: this client / all my clients
   W               Switch client (pick one of your clients)
   d <C-d>         Diff against have revision
+  gD              Diff against revision…
   d <C-d>         Diff shelved vs base revision
   s               Shelve
   S               Unshelve
@@ -200,6 +197,7 @@ Client view (:P4)                                     *perforated-client-view*
   P <C-s>         Submit
   R               Resolve
   gy              Get latest revision
+  g@              Get revision…
   gy              Get latest file revisions
   gy              Get latest revisions of these files
   gY <C-S-g>      Sync workspace
@@ -230,7 +228,6 @@ Client view (:P4)                                     *perforated-client-view*
   p               Reconcile: set the paths to scan
   Q               Send to quickfix
   gQ              Send to location list
-  gR <C-S-r>      Revision graph (p4vc)
 
 Describe buffer (:P4 describe)                           *perforated-describe*
 
@@ -260,7 +257,6 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   I               Integrate (cherry-pick) into this workspace
   Q               Files to quickfix
   gX              Copy Swarm review URL
-  gR <C-S-r>      Revision graph (p4vc)
 
 File history (:P4 filelog)                                *perforated-history*
 
@@ -280,7 +276,6 @@ File history (:P4 filelog)                                *perforated-history*
   g@                   Sync workspace to this CL
   y                    Copy CL number
   gX                   Copy Swarm review URL
-  gR <C-S-r>           Revision graph (p4vc)
 
 Annotate (:P4 annotate)                                  *perforated-annotate*
 
@@ -297,7 +292,6 @@ Annotate (:P4 annotate)                                  *perforated-annotate*
   q               Close
   ?               Help
   . <RightMouse>  Action menu
-  gR <C-S-r>      Revision graph (p4vc)
 
 Time-lapse (:P4 timelapse)                              *perforated-timelapse*
 
@@ -324,7 +318,6 @@ Time-lapse (:P4 timelapse)                              *perforated-timelapse*
   q               Close
   ?               Help
   . <RightMouse>  Action menu
-  gR <C-S-r>      Revision graph (p4vc)
 
 Submitted changelists (:P4 changes)                       *perforated-changes*
 
@@ -382,7 +375,6 @@ only (your buffer-local mappings win).
   <Plug>(perforated-reset-hunk)
   <Plug>(perforated-resolve)
   <Plug>(perforated-revert)
-  <Plug>(perforated-revgraph)
   <Plug>(perforated-shelve)
   <Plug>(perforated-status)
   <Plug>(perforated-submit)
@@ -394,7 +386,6 @@ Preset (keymaps = "default"):
 
   <leader>pA     annotate
   <leader>pD     diff-external
-  <leader>pG     revgraph
   <leader>pP     submit
   <leader>pQ     hunks-file
   <leader>pR     resolve
@@ -495,7 +486,6 @@ keys):
       },
       merge = {},
       p4 = "p4",
-      p4vc = "p4vc",
       picker = "auto",
       picker_mode = "normal",
       poll = {
