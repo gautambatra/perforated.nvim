@@ -223,10 +223,10 @@ other layouts):
   - `.` or right-click opens a menu of what you can do with the line under the cursor
     (`<Space>` is left alone because many people use it as their leader key; remap with
     `keys = { menu = { '<your key>' } }`). On a changelist the menu has a fixed order in
-    groups separated by rules: submit; viewing, diffing, getting the latest revisions (only
-    when files are stale), copying the number, editing the description, deleting (only when no
-    files are opened in it) and quickfix; reverting, resolving (only with unresolved files) and
-    moving files; the shelf and Swarm; then new changelist, sync and switch client. `<C-d>` on a
+    groups separated by rules: submit; viewing, diffing, editing the description, copying the
+    number or Swarm URL, quickfix, getting the latest revisions (only when files are stale) and
+    deleting (only when no files are opened in it); reverting, resolving (only with unresolved
+    files) and moving files; the shelf; then new changelist, sync and switch client. `<C-d>` on a
     changelist diffs all its files. Every action menu shows an action's Ctrl shortcut after
     its label, e.g. `Diff all files (Ctrl+D)` (not with `keys.p4v = false`). Describe (`gd`)
     isn't in the menu; `K` is its quick counterpart there.
