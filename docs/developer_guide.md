@@ -1054,7 +1054,11 @@ checks `kinds` and `when`. `attach(buf, actions, view)` creates one raw keymap p
 `nvim_buf_set_keymap` is faster than `vim.keymap.set`); keys shared by several actions
 dispatch to the first that applies to the node under the cursor (so `x` reverts a file but
 stops a reconcile scan). `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
-footer).
+footer). `menu_items` builds the `.` menu: valid actions in definition order, unless the view
+has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change`). A layout
+lists action ids, `'-'` separators and `{ id, label }` renames; it's authoritative (actions it
+leaves out keep their keys but aren't offered), invalid entries are skipped and separators
+never lead, trail or double up.
 
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor
@@ -1062,7 +1066,7 @@ moves (per-window statuslines are hidden with `laststatus=3`, so a float is used
 
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep
-processing). Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
+processing). An item `{ separator = true }` draws a full-width rule. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
 per item, and a *grace period* during which keys are captured for replay (for the check-out
 prompt, which can pop up mid-typing).
 

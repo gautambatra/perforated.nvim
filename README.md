@@ -222,7 +222,12 @@ other layouts):
     `<C-w>` close, `<F5>` refresh, `<C-1>`/`<C-2>` jump to a section).
   - `.` or right-click opens a menu of what you can do with the line under the cursor
     (`<Space>` is left alone because many people use it as their leader key; remap with
-    `keys = { menu = { '<your key>' } }`).
+    `keys = { menu = { '<your key>' } }`). On a changelist the menu has a fixed order in
+    groups separated by rules: submit; viewing, diffing, getting the latest revisions (only
+    when files are stale), copying the number, editing the description, deleting (only when no
+    files are opened in it) and quickfix; reverting, resolving (only with unresolved files) and
+    moving files; the shelf and Swarm; then new changelist, sync and switch client. `<C-d>` on a
+    changelist diffs all its files.
   - `K` on a changelist opens **View changelist**: a scrollable popup with the full
     description, its files and its shelved files (`D` there opens the diff tab). `C` switches
     the popup to edit mode: the same popup becomes the description editor (`:w` / `<C-s>`
@@ -252,7 +257,8 @@ other layouts):
   accident. `gS` or `:P4 change! N` opens the full spec instead. Admins can set
   `change.allow_force = true` to retry with `-f`, with a confirmation. The default changelist
   has no description, so move its files to a numbered changelist instead.
-- **`<Del>` / `:P4 change -d N`: delete a pending changelist.** One confirmation says what's in
+- **`<Del>` / `:P4 change -d N`: delete a pending changelist.** In the client view `<Del>`
+  is offered only on a changelist with no opened files. One confirmation says what's in
   it; its opened files move to the default changelist (or are reverted, if you choose that) and
   its shelved files are deleted, then the changelist is. The default changelist can't be
   deleted; another client's changelist needs `change.allow_force`.
@@ -333,7 +339,7 @@ other layouts):
 - **`:P4 blame` (or `blame_line = { enabled = true }`): current-line blame** as virtual text.
   The file is annotated once per revision; moving the cursor makes no p4 calls.
 - **`:P4 lookup` (`g/` / `<C-g>`):** type a changelist number, a path or a user name.
-- **Swarm:** `gx` opens a changelist's review and `gX` copies its URL. The URL comes from
+- **Swarm:** `gX` copies a changelist's review URL. The URL comes from
   `swarm.url` or the server's `P4.Swarm.URL` property.
 
 </details>
@@ -378,8 +384,8 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 <details>
 <summary><b>🚀 Shelve, submit, sync, resolve, integrate</b></summary>
 
-- **Shelve (`s`), unshelve (`S`), delete shelved files (`<Del>`)** on a changelist or on marked
-  files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
+- **Shelve (`s`), unshelve (`S`), delete shelved files (`<Del>` on a shelf or shelved file,
+  `g<Del>` on a changelist)** on a changelist or on marked files in the client view; `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL
   [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
   shelf's own changelist when it's yours, otherwise you pick one; files that need a resolve are
   listed in quickfix.

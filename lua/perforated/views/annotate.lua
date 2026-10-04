@@ -487,9 +487,9 @@ local function actions(view)
       end,
     },
     {
-      id = 'swarm',
-      desc = 'Open review in Swarm',
-      keys = { 'gx' },
+      id = 'swarm_copy',
+      desc = 'Copy Swarm review URL',
+      keys = { 'gX' },
       kinds = LINE,
       run = function(items)
         history.swarm(ws, items[1].change)

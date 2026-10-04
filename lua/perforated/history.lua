@@ -300,11 +300,10 @@ function M.swarm_url(ws, cb)
   end)
 end
 
---- Open (or copy) the Swarm review page of a changelist.
+--- Copy the Swarm review URL of a changelist.
 ---@param ws perforated.Workspace
 ---@param change string
----@param copy boolean?
-function M.swarm(ws, change, copy)
+function M.swarm(ws, change)
   M.swarm_url(ws, function(base)
     if not base then
       return require('perforated.ui.toast').notify(
@@ -313,13 +312,9 @@ function M.swarm(ws, change, copy)
       )
     end
     local url = ('%s/changes/%s'):format(base, change)
-    if copy then
-      vim.fn.setreg('"', url)
-      pcall(vim.fn.setreg, '+', url)
-      require('perforated.ui.toast').notify('[perforated] copied ' .. url)
-    else
-      vim.ui.open(url)
-    end
+    vim.fn.setreg('"', url)
+    pcall(vim.fn.setreg, '+', url)
+    require('perforated.ui.toast').notify('[perforated] copied ' .. url)
   end)
 end
 

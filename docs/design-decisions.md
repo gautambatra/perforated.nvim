@@ -34,6 +34,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - Pending scope: current client, key toggles to all my clients.
 - On-demand (not default sections): lookup CL by number, submitted CLs of another user.
 - Actions: **direct single keys** + `?` floating help; **always-visible footer** with the most common keys for the item under cursor.
+- **Changelist `.` menu** *(2026-10-04)*: a fixed order in groups separated by rules — Submit… | View changelist, Diff all files (`<C-d>` too), Get latest file revisions (only when some file is stale), Copy CL number, Edit description, Delete changelist (only when no files are opened in it), Send to quickfix | Revert unchanged files, Revert files, Resolve (only with unresolved files), Move all files to another changelist | Shelve files, Unshelve files, Delete shelved files (`g<Del>`; `<Del>` stays "delete changelist"), Copy Swarm URL | Create new changelist, Sync entire workspace, Switch client. "Describe changelist" (`gd`) and "send to location list" (`gQ`) keep their keys but aren't in this menu.
 - Freshness: **always fresh** (loading skeleton until data arrives; no stale-while-revalidate).
 - Refresh: after every plugin action (`PerforatedChanged`) and when the background poll's refresh sees the opened files change *(2026-10-03)*; no timer of its own; `gr` forces one. Stale files' paths use the stale colour.
 
@@ -184,7 +185,7 @@ Where it's used:
 - Pickers open in **normal mode** (`picker_mode = 'normal'`, the default; `'insert'` starts in the prompt) *(2026-10-02)*: telescope `initial_mode`, snacks `focus = 'list'`. fzf-lua and mini.pick have no normal mode.
 
 ## Extras (roadmap)
-- Swarm links (open/copy review URL).
+- Swarm links: copy the review URL (`gX`). Opening it in a browser was dropped *(2026-10-04)*.
 - p4v escape hatches (`p4vc timelapse`, `revgraph`).
 
 ## Testing

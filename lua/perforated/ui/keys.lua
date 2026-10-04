@@ -151,22 +151,65 @@ function M.valid(actions, node)
   end, actions)
 end
 
+--- Menu entries for a node: the valid actions, in definition order — or, when the view has a
+--- `menu_layout` for the node's kind, in that order. A layout lists action ids, `'-'` for a
+--- separator, or `{ id, label }` to rename an entry in that menu only; it is authoritative, so
+--- actions it leaves out stay on their keys but aren't offered. Invalid entries are skipped and
+--- separators collapse (never first, last or doubled).
+---@param actions perforated.Action[]
+---@param node perforated.TreeNode?
+---@param layouts table<string, (string|string[])[]>?  node kind → layout
+---@return perforated.MenuItem[]
+function M.menu_items(actions, node, layouts)
+  local function item(a, label)
+    local keys = M.keys_of(a)
+    return { key = keys[1] or a.id, label = label or a.desc, value = a }
+  end
+  local layout = node and layouts and layouts[node.kind]
+  local items = {}
+  if not layout then
+    for _, a in ipairs(M.valid(actions, node)) do
+      items[#items + 1] = item(a)
+    end
+    return items
+  end
+  local by_id = {}
+  for _, a in ipairs(actions) do
+    by_id[a.id] = by_id[a.id] or a
+  end
+  local sep = false
+  for _, e in ipairs(layout) do
+    if e == '-' then
+      sep = #items > 0
+    else
+      local id, label = e, nil
+      if type(e) == 'table' then
+        id, label = e[1], e[2]
+      end
+      local a = by_id[id]
+      if a and not a.nomenu and M.applies(a, node) then
+        if sep then
+          items[#items + 1] = { separator = true }
+          sep = false
+        end
+        items[#items + 1] = item(a, label)
+      end
+    end
+  end
+  return items
+end
+
 --- `.` / right-click: menu of the actions valid for the cursor's node.
 ---@param actions perforated.Action[]
----@param view table
+---@param view table  { tree, menu_layout? }
 function M.menu(actions, view)
   local node = view.tree:node_at()
-  local valid = M.valid(actions, node)
-  if #valid == 0 then
+  local items = M.menu_items(actions, node, view.menu_layout)
+  if #items == 0 then
     return require('perforated.ui.toast').notify(
       '[perforated] no actions here',
       vim.log.levels.INFO
     )
-  end
-  local items = {}
-  for _, a in ipairs(valid) do
-    local keys = M.keys_of(a)
-    items[#items + 1] = { key = keys[1] or a.id, label = a.desc, value = a }
   end
   local choice = require('perforated.ui.float').menu({
     title = 'Actions',
