@@ -57,6 +57,11 @@ local function file_node(view, rec, prefix)
   end
   local marker, row_hl = require('perforated.modified').marker(changed)
   local stale = require('perforated.status').is_stale(rec)
+  -- Unresolved (needs action now) outranks stale; both colour the ● and the path.
+  local state_hl = rec.unresolved and 'PerforatedUnresolved' or (stale and 'PerforatedStale')
+  if marker and state_hl and vim.trim(marker[1]) ~= '' then
+    marker = { marker[1], state_hl }
+  end
   local text = {
     marker or { '' },
     {
@@ -67,8 +72,9 @@ local function file_node(view, rec, prefix)
       row_hl == 'PerforatedUnchanged' and row_hl or 'PerforatedAction',
     },
     { icon ~= '' and (icon .. ' ') or '', row_hl == 'PerforatedUnchanged' and row_hl or icon_hl },
-    -- A stale file's path takes the colour of its "stale" badge, whatever its changed state.
-    { shown, stale and 'PerforatedStale' or row_hl or 'PerforatedPath' },
+    -- A stale or unresolved file's path takes the colour of its badge, whatever its changed
+    -- state.
+    { shown, state_hl or row_hl or 'PerforatedPath' },
   }
   if rec.haveRev or rec.headRev then
     text[#text + 1] =
@@ -133,7 +139,7 @@ local function build(view, data)
       item = have,
       text = {
         { '    Sync CL: ', 'PerforatedSection' },
-        { have.change, 'PerforatedChangelist' },
+        { have.change, 'PerforatedClientChangelist' },
         { '  ' .. first_line(have.desc), 'PerforatedPath' },
         {
           ('  %s %s'):format(have.user or '', t and os.date('%Y-%m-%d', t) or ''),
@@ -240,10 +246,10 @@ local function build(view, data)
       end
       local title
       if s.change == 'default' then
-        title = { { 'default', 'PerforatedChangelist' } }
+        title = { { 'default', 'PerforatedClientChangelist' } }
       else
         title = {
-          { 'CL ' .. s.change, 'PerforatedChangelist' },
+          { 'CL ' .. s.change, 'PerforatedClientChangelist' },
           { '  ' .. first_line(s.rec and s.rec.desc), 'PerforatedPath' },
         }
       end
@@ -393,7 +399,7 @@ local function build(view, data)
       kind = 'submitted',
       item = c,
       text = {
-        { 'CL ' .. c.change, 'PerforatedChangelist' },
+        { 'CL ' .. c.change, 'PerforatedClientChangelist' },
         { '  ' .. short_date(c.time), 'PerforatedDim' },
         { '  ' .. first_line(c.desc), 'PerforatedPath' },
       },

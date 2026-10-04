@@ -196,7 +196,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **Staying current:** the view refreshes itself after every plugin action on the workspace
   (check-out, revert, resolve, submit, sync…) and when the background check finds news (a file
   became stale, someone resolved one…). There's no timer; `gr` (or `:P4` again) refreshes on
-  demand. A stale file's path is drawn in the stale colour.
+  demand. A stale file's path and its `●` are drawn in the stale colour, an unresolved
+  file's in the unresolved colour (which wins when both apply). Changelist numbers are bold,
+  white on a dark background and black on a light one (`PerforatedClientChangelist`).
 - **Sync CL:** the newest changelist your workspace has synced (`p4 -c <client> changes -m1
   #have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists (the default changelist first, then the newest) with their
@@ -825,7 +827,8 @@ opts = {
 `:checkhealth perforated` reports unknown keys, which catches typos.
 
 Highlight groups (`PerforatedAdd`, `PerforatedChange`, `PerforatedDelete`, `PerforatedStale`,
-`PerforatedToast`, …) are all `default` links, so you can override them.
+`PerforatedToast`, …) are all `default` links (or derived colours), so you can override them;
+`:h perforated-highlights` lists them.
 
 ## Performance
 

@@ -1202,7 +1202,9 @@ client-side via `vim.lsp.commands`. Loaded only when `lsp.enabled` is set.
 #### `timings.lua`, `hl.lua`
 `:P4 debug timings` report; highlight links (`LINKS`, re-applied on `ColorScheme`;
 `PerforatedUnchanged` is derived halfway between `Normal` and `Comment`; `PerforatedCount`,
-a changelist's non-zero opened-file count, links to `PerforatedModified`).
+a changelist's non-zero opened-file count, links to `PerforatedModified`;
+`PerforatedClientChangelist`, the client view's changelist numbers, is bold white or black by
+`'background'`, re-applied on `OptionSet background` unless someone else redefined it).
 
 #### `lua/lualine/components/perforated.lua`
 A lualine component showing `require('perforated').statusline()`.

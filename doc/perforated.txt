@@ -554,6 +554,7 @@ can override them:
   PerforatedBlame              Comment
   PerforatedChange             Changed
   PerforatedChangelist         Identifier
+  PerforatedClientChangelist   bold white (dark) / black (light background)
   PerforatedCount              PerforatedModified
   PerforatedDelete             Removed
   PerforatedDiffAdded          Added
