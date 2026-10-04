@@ -1058,7 +1058,8 @@ footer). `menu_items` builds the `.` menu: valid actions in definition order, un
 has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change`). A layout
 lists action ids, `'-'` separators and `{ id, label }` renames; it's authoritative (actions it
 leaves out keep their keys but aren't offered), invalid entries are skipped and separators
-never lead, trail or double up.
+never lead, trail or double up. Labels end with the action's Ctrl keys in words
+(`ctrl_label`: `<C-S-t>` → `Ctrl+Shift+T`), e.g. `Diff all files (Ctrl+D)`.
 
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor

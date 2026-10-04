@@ -227,8 +227,9 @@ other layouts):
     when files are stale), copying the number, editing the description, deleting (only when no
     files are opened in it) and quickfix; reverting, resolving (only with unresolved files) and
     moving files; the shelf and Swarm; then new changelist, sync and switch client. `<C-d>` on a
-    changelist diffs all its files. Describe (`gd`) isn't in the menu; `K` is its quick
-    counterpart there.
+    changelist diffs all its files. Every action menu shows an action's Ctrl shortcut after
+    its label, e.g. `Diff all files (Ctrl+D)` (not with `keys.p4v = false`). Describe (`gd`)
+    isn't in the menu; `K` is its quick counterpart there.
   - `K` on a changelist opens **View changelist**: a scrollable popup with the full
     description, its files and its shelved files (`D` there opens the diff tab). `C` switches
     the popup to edit mode: the same popup becomes the description editor (`:w` / `<C-s>`
