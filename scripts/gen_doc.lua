@@ -134,7 +134,6 @@ header('KEYS IN PLUGIN VIEWS', 'perforated-keys')
 wrap(
   'Plugin views have buffer-local keys from one action registry, which also drives the `.` action menu (right-click too), the `?` help and the key footer. Change any action\'s keys with `keys = { <id> = { "x" } }` (or `false` to remove them); `keys.p4v = false` removes the P4V-style keys (<C-d>, <C-r>, ...). The ids are listed in the `?` help of each view.'
 )
-local p4vc = require('perforated.p4vc').actions(ws, nil, function() end)
 local views = {
   {
     'Client view (:P4)',
@@ -174,9 +173,7 @@ for _, v in ipairs(views) do
   add()
   add(v[1] .. (' '):rep(math.max(1, W - #v[1] - #v[2] - 2)) .. '*' .. v[2] .. '*')
   add()
-  local list =
-    vim.list_extend(vim.list_extend({}, v[3]), v[2] == 'perforated-changes' and {} or p4vc)
-  key_table(list)
+  key_table(v[3])
 end
 add()
 add('Diff tab (D, :P4 diff -a)' .. (' '):rep(W - 25 - 22) .. '*perforated-diff-tab*')

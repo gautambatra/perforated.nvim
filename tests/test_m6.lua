@@ -1,9 +1,9 @@
--- M6: p4vc escape hatches, timings, memory soak (real p4d unless noted).
+-- M6: timings, memory soak (real p4d unless noted).
 local H = require('tests.helpers')
 local P = require('tests.helpers.p4d')
 local T = MiniTest.new_set()
 
-local child, server, root, log
+local child, server, root
 
 local function wait(expr, ms)
   H.eq(H.wait(child, expr, ms or 15000), true)
@@ -16,23 +16,16 @@ local function setup(config)
   server:submit_files('alice_ws', root, { ['a.txt'] = 'a\n', ['b.txt'] = 'b\n' }, 'initial')
   server:p4({ 'edit', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
   server:p4config(root, 'alice_ws')
-  log = server.dir .. '/p4vc.log'
   child = H.child({
-    env = { P4CONFIG = '.p4config', FAKE_P4VC_LOG = log },
+    env = { P4CONFIG = '.p4config' },
     config = vim.tbl_deep_extend('force', {
       p4 = P.p4,
       poll = { interval = 0 },
       startup_check = false,
-      p4vc = H.root .. '/tests/bin/fake-p4vc',
     }, config or {}),
   })
   child.cmd('edit ' .. root .. '/a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
-end
-
-local function p4vc_calls()
-  local ok, lines = pcall(vim.fn.readfile, log)
-  return ok and lines or {}
 end
 
 T['m6'] = MiniTest.new_set({
@@ -48,54 +41,21 @@ T['m6'] = MiniTest.new_set({
   },
 })
 
-T['m6']['p4vc: :P4 p4vc revgraph (current file), gR in the client view, health'] = function()
+T['m6']['p4vc is gone: no :P4 p4vc, no revision graph action or <Plug> map'] = function()
   setup()
-  child.cmd('P4 p4vc revgraph')
-  H.eq(
-    vim.wait(5000, function()
-      return #p4vc_calls() == 1
-    end, 50),
-    true
-  )
-  H.eq(p4vc_calls()[1], 'revgraph //depot/a.txt|' .. root)
+  H.eq(vim.tbl_contains(child.lua_get([[require('perforated.commands').names()]]), 'p4vc'), false)
+  H.eq(child.fn.maparg('<Plug>(perforated-revgraph)', 'n'), '')
+  H.eq(child.lua_get([[pcall(require, 'perforated.p4vc')]]), false)
   child.cmd('P4')
   wait(
     [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true) ~= nil]]
   )
-  for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
-    if l:find('b.txt', 1, true) then
-      child.api.nvim_win_set_cursor(0, { i, 0 })
-    end
-  end
-  child.type_keys('gR')
-  H.eq(
-    vim.wait(5000, function()
-      return #p4vc_calls() == 2
-    end, 50),
-    true
-  )
-  H.eq(p4vc_calls()[2], 'revgraph //depot/b.txt|' .. root)
-  child.cmd('checkhealth perforated')
-  H.neq(
-    table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('p4vc: ', 1, true),
-    nil
-  )
-end
-
-T['m6']['p4vc missing: actions hidden, command explains'] = function()
-  setup({ p4vc = '/nonexistent/p4vc' })
-  child.cmd('P4')
-  wait(
-    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true) ~= nil]]
-  )
-  local valid = child.lua_get([[(function()
+  local ids = child.lua_get([[(function()
     local v = require('perforated.views.client')._get(require('perforated').workspace().key)
-    for i, l in ipairs(vim.api.nvim_buf_get_lines(v.buf, 0, -1, false)) do
-      if l:find('b.txt', 1, true) then vim.api.nvim_win_set_cursor(0, { i, 0 }) end
-    end
-    return vim.tbl_map(function(a) return a.id end, require('perforated.ui.keys').valid(v.actions, v.tree:node_at()))
+    return vim.tbl_map(function(a) return a.id end, v.actions)
   end)()]])
-  H.eq(vim.tbl_contains(valid, 'revgraph'), false)
+  H.eq(vim.tbl_contains(ids, 'revgraph'), false)
+  H.eq(vim.tbl_contains(ids, 'p4vc_timelapse'), false)
 end
 
 T['m6'][':P4 debug timings lists p4 commands and plugin timings'] = function()

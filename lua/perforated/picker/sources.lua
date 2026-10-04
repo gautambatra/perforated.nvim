@@ -139,6 +139,47 @@ function M.submitted(ws, opts)
   )
 end
 
+--- A file's revisions (newest first, the have revision marked) → `on_rev(rev)`.
+---@param ws perforated.Workspace
+---@param rec table  fstat record: depotFile, haveRev
+---@param title string
+---@param on_rev fun(rev: perforated.Rev)
+function M.revision(ws, rec, title, on_rev)
+  require('perforated.history').filelog(
+    ws,
+    rec.depotFile,
+    { follow = false, max = 500 },
+    function(revs, err)
+      if not revs then
+        return require('perforated.ui.toast').notify(
+          '[perforated] ' .. tostring(err),
+          vim.log.levels.ERROR
+        )
+      end
+      picker.pick({
+        title = title,
+        items = revs,
+        format = function(r)
+          return ('#%-4s %-8s %s %-12s %s%s'):format(
+            r.rev,
+            r.change or '',
+            date(r.time),
+            r.user or '',
+            first_line(r.desc),
+            tostring(r.rev) == tostring(rec.haveRev) and '  (have)' or ''
+          )
+        end,
+        preview = desc_lines,
+        on_choice = function(chosen)
+          if chosen then
+            on_rev(chosen[1])
+          end
+        end,
+      })
+    end
+  )
+end
+
 --- Users → their submitted changelists.
 function M.users(ws)
   ws:run({ 'users' }, {}, function(res)
