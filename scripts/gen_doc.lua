@@ -224,13 +224,13 @@ add()
 local links = require('perforated.hl').LINKS
 local groups = vim.tbl_keys(links)
 groups[#groups + 1] = 'PerforatedUnchanged'
-groups[#groups + 1] = 'PerforatedClientChangelist'
+vim.list_extend(groups, vim.tbl_keys(require('perforated.hl').COLORS))
 groups[#groups + 1] = 'PerforatedAge1..10'
 table.sort(groups)
 for _, g in ipairs(groups) do
   local target = links[g]
     or (g == 'PerforatedUnchanged' and 'between Normal and Comment')
-    or (g == 'PerforatedClientChangelist' and 'bold white (dark) / black (light background)')
+    or (require('perforated.hl').COLORS[g] and require('perforated.hl').COLORS[g].fg)
     or 'annotate age gradient (annotate.gradient)'
   add(('  %-28s %s'):format(g, target))
 end

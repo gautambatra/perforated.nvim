@@ -197,8 +197,7 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   (check-out, revert, resolve, submit, sync…) and when the background check finds news (a file
   became stale, someone resolved one…). There's no timer; `gr` (or `:P4` again) refreshes on
   demand. A stale file's path and its `●` are drawn in the stale colour, an unresolved
-  file's in the unresolved colour (which wins when both apply). Changelist numbers are bold,
-  white on a dark background and black on a light one (`PerforatedClientChangelist`).
+  file's in the unresolved colour, orange (which wins when both apply).
 - **Sync CL:** the newest changelist your workspace has synced (`p4 -c <client> changes -m1
   #have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists (the default changelist first, then the newest) with their

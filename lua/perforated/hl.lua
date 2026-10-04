@@ -7,7 +7,6 @@ local LINKS = {
   PerforatedChange = 'Changed',
   PerforatedDelete = 'Removed',
   PerforatedStale = 'DiagnosticWarn',
-  PerforatedUnresolved = 'DiagnosticError',
   PerforatedOffline = 'DiagnosticError',
   PerforatedTitle = 'Title',
   PerforatedKey = 'Special',
@@ -53,27 +52,6 @@ M.LINKS = LINKS
 
 local done = false
 
---- Changelist numbers in the client view: bold, white on a dark background and black on a
---- light one. Not a link (no standard group means "plain bold"), so it follows 'background'.
-local function client_changelist()
-  local light = vim.o.background == 'light'
-  local want = {
-    fg = light and '#000000' or '#ffffff',
-    ctermfg = light and 0 or 15,
-    bold = true,
-  }
-  local cur = vim.api.nvim_get_hl(0, { name = 'PerforatedClientChangelist' })
-  -- Replace only our own earlier value (or nothing): a user's or colorscheme's definition wins.
-  local ours = M._client_cl
-  if
-    vim.tbl_isempty(cur)
-    or (ours and cur.fg == tonumber(ours.fg:sub(2), 16) and cur.bold == ours.bold)
-  then
-    vim.api.nvim_set_hl(0, 'PerforatedClientChangelist', want)
-    M._client_cl = want
-  end
-end
-
 --- fg colour of a group as '#rrggbb' (nil without one).
 local function fg(name)
   local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
@@ -90,9 +68,18 @@ function M.blend(a, b, t)
   return out
 end
 
+--- Fixed colours, for meanings no standard group carries reliably.
+M.COLORS = {
+  -- Orange: needs action, but isn't an error (and stays apart from stale's warning colour).
+  PerforatedUnresolved = { fg = '#ff8700', ctermfg = 208 },
+}
+
 function M.setup()
   for name, link in pairs(LINKS) do
     vim.api.nvim_set_hl(0, name, { link = link, default = true })
+  end
+  for name, spec in pairs(M.COLORS) do
+    vim.api.nvim_set_hl(0, name, vim.tbl_extend('force', spec, { default = true }))
   end
   -- Unchanged opened files: halfway between normal text and comments. Muted, but more readable
   -- than Comment (which is very faint in some themes, e.g. onedark).
@@ -106,15 +93,11 @@ function M.setup()
   else
     vim.api.nvim_set_hl(0, 'PerforatedUnchanged', { link = 'Comment', default = true })
   end
-  client_changelist()
   if not done then
     done = true
-    local group = vim.api.nvim_create_augroup('perforated.hl', { clear = true })
-    vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = M.setup })
-    vim.api.nvim_create_autocmd('OptionSet', {
-      group = group,
-      pattern = 'background',
-      callback = client_changelist,
+    vim.api.nvim_create_autocmd('ColorScheme', {
+      group = vim.api.nvim_create_augroup('perforated.hl', { clear = true }),
+      callback = M.setup,
     })
   end
 end

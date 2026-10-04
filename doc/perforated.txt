@@ -554,7 +554,6 @@ can override them:
   PerforatedBlame              Comment
   PerforatedChange             Changed
   PerforatedChangelist         Identifier
-  PerforatedClientChangelist   bold white (dark) / black (light background)
   PerforatedCount              PerforatedModified
   PerforatedDelete             Removed
   PerforatedDiffAdded          Added
@@ -592,7 +591,7 @@ can override them:
   PerforatedToastErrorBorder   DiagnosticError
   PerforatedToastInfoBorder    DiagnosticInfo
   PerforatedUnchanged          between Normal and Comment
-  PerforatedUnresolved         DiagnosticError
+  PerforatedUnresolved         #ff8700
 
 ==============================================================================
 EVENTS                                                     *perforated-events*

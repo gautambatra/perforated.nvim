@@ -237,22 +237,15 @@ local function row_groups(text)
   end)()]]):format(row - 1, row - 1, row - 1))
 end
 
-T['client view']['changelist numbers: bold white (dark), bold black (light); overrides kept'] = function()
-  child.cmd('set background=dark')
+T['client view']['changelist numbers use PerforatedChangelist; unresolved is orange'] = function()
   open_view()
-  H.eq(row_groups('CL 2  Fix parser')['CL 2'], 'PerforatedClientChangelist')
-  H.eq(row_groups('initial import  alice')['1'], 'PerforatedClientChangelist') -- Sync CL
-  local hl = [[(function()
-    local h = vim.api.nvim_get_hl(0, { name = 'PerforatedClientChangelist' })
-    return { fg = h.fg, bold = h.bold }
-  end)()]]
-  H.eq(child.lua_get(hl), { fg = 0xffffff, bold = true })
-  child.cmd('set background=light')
-  H.eq(child.lua_get(hl), { fg = 0x000000, bold = true })
-  -- a user's own colour survives a background switch
-  child.cmd('highlight PerforatedClientChangelist guifg=#ff0000')
-  child.cmd('set background=dark')
-  H.eq(child.lua_get(hl).fg, 0xff0000)
+  H.eq(row_groups('CL 2  Fix parser')['CL 2'], 'PerforatedChangelist')
+  H.eq(row_groups('initial import  alice')['1'], 'PerforatedChangelist') -- Sync CL
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedUnresolved' }).fg]]), 0xff8700)
+  -- a colorscheme or user definition wins
+  child.cmd('highlight PerforatedUnresolved guifg=#123456')
+  child.lua([[require('perforated.hl').setup()]])
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedUnresolved' }).fg]]), 0x123456)
 end
 
 T['client view']['stale / unresolved files: their ● and path take the badge colour'] = function()
