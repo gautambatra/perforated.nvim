@@ -139,7 +139,7 @@ local function build(view, data)
       item = have,
       text = {
         { '    Sync CL: ', 'PerforatedSection' },
-        { have.change, 'PerforatedClientChangelist' },
+        { have.change, 'PerforatedChangelist' },
         { '  ' .. first_line(have.desc), 'PerforatedPath' },
         {
           ('  %s %s'):format(have.user or '', t and os.date('%Y-%m-%d', t) or ''),
@@ -246,10 +246,10 @@ local function build(view, data)
       end
       local title
       if s.change == 'default' then
-        title = { { 'default', 'PerforatedClientChangelist' } }
+        title = { { 'default', 'PerforatedChangelist' } }
       else
         title = {
-          { 'CL ' .. s.change, 'PerforatedClientChangelist' },
+          { 'CL ' .. s.change, 'PerforatedChangelist' },
           { '  ' .. first_line(s.rec and s.rec.desc), 'PerforatedPath' },
         }
       end
@@ -399,7 +399,7 @@ local function build(view, data)
       kind = 'submitted',
       item = c,
       text = {
-        { 'CL ' .. c.change, 'PerforatedClientChangelist' },
+        { 'CL ' .. c.change, 'PerforatedChangelist' },
         { '  ' .. short_date(c.time), 'PerforatedDim' },
         { '  ' .. first_line(c.desc), 'PerforatedPath' },
       },
