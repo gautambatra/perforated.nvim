@@ -618,6 +618,19 @@ local function menu_labels(text)
   )
 end
 
+--- Label → Ctrl hint of the `.` menu for the line containing `text`.
+local function menu_hints(text)
+  goto_line(text)
+  local v = view_expr(root)
+  return child.lua_get(([[(function()
+    local out = {}
+    for _, i in ipairs(require('perforated.ui.keys').menu_items(%s.actions, %s.tree:node_at(), %s.menu_layout)) do
+      if i.label then out[i.label] = i.hint end
+    end
+    return out
+  end)()]]):format(v, v, v))
+end
+
 T['client view']['changelist menu: fixed order, groups, only what applies'] = function()
   server:p4({ 'change', '-i' }, {
     client = 'alice_ws',
@@ -626,42 +639,42 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   })
   open_view()
   H.eq(menu_labels('CL 2  Fix parser'), {
-    'Submit… (Ctrl+S)',
+    'Submit…',
     '-',
     'View changelist',
-    'Diff all files (Ctrl+D)',
+    'Diff all files',
     'Edit description',
     'Copy CL number',
     'Copy Swarm URL',
     'Send to quickfix',
     '-',
     'Revert unchanged files',
-    'Revert files (Ctrl+R)',
+    'Revert files',
     'Move all files to another changelist',
     '-',
     'Shelve files',
     'Unshelve files',
     'Delete shelved files',
     '-',
-    'Create new changelist (Ctrl+N)',
-    'Sync entire workspace (Ctrl+Shift+G)',
+    'Create new changelist',
+    'Sync entire workspace',
     'Switch client',
   })
   -- default: stale c.txt → get latest; no CL number, description, shelf or Swarm
   H.eq(menu_labels('default'), {
-    'Submit… (Ctrl+S)',
+    'Submit…',
     '-',
     'View changelist',
-    'Diff all files (Ctrl+D)',
+    'Diff all files',
     'Send to quickfix',
     'Get latest file revisions',
     '-',
     'Revert unchanged files',
-    'Revert files (Ctrl+R)',
+    'Revert files',
     'Move all files to another changelist',
     '-',
-    'Create new changelist (Ctrl+N)',
-    'Sync entire workspace (Ctrl+Shift+G)',
+    'Create new changelist',
+    'Sync entire workspace',
     'Switch client',
   })
   -- describe stays on `gd`, in no menu of the view (submitted rows included)
@@ -672,7 +685,7 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   -- an empty CL can be deleted; one with files can't
   local empty = menu_labels('Empty one')
   H.eq(vim.tbl_contains(empty, 'Delete changelist'), true)
-  H.eq(vim.tbl_contains(empty, 'Submit… (Ctrl+S)'), false)
+  H.eq(vim.tbl_contains(empty, 'Submit…'), false)
   H.eq(empty[1], 'View changelist') -- no leading separator
   -- `.` draws the groups with rules, and the keys still choose
   goto_line('CL 2  Fix parser')
@@ -687,7 +700,17 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   end)()]]
   wait(menu .. ' ~= nil')
   local shown = child.lua_get(menu)
-  H.eq(shown[1]:match('^%s+P%s+Submit… %(Ctrl%+S%)$') ~= nil, true)
+  H.eq(shown[1]:match('^%s+P%s+Submit…%s+Ctrl%+S$') ~= nil, true)
+  -- Ctrl shortcuts sit in one right-hand column, without parentheses
+  local cols = {}
+  for _, l in ipairs(shown) do
+    local col = l:find('Ctrl+', 1, true)
+    if col then
+      cols[vim.fn.strdisplaywidth(l:sub(1, col - 1))] = true
+    end
+    H.eq(l:find('(Ctrl', 1, true), nil)
+  end
+  H.eq(vim.tbl_count(cols), 1)
   H.eq(#shown[2] > 0 and shown[2]:gsub('─', '') == '', true)
   child.type_keys('K')
   wait(FLOAT_LINES .. ' ~= nil')
@@ -701,15 +724,15 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
   open_view()
   local tail = {
     '-',
-    'Diff against have revision (Ctrl+D)',
+    'Diff against have revision',
     'Diff against revision…',
     '-',
-    'File history (Ctrl+T)',
+    'File history',
     'Annotate',
-    'Time-lapse view (Ctrl+Shift+T)',
+    'Time-lapse view',
     '-',
-    'Create new changelist (Ctrl+N)',
-    'Sync entire workspace (Ctrl+Shift+G)',
+    'Create new changelist',
+    'Sync entire workspace',
     'Switch client',
   }
   local function with_tail(head)
@@ -723,7 +746,7 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
       'Get revision…',
       '-',
       'Revert if unchanged',
-      'Revert (Ctrl+R)',
+      'Revert',
       'Move to another changelist',
     })
   )
@@ -1020,10 +1043,12 @@ T['client view']['P4V keys are mapped; keys.p4v = false removes them'] = functio
   for _, k in ipairs({ '<C-d>', '<C-r>', '<C-n>' }) do
     H.eq(child.lua_get(([[vim.fn.maparg('%s', 'n', false, true).buffer]]):format(k)), 1)
   end
-  -- …and the action menu shows them after the label
-  local labels = menu_labels('CL 2  Fix parser')
-  H.eq(vim.tbl_contains(labels, 'Revert files (Ctrl+R)'), true)
-  H.eq(vim.tbl_contains(labels, 'Create new changelist (Ctrl+N)'), true)
+  -- …and the action menu shows them beside the label
+  local hints = menu_hints('CL 2  Fix parser')
+  H.eq(hints['Revert files'], 'Ctrl+R')
+  H.eq(hints['Create new changelist'], 'Ctrl+N')
+  H.eq(hints['Diff all files'], 'Ctrl+D')
+  H.eq(hints['View changelist'], nil)
   H.eq(
     child.lua_get(
       [[vim.tbl_map(require('perforated.ui.keys').ctrl_label, { '<C-S-t>', '<C-1>', '<F5>', 'gd' })]]
@@ -1035,7 +1060,7 @@ T['client view']['P4V keys are mapped; keys.p4v = false removes them'] = functio
   child.cmd('bwipeout! ' .. child.lua_get(view_expr(root) .. '.buf'))
   open_view()
   H.eq(child.fn.maparg('<C-d>', 'n'), '')
-  H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Diff all files'), true) -- no (Ctrl+D)
+  H.eq(menu_hints('CL 2  Fix parser')['Diff all files'], nil) -- no Ctrl+D
   H.eq(child.lua_get([[vim.fn.maparg('d', 'n', false, true).buffer]]), 1)
 end
 

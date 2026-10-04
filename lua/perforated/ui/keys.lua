@@ -170,8 +170,8 @@ function M.ctrl_label(lhs)
   return table.concat(out, '+')
 end
 
---- Menu entries for a node (labels end with the action's Ctrl shortcuts, `Diff all files
---- (Ctrl+D)`): the valid actions, in definition order — or, when the view has a
+--- Menu entries for a node (each with its Ctrl shortcut as `hint`, e.g. `Ctrl+D`, shown
+--- right-aligned): the valid actions, in definition order — or, when the view has a
 --- `menu_layout` for the node's kind, in that order. A layout lists action ids, `'-'` for a
 --- separator, or `{ id, label }` to rename an entry in that menu only; it is authoritative, so
 --- actions it leaves out stay on their keys but aren't offered. Invalid entries are skipped and
@@ -183,16 +183,13 @@ end
 function M.menu_items(actions, node, layouts)
   local function item(a, label)
     local keys = M.keys_of(a)
-    label = label or a.desc
-    -- Ctrl shortcuts (P4V's) after the label, unless one is already the key column's key.
+    -- Ctrl shortcuts (P4V's) in the right-hand column, unless one is already the key column's.
     local ctrl = {}
     for i = 2, #keys do
       ctrl[#ctrl + 1] = M.ctrl_label(keys[i])
     end
-    if #ctrl > 0 and not M.ctrl_label(keys[1]) then
-      label = ('%s (%s)'):format(label, table.concat(ctrl, ', '))
-    end
-    return { key = keys[1] or a.id, label = label, value = a }
+    local hint = #ctrl > 0 and not M.ctrl_label(keys[1]) and table.concat(ctrl, ', ') or nil
+    return { key = keys[1] or a.id, label = label or a.desc, hint = hint, value = a }
   end
   local layout = node and layouts and layouts[node.kind]
   local items = {}

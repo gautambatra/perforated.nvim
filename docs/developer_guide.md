@@ -1055,8 +1055,9 @@ footer). `menu_items` builds the `.` menu: valid actions in definition order, un
 has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change`). A layout
 lists action ids, `'-'` separators and `{ id, label }` renames; it's authoritative (actions it
 leaves out keep their keys but aren't offered), invalid entries are skipped and separators
-never lead, trail or double up. Labels end with the action's Ctrl keys in words
-(`ctrl_label`: `<C-S-t>` → `Ctrl+Shift+T`), e.g. `Diff all files (Ctrl+D)`.
+never lead, trail or double up. Each item's `hint` is the action's Ctrl keys in words
+(`ctrl_label`: `<C-S-t>` → `Ctrl+Shift+T`), which `float.menu` shows in an aligned right-hand
+column.
 
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor
@@ -1064,7 +1065,8 @@ moves (per-window statuslines are hidden with `laststatus=3`, so a float is used
 
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep
-processing). An item `{ separator = true }` draws a full-width rule. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
+processing). An item `{ separator = true }` draws a full-width rule; an item's `hint` goes in a
+right-hand column, aligned across items. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
 per item, and a *grace period* during which keys are captured for replay (for the check-out
 prompt, which can pop up mid-typing).
 

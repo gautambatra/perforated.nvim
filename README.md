@@ -231,8 +231,8 @@ other layouts):
     file's history); revert, move, shelve; diff against the have revision or **against a
     revision** (`gD`, picked the same way); history, annotate, time-lapse; then the same last
     group. `<C-d>` on a
-    changelist diffs all its files. Every action menu shows an action's Ctrl shortcut after
-    its label, e.g. `Diff all files (Ctrl+D)` (not with `keys.p4v = false`). Describe (`gd`)
+    changelist diffs all its files. Every action menu shows an action's Ctrl shortcut in an
+    aligned column on the right, e.g. `Diff all files … Ctrl+D` (not with `keys.p4v = false`). Describe (`gd`)
     isn't in the menu; `K` is its quick counterpart there.
   - `K` on a changelist opens **View changelist**: a scrollable popup with the full
     description, its files and its shelved files (`D` there opens the diff tab). `C` switches

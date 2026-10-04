@@ -9,6 +9,7 @@ M.ns = vim.api.nvim_create_namespace('perforated.float')
 ---@field label string
 ---@field value any
 ---@field aliases string[]?  more keys that choose it (not shown)
+---@field hint string?       shown in a right-hand column, aligned (e.g. `Ctrl+R`)
 ---@field separator boolean?  a horizontal rule instead of a choice (no key, label or value)
 
 ---@class perforated.MenuOpts
@@ -33,14 +34,26 @@ function M.menu(opts)
   if #lines > 0 then
     lines[#lines + 1] = ''
   end
-  local seps = {}
+  local seps, hint_hls = {}, {}
+  local label_w = 0
+  for _, it in ipairs(opts.items) do
+    if it.hint then
+      label_w = math.max(label_w, vim.fn.strdisplaywidth(it.label))
+    end
+  end
   for _, it in ipairs(opts.items) do
     if it.separator then
       lines[#lines + 1] = ''
       seps[#seps + 1] = #lines
     else
       local key = it.key
-      lines[#lines + 1] = ('  %-6s %s'):format(key, it.label)
+      local line = ('  %-6s %s'):format(key, it.label)
+      if it.hint then
+        line = line .. (' '):rep(label_w - vim.fn.strdisplaywidth(it.label) + 4)
+        hint_hls[#lines + 1] = { #line, #line + #it.hint }
+        line = line .. it.hint
+      end
+      lines[#lines + 1] = line
       key_hls[#lines] = #key
     end
   end
@@ -67,6 +80,15 @@ function M.menu(opts)
   end
   for _, i in ipairs(seps) do
     vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, { line_hl_group = 'PerforatedFloatBorder' })
+  end
+  for i, r in pairs(hint_hls) do
+    vim.api.nvim_buf_set_extmark(
+      buf,
+      M.ns,
+      i - 1,
+      r[1],
+      { end_col = r[2], hl_group = 'PerforatedKey' }
+    )
   end
   local header_hl = opts.header_hl == nil and 'PerforatedDim' or opts.header_hl
   for i = 1, header_hl and #(opts.header or {}) or 0 do
