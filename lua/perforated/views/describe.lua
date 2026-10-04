@@ -590,17 +590,6 @@ local function actions(view)
       end,
     },
     {
-      id = 'swarm',
-      desc = 'Open review in Swarm',
-      keys = { 'gx' },
-      when = function()
-        return view.item.change ~= 'default'
-      end,
-      run = function()
-        require('perforated.history').swarm(ws, view.item.change)
-      end,
-    },
-    {
       id = 'swarm_copy',
       desc = 'Copy Swarm review URL',
       keys = { 'gX' },
@@ -608,7 +597,7 @@ local function actions(view)
         return view.item.change ~= 'default'
       end,
       run = function()
-        require('perforated.history').swarm(ws, view.item.change, true)
+        require('perforated.history').swarm(ws, view.item.change)
       end,
     },
   })

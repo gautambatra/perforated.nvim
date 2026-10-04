@@ -594,11 +594,116 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), false)
   goto_line('CL 2  Fix parser')
   H.eq(vim.tbl_contains(ids(), 'Revert unchanged files'), true)
-  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), true)
+  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), false) -- a.txt isn't stale
+  goto_line('default')
+  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), true) -- c.txt is
+  goto_line('CL 2  Fix parser')
   child.type_keys('y')
   H.eq(child.fn.getreg('"'), '2')
   H.eq(child.fn.maparg('.', 'n') ~= '', true)
   H.eq(child.fn.maparg('<Space>', 'n'), '')
+end
+
+--- Labels of the `.` menu for the line containing `text` ('-' for a separator).
+local function menu_labels(text)
+  goto_line(text)
+  local v = view_expr(root)
+  return child.lua_get(
+    ([[vim.tbl_map(function(i) return i.separator and '-' or i.label end,
+      require('perforated.ui.keys').menu_items(%s.actions, %s.tree:node_at(), %s.menu_layout))]]):format(
+      v,
+      v,
+      v
+    )
+  )
+end
+
+T['client view']['changelist menu: fixed order, groups, only what applies'] = function()
+  server:p4({ 'change', '-i' }, {
+    client = 'alice_ws',
+    cwd = root,
+    stdin = 'Change: new\nDescription:\n\tEmpty one\n',
+  })
+  open_view()
+  H.eq(menu_labels('CL 2  Fix parser'), {
+    'Submit…',
+    '-',
+    'View changelist',
+    'Diff all files',
+    'Copy CL number',
+    'Edit description',
+    'Send to quickfix',
+    '-',
+    'Revert unchanged files',
+    'Revert files',
+    'Move all files to another changelist',
+    '-',
+    'Shelve files',
+    'Unshelve files',
+    'Delete shelved files',
+    'Copy Swarm URL',
+    '-',
+    'Create new changelist',
+    'Sync entire workspace',
+    'Switch client',
+  })
+  -- default: stale c.txt → get latest; no CL number, description, shelf or Swarm
+  H.eq(menu_labels('default'), {
+    'Submit…',
+    '-',
+    'View changelist',
+    'Diff all files',
+    'Get latest file revisions',
+    'Send to quickfix',
+    '-',
+    'Revert unchanged files',
+    'Revert files',
+    'Move all files to another changelist',
+    '-',
+    'Create new changelist',
+    'Sync entire workspace',
+    'Switch client',
+  })
+  -- an empty CL can be deleted; one with files can't
+  local empty = menu_labels('Empty one')
+  H.eq(vim.tbl_contains(empty, 'Delete changelist'), true)
+  H.eq(vim.tbl_contains(empty, 'Submit…'), false)
+  H.eq(empty[1], 'View changelist') -- no leading separator
+  -- `.` draws the groups with rules, and the keys still choose
+  goto_line('CL 2  Fix parser')
+  child.type_keys('.')
+  local menu = [[(function()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      local b = vim.api.nvim_win_get_buf(w)
+      if vim.api.nvim_win_get_config(w).relative ~= '' and vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]:find('Submit') then
+        return vim.api.nvim_buf_get_lines(b, 0, -1, false)
+      end
+    end
+  end)()]]
+  wait(menu .. ' ~= nil')
+  local shown = child.lua_get(menu)
+  H.eq(shown[1]:match('^%s+P%s+Submit…$') ~= nil, true)
+  H.eq(#shown[2] > 0 and shown[2]:gsub('─', '') == '', true)
+  child.type_keys('K')
+  wait(FLOAT_LINES .. ' ~= nil')
+  H.expect.no_equality(
+    table.concat(child.lua_get(FLOAT_LINES), '\n'):find('second line', 1, true),
+    nil
+  )
+end
+
+T['client view']['a changelist resolves only with unresolved files; S, g<Del> act on its shelf'] = function()
+  open_view()
+  H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Resolve'), false)
+  child.lua(
+    [[require('perforated.ops').unshelve = function(_, cl, files) _G.unsh = { cl, files } end
+    require('perforated.ops').delete_shelved = function(_, cl, files) _G.del = { cl, files } end]]
+  )
+  goto_line('CL 2  Fix parser')
+  child.type_keys('S')
+  H.eq(child.lua_get('_G.unsh'), { '2' })
+  child.type_keys('g', '<Del>')
+  H.eq(child.lua_get('_G.del'), { '2' })
 end
 
 T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in a tab'] = function()

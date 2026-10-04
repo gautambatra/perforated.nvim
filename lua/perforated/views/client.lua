@@ -696,7 +696,7 @@ local function files_of(items)
   return out
 end
 
---- Shelf / shelved-file nodes grouped by changelist: change → depot files, or false for the
+--- Shelf / shelved-file (or changelist) nodes grouped by changelist: change → depot files, or false for the
 --- whole shelf.
 ---@param nodes perforated.TreeNode[]
 ---@return table<string, string[]|false>
@@ -704,7 +704,7 @@ local function shelved_by_change(nodes)
   local out = {}
   for _, n in ipairs(nodes) do
     local change = n.item.change
-    if n.kind == 'shelf' then
+    if n.kind == 'shelf' or n.kind == 'change' then
       out[change] = false
     elseif out[change] ~= false then
       out[change] = out[change] or {}
@@ -956,9 +956,12 @@ local function actions(view)
       id = 'unshelve',
       desc = 'Unshelve',
       keys = { 'S' },
-      kinds = { shelf = true, shelved_file = true },
+      kinds = { shelf = true, shelved_file = true, change = true },
       multi = true,
       footer = 41,
+      when = function(item, node)
+        return node.kind ~= 'change' or #(item.shelved or {}) > 0
+      end,
       run = function(_, ctx)
         local ops = require('perforated.ops')
         for change, files in pairs(shelved_by_change(ctx.nodes)) do
@@ -977,6 +980,24 @@ local function actions(view)
         local ops = require('perforated.ops')
         for change, files in pairs(shelved_by_change(ctx.nodes)) do
           ops.delete_shelved(ws, change, files or nil)
+        end
+        view.tree.marks = {}
+      end,
+    },
+    {
+      -- On a changelist `<Del>` deletes the changelist itself.
+      id = 'delete_shelved_change',
+      desc = 'Delete shelved files',
+      keys = { 'g<Del>' },
+      kinds = { change = true },
+      multi = true,
+      when = function(item)
+        return #(item.shelved or {}) > 0 and item.mine ~= false
+      end,
+      run = function(_, ctx)
+        local ops = require('perforated.ops')
+        for change in pairs(shelved_by_change(ctx.nodes)) do
+          ops.delete_shelved(ws, change, nil)
         end
         view.tree.marks = {}
       end,
@@ -1044,7 +1065,7 @@ local function actions(view)
       kinds = { change = true },
       footer = 43,
       when = function(item)
-        return #(item.files or {}) > 0
+        return vim.iter(item.files or {}):any(require('perforated.status').is_stale)
       end,
       run = function(items)
         require('perforated.ops').sync(ws, paths_of(files_of(items)))
@@ -1105,18 +1126,6 @@ local function actions(view)
       end,
     },
     {
-      id = 'swarm',
-      desc = 'Open review in Swarm',
-      keys = { 'gx' },
-      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
-      when = function(item)
-        return item and item.change ~= 'default'
-      end,
-      run = function(items)
-        require('perforated.history').swarm(ws, items[1].change)
-      end,
-    },
-    {
       id = 'swarm_copy',
       desc = 'Copy Swarm review URL',
       keys = { 'gX' },
@@ -1125,7 +1134,7 @@ local function actions(view)
         return item and item.change ~= 'default'
       end,
       run = function(items)
-        require('perforated.history').swarm(ws, items[1].change, true)
+        require('perforated.history').swarm(ws, items[1].change)
       end,
     },
     {
@@ -1215,6 +1224,7 @@ local function actions(view)
       id = 'diff_all',
       desc = 'Diff all files',
       keys = { 'D' },
+      p4v = { '<C-d>' },
       kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       footer = 11,
       run = function(items)
@@ -1392,6 +1402,7 @@ local function actions(view)
       kinds = { change = true },
       when = function(item)
         return item.change ~= 'default'
+          and #(item.files or {}) == 0
           and (item.mine ~= false or require('perforated.config').get().change.allow_force)
       end,
       run = function(items)
@@ -1527,6 +1538,36 @@ local function actions(view)
     },
   }
 end
+
+--- The `.` menu of a changelist, in this order (`'-'` separates groups). Actions not listed
+--- (describe, send to location list) keep their keys but aren't offered here.
+M.MENU_LAYOUT = {
+  change = {
+    { 'submit', 'Submit…' },
+    '-',
+    'view_change',
+    'diff_all',
+    'get_latest_change',
+    'yank',
+    'edit_description',
+    'delete_change',
+    'to_qf',
+    '-',
+    'revert_unchanged',
+    { 'revert', 'Revert files' },
+    'resolve',
+    'move_all',
+    '-',
+    { 'shelve', 'Shelve files' },
+    { 'unshelve', 'Unshelve files' },
+    'delete_shelved_change',
+    { 'swarm_copy', 'Copy Swarm URL' },
+    '-',
+    { 'new_change', 'Create new changelist' },
+    { 'sync', 'Sync entire workspace' },
+    { 'switch_client', 'Switch client' },
+  },
+}
 
 --- Send nodes (files, CLs, sections) to the quickfix / location list.
 function M.to_qf(view, _, ctx, loclist)
@@ -1810,6 +1851,7 @@ function M.open(ws, opts)
   views[ws.key] = view
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = actions(view)
+  view.menu_layout = M.MENU_LAYOUT
   -- P4V tools (p4vc, when installed)
   vim.list_extend(
     view.actions,

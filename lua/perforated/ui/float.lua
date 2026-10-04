@@ -9,6 +9,7 @@ M.ns = vim.api.nvim_create_namespace('perforated.float')
 ---@field label string
 ---@field value any
 ---@field aliases string[]?  more keys that choose it (not shown)
+---@field separator boolean?  a horizontal rule instead of a choice (no key, label or value)
 
 ---@class perforated.MenuOpts
 ---@field title string
@@ -32,16 +33,25 @@ function M.menu(opts)
   if #lines > 0 then
     lines[#lines + 1] = ''
   end
+  local seps = {}
   for _, it in ipairs(opts.items) do
-    local key = it.key
-    lines[#lines + 1] = ('  %-6s %s'):format(key, it.label)
-    key_hls[#lines] = #key
+    if it.separator then
+      lines[#lines + 1] = ''
+      seps[#seps + 1] = #lines
+    else
+      local key = it.key
+      lines[#lines + 1] = ('  %-6s %s'):format(key, it.label)
+      key_hls[#lines] = #key
+    end
   end
   local width = vim.fn.strdisplaywidth(opts.title) + 4
   for _, l in ipairs(lines) do
     width = math.max(width, vim.fn.strdisplaywidth(l) + 2)
   end
   width = math.min(width, vim.o.columns - 4)
+  for _, i in ipairs(seps) do
+    lines[i] = ('─'):rep(width)
+  end
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
@@ -54,6 +64,9 @@ function M.menu(opts)
       2,
       { end_col = 2 + n, hl_group = 'PerforatedKey' }
     )
+  end
+  for _, i in ipairs(seps) do
+    vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, { line_hl_group = 'PerforatedFloatBorder' })
   end
   local header_hl = opts.header_hl == nil and 'PerforatedDim' or opts.header_hl
   for i = 1, header_hl and #(opts.header or {}) or 0 do
@@ -89,7 +102,9 @@ function M.menu(opts)
   M.active = opts.title -- observable while waiting (tests, statusline)
   local by_key = {}
   for _, it in ipairs(opts.items) do
-    by_key[it.key] = it
+    if it.key then
+      by_key[it.key] = it
+    end
     for _, k in ipairs(it.aliases or {}) do
       by_key[k] = by_key[k] or it
     end

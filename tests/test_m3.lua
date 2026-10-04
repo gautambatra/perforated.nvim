@@ -357,6 +357,7 @@ T['m3']['lookup: number → describe, user → changes; Swarm URL from config'] 
   wait_text('bob fixes line 2')
   child.type_keys('gX')
   wait([[vim.fn.getreg('"') == 'https://swarm.example/changes/2']])
+  H.expect.no_equality(child.lua_get([[vim.fn.maparg('gx', 'n', false, true).buffer]]), 1) -- no "open"
   child.cmd('P4 lookup bob')
   wait_text('bob fixes line 2')
   H.eq(text():find('alice changes', 1, true), nil)
