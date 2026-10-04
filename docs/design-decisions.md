@@ -119,6 +119,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 - No global keymaps by default; `<Plug>` mappings + **opt-in preset** (`keymaps = 'default'`). Buffer-local maps in plugin buffers always on.
 
 ### Plugin-buffer keys (client view, describe, history, annotate, time-lapse)
+- Tree layout *(2026-10-04)*: 4 columns per level, `▶`/`▼` fold triangles; a row without a triangle starts where one would, so "Shelved" lines up with the files above it (their `●` column).
 - Folding: `l` / `<Tab>` / `<CR>` expand, `h` collapse (on a child: jump to parent + collapse). `<CR>` on a leaf → action menu.
 - **Context action menu** everywhere: `.` / `<RightMouse>` (not `<Space>`: commonly the leader key) → float listing only actions valid for the item under cursor, each with its hotkey. Normal code buffers: `<leader>p<Space>`.
 - Navigation: `]]`/`[[` sections, `gr` refresh, `q` close, `?` help, `m`/`u` mark/unmark, `/` filter.

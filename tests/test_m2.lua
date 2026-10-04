@@ -266,7 +266,7 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(#child.api.nvim_list_tabpages(), 2)
   H.eq(has_line('Client alice_ws'), true)
   H.eq(has_line('Sync CL: 1  initial import'), true) -- the newest changelist we have
-  H.eq(lines()[goto_line('Sync CL:')]:match('^(%s*)Sync CL:'), '      ') -- tree indent + 4 spaces
+  H.eq(lines()[goto_line('Sync CL:')]:match('^(%s*)Sync CL:'), '    ') -- level with the changelists
   H.eq(goto_line('Sync CL:') < goto_line('Pending'), true)
   H.eq(vim.trim(lines()[goto_line('Pending') - 1]), '') -- a blank line between sections
   H.eq(vim.trim(lines()[goto_line('Recent submitted') - 1]), '')
@@ -567,10 +567,26 @@ T['client view']['K shows the full description, opened and shelved files'] = fun
   H.eq(child.lua_get(FLOAT_LINES), vim.NIL)
 end
 
+T['client view']['layout: 4 columns per level; the shelf lines up with the files'] = function()
+  open_view()
+  local function line_of(text)
+    return lines()[goto_line(text)]
+  end
+  H.eq(line_of('Pending'):match('^▼ Pending') ~= nil, true)
+  H.eq(line_of('CL 2  Fix parser'):match('^    ▼ CL 2') ~= nil, true)
+  -- files at depth 2 start at column 8 (the ● marker column), and so does the shelf's triangle
+  H.eq(line_of('a.txt  #1/#1'):match('^        ● edit') ~= nil, true)
+  H.eq(line_of('b.txt'):match('^          edit') ~= nil, true) -- blank marker
+  H.eq(line_of('Shelved (1)'):match('^        ▶ ') ~= nil, true)
+  child.type_keys('l')
+  H.eq(line_of('//depot/a.txt'):match('^            edit') ~= nil, true)
+  H.eq(line_of('CL 1  20'):match('^    CL 1') ~= nil, true)
+end
+
 T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = function()
   open_view()
-  H.eq(has_line('▾ '), true)
-  H.eq(has_line('▸ '), true) -- the collapsed shelf
+  H.eq(has_line('▼ '), true)
+  H.eq(has_line('▶ '), true) -- the collapsed shelf
   local ids = function()
     return child.lua_get(
       [[vim.tbl_map(function(a) return a.desc end,
