@@ -13,8 +13,9 @@ local function scratch(buf, name)
 end
 
 local function win_opts(win)
-  vim.wo[win].cursorline, vim.wo[win].number, vim.wo[win].relativenumber = true, false, false
-  vim.wo[win].signcolumn, vim.wo[win].wrap, vim.wo[win].foldcolumn = 'no', false, '0'
+  vim.wo[win][0].cursorline, vim.wo[win][0].number, vim.wo[win][0].relativenumber =
+    true, false, false
+  vim.wo[win][0].signcolumn, vim.wo[win][0].wrap, vim.wo[win][0].foldcolumn = 'no', false, '0'
 end
 
 --- A window that shows code (a file, a revision, a diff side) follows the user's global
@@ -23,7 +24,7 @@ end
 ---@param win integer
 function M.code_win(win)
   if vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].number, vim.wo[win].relativenumber = vim.go.number, vim.go.relativenumber
+    vim.wo[win][0].number, vim.wo[win][0].relativenumber = vim.go.number, vim.go.relativenumber
   end
 end
 
@@ -59,7 +60,7 @@ function M.float(name, title, size)
     title = ' ' .. title .. ' ',
     title_pos = 'left',
   })
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
   win_opts(win)
   return buf, win
 end

@@ -134,7 +134,7 @@ function M.menu(opts)
     win_opts.col = math.floor((vim.o.columns - width) / 2)
   end
   local win = vim.api.nvim_open_win(buf, false, win_opts)
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
 
   M.active = opts.title -- observable while waiting (tests, statusline)
   local by_key = {}

@@ -172,8 +172,8 @@ function M.show()
     footer = ' x stop · q close ',
     footer_pos = 'right',
   })
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
-  vim.wo[win].cursorline = true
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].cursorline = true
   float = { buf = buf, win = win }
   local function close()
     pcall(vim.api.nvim_win_close, win, true)

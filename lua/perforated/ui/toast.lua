@@ -228,8 +228,8 @@ function M._render(t)
   local border = BORDER[level]
     or (level < vim.log.levels.INFO and BORDER[vim.log.levels.INFO])
     or 'PerforatedToastBorder'
-  vim.wo[t.win].winhighlight = 'NormalFloat:PerforatedToast,FloatBorder:' .. border
-  vim.wo[t.win].wrap = false
+  vim.wo[t.win][0].winhighlight = 'NormalFloat:PerforatedToast,FloatBorder:' .. border
+  vim.wo[t.win][0].wrap = false
   shown[#shown + 1] = t
   M._restack()
   arm_activity()

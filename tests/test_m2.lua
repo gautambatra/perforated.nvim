@@ -1125,6 +1125,28 @@ T['client view']['diff tab: moving the cursor in the panel loads each file (both
   H.eq(math.abs(w[2] - w[3]) <= 1, true)
 end
 
+T['client view']['views and diff tabs leave global window options alone'] = function()
+  child.o.number, child.o.wrap, child.o.cursorline, child.o.signcolumn = true, true, false, 'auto'
+  local function globals()
+    return child.lua_get([[{ vim.go.number, vim.go.wrap, vim.go.cursorline, vim.go.signcolumn,
+      vim.go.relativenumber, vim.go.foldcolumn }]])
+  end
+  local before = globals()
+  open_view() -- client view: no numbers, cursorline, no wrap — in its own window only
+  H.write(root .. '/b.txt', 'b2\n')
+  goto_line('default')
+  child.type_keys('D') -- diff tab with a file panel
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  child.cmd('tabnext 1')
+  child.cmd('P4 annotate')
+  -- (the annotate split binds and unwraps the source window)
+  wait([[next(require('perforated.views.annotate')._views) ~= nil]])
+  H.eq(globals(), before)
+  child.cmd('tabnew')
+  H.eq(child.wo.number, true) -- a new window still gets line numbers
+  H.eq(child.wo.wrap, true)
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up

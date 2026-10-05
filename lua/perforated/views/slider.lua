@@ -144,7 +144,7 @@ function Slider:render()
       and ('incremental diff ◆ %s → ● %s'):format(label(view, a), label(view, b))
     or view.mode == 'range' and ('range: changes since ◆ %s'):format(label(view, a))
     or 'single'
-  vim.wo[self.win].winbar = ('%%#PerforatedTitle# Time-lapse%%#PerforatedDim#  %s  ·  %s  ·  labels: %s (S)'):format(
+  vim.wo[self.win][0].winbar = ('%%#PerforatedTitle# Time-lapse%%#PerforatedDim#  %s  ·  %s  ·  labels: %s (S)'):format(
     (view.tl.depotFile:gsub('%%', '%%%%')),
     mode,
     view.scale == 'rev' and 'revisions' or 'changelists'
@@ -218,7 +218,7 @@ function M.attach(view, on_click)
     buf,
     'perforated://slider/' .. (view.tl and view.tl.depotFile or '')
   )
-  local wo = vim.wo[win]
+  local wo = vim.wo[win][0] -- window-local (:setlocal), never the global default
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
   wo.cursorline, wo.wrap, wo.winfixheight, wo.list = false, false, true, false
   wo.statusline = ' '

@@ -86,8 +86,8 @@ function M.input(opts, on_confirm)
     footer_pos = 'right',
     zindex = 200,
   })
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
-  vim.wo[win].wrap = false
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].wrap = false
 
   local done = false
   local function finish(value)

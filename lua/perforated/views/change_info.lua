@@ -127,9 +127,9 @@ function M.show(ws, item, d, shelved)
     footer = ' q close · <CR> describe · D diff all files' .. (editable and ' · C edit ' or ' '),
     footer_pos = 'right',
   })
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
-  vim.wo[win].wrap = true
-  vim.wo[win].cursorline = true
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].wrap = true
+  vim.wo[win][0].cursorline = true
   local function close()
     pcall(vim.api.nvim_win_close, win, true)
   end

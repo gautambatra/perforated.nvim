@@ -201,7 +201,7 @@ end
 
 local function set_bind(win, on)
   if vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].scrollbind, vim.wo[win].cursorbind = on, on
+    vim.wo[win][0].scrollbind, vim.wo[win][0].cursorbind = on, on
   end
 end
 
@@ -214,7 +214,7 @@ function M.close(view)
   pcall(vim.api.nvim_del_augroup_by_id, view.aug)
   set_bind(view.src_win, false)
   if vim.api.nvim_win_is_valid(view.src_win) and view.src_wrap ~= nil then
-    vim.wo[view.src_win].wrap = view.src_wrap
+    vim.wo[view.src_win][0].wrap = view.src_wrap
   end
   if vim.api.nvim_win_is_valid(view.win) then
     pcall(vim.api.nvim_win_close, view.win, true)
@@ -580,7 +580,7 @@ function M.open_buf(buf)
   vim.api.nvim_win_set_buf(win, abuf)
   pcall(vim.api.nvim_buf_set_name, abuf, 'perforated://annotate/' .. spec)
   vim.api.nvim_win_set_width(win, require('perforated.config').get().annotate.width)
-  local wo = vim.wo[win]
+  local wo = vim.wo[win][0] -- window-local (:setlocal), never the global default
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
   wo.wrap, wo.winfixwidth, wo.cursorline, wo.list, wo.spell = false, true, true, false, false
   wo.foldenable = false
@@ -608,7 +608,7 @@ function M.open_buf(buf)
       return {}
     end,
   }
-  vim.wo[src_win].wrap = false
+  vim.wo[src_win][0].wrap = false
   set_bind(win, true)
   set_bind(src_win, true)
   view.actions = actions(view)

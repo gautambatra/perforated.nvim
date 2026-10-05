@@ -1934,12 +1934,12 @@ function M.open(ws, opts)
   else
     view.win = show(buf, kind)
   end
-  vim.wo[view.win].cursorline = true
-  vim.wo[view.win].wrap = false
-  vim.wo[view.win].number = false
-  vim.wo[view.win].relativenumber = false
-  vim.wo[view.win].signcolumn = 'no'
-  vim.wo[view.win].foldcolumn = '0'
+  vim.wo[view.win][0].cursorline = true
+  vim.wo[view.win][0].wrap = false
+  vim.wo[view.win][0].number = false
+  vim.wo[view.win][0].relativenumber = false
+  vim.wo[view.win][0].signcolumn = 'no'
+  vim.wo[view.win][0].foldcolumn = '0'
   attach_footer(view, view.win)
   keys.attach(buf, view.actions, view)
 
