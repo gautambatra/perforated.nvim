@@ -923,18 +923,16 @@ T['client view']['action menu: j/k, arrows or the pointer highlight an item; <CR
       end
     end)()]]):format(text))
   end
-  -- Headless Neovim (no UI) never delivers pointer moves, so stand in for the UI: the next
-  -- key the menu reads is a <MouseMove> at the screen cell of 'View changelist'.
+  -- The pointer moves over 'View changelist'. A terminal reports movement only by updating the
+  -- mouse position (getcharstr() never returns <MouseMove>), which the menu polls while open;
+  -- headless Neovim has no pointer, so the test moves the position itself.
   local p = screen_of('View changelist')
   child.lua(([[
-    local getchar, getmouse = vim.fn.getcharstr, vim.fn.getmousepos
-    _G.pending = { vim.keycode('<MouseMove>') }
-    vim.fn.getcharstr = function(...) return table.remove(_G.pending, 1) or getchar(...) end
+    local getmouse = vim.fn.getmousepos
     vim.fn.getmousepos = function() return { screenrow = %d, screencol = %d } end
-    _G.restore = function() vim.fn.getcharstr, vim.fn.getmousepos = getchar, getmouse end
+    _G.restore = function() vim.fn.getmousepos = getmouse end
   ]]):format(p.row, p.col))
-  child.type_keys('<Down>') -- wakes the menu (→ Diff all files); then it reads the move
-  wait(sel .. " == 'View changelist'")
+  wait(sel .. " == 'View changelist'") -- no key pressed
   child.lua('_G.restore()')
   child.type_keys('<CR>')
   wait(FLOAT_LINES .. ' ~= nil') -- the K popup
