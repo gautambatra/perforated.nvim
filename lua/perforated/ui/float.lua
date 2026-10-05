@@ -194,10 +194,41 @@ function M.menu(opts)
   highlight(sel)
   vim.cmd.redraw() -- the one redraw that shows the menu
   local NEXT = { j = 1, ['<Down>'] = 1, ['<C-N>'] = 1, k = -1, ['<Up>'] = -1, ['<C-P>'] = -1 }
-  -- Pointer movement arrives as <MouseMove> keys only with 'mousemoveevent': on while the menu
-  -- is open, restored after.
+  -- Hover: highlight the item under the pointer. The terminal reports pointer movement only
+  -- with 'mousemoveevent' (on while the menu is open, restored after), and getcharstr() swallows
+  -- those reports rather than returning <MouseMove>; they do update the mouse position, so a
+  -- short timer, alive only while the menu is open, follows that instead.
+  local function hover()
+    local line = mouse_line()
+    if line and by_line[line] and item_lines[sel] ~= line then
+      highlight(line_of[by_line[line]])
+      vim.cmd.redraw()
+    end
+  end
   local mme = vim.o.mousemoveevent
   vim.o.mousemoveevent = true
+  local function pointer()
+    local p = vim.fn.getmousepos()
+    return p.screenrow * 100000 + p.screencol
+  end
+  -- Only movement counts: a pointer that already rests where the menu opens doesn't move the
+  -- highlight.
+  local last_pos = pointer()
+  local poll = vim.uv.new_timer()
+  poll:start(
+    40,
+    40,
+    vim.schedule_wrap(function()
+      if not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      local pos = pointer()
+      if pos ~= last_pos then
+        last_pos = pos
+        hover()
+      end
+    end)
+  )
 
   local grace = opts.grace or 0
   local opened = vim.uv.now()
@@ -213,11 +244,7 @@ function M.menu(opts)
     if vim.uv.now() - opened < grace then
       replay[#replay + 1] = raw
     elseif key == '<MouseMove>' then
-      local line = mouse_line()
-      if line and by_line[line] and item_lines[sel] ~= line then
-        highlight(line_of[by_line[line]])
-        vim.cmd.redraw()
-      end
+      hover() -- (in case a Neovim delivers the key after all)
     elseif typed == '' and NEXT[key] and not by_key[key] then
       highlight(sel + NEXT[key])
       vim.cmd.redraw()
@@ -257,6 +284,8 @@ function M.menu(opts)
     end
   end
   M.active, M.selected = nil, nil
+  poll:stop()
+  poll:close()
   vim.o.mousemoveevent = mme
   pcall(vim.api.nvim_win_close, win, true)
   vim.cmd.redraw()

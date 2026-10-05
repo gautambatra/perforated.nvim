@@ -1073,10 +1073,14 @@ processing). A `<LeftMouse>` chooses the item under it (hit-tested against the m
 rectangle, since `getmousepos()` ignores non-focusable floats); a click elsewhere cancels,
 and a `<RightMouse>` there is fed back (`feedkeys`) so the view's mapping opens the menu of
 the line it hit. A highlighted item (`PerforatedMenuSel`, one extmark moved in place) follows
-`j`/`k`/`<Up>`/`<Down>`/`<C-n>`/`<C-p>` (unless an item claims the key) and `<MouseMove>`
-(`mousemoveevent` is switched on only while the menu is open, then restored); `<CR>` chooses
-it, and it starts on the item `<CR>` already chose (a default). `M.selected` exposes it for
-tests; headless Neovim never delivers `<MouseMove>`, so the test substitutes `getcharstr`.
+`j`/`k`/`<Up>`/`<Down>`/`<C-n>`/`<C-p>` (unless an item claims the key) and the mouse
+pointer; `<CR>` chooses it, and it starts on the item `<CR>` already chose (a default).
+Hover: `mousemoveevent` is switched on while the menu is open (restored after) so the terminal
+reports pointer movement, but `getcharstr()` swallows those reports instead of returning
+`<MouseMove>` (verified in a real terminal); they do update `getmousepos()`, so a 40 ms timer
+that lives only while the menu is open follows the pointer and redraws only when the item
+under it changes. `M.selected` exposes the highlight for tests, which move the pointer by
+stubbing `getmousepos()` (headless Neovim has none).
 An item `{ separator = true }` draws a full-width rule; an item's `hint` goes in a
 right-hand column, aligned across items. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
 per item, and a *grace period* during which keys are captured for replay (for the check-out
