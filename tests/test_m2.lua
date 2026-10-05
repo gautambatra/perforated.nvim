@@ -894,6 +894,66 @@ T['client view']['action menu: a click chooses an item; a click outside cancels'
   H.eq(child.lua_get(FLOAT_LINES), vim.NIL)
 end
 
+T['client view']['action menu: j/k, arrows or the pointer highlight an item; <CR> runs it'] = function()
+  child.o.mouse = 'a'
+  open_view()
+  local sel = [[require('perforated.ui.float').selected]]
+  goto_line('CL 2  Fix parser')
+  child.type_keys('.')
+  wait([[require('perforated.ui.float').active ~= nil]])
+  H.eq(child.lua_get(sel), 'Submit…') -- no <CR> default: the first item
+  H.eq(child.o.mousemoveevent, true) -- only while the menu is open
+  child.type_keys('j') -- skips the separator
+  H.eq(child.lua_get(sel), 'View changelist')
+  child.type_keys('<Down>', '<Down>')
+  H.eq(child.lua_get(sel), 'Edit description')
+  child.type_keys('k')
+  H.eq(child.lua_get(sel), 'Diff all files')
+  child.type_keys('k', 'k', 'k', 'k') -- stops at the top
+  H.eq(child.lua_get(sel), 'Submit…')
+  -- the mouse pointer highlights what it is over
+  local function screen_of(text)
+    return child.lua_get(([[(function()
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_config(w).relative ~= '' then
+          for i, l in ipairs(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)) do
+            if l:find(%q, 1, true) then return vim.fn.screenpos(w, i, 4) end
+          end
+        end
+      end
+    end)()]]):format(text))
+  end
+  -- Headless Neovim (no UI) never delivers pointer moves, so stand in for the UI: the next
+  -- key the menu reads is a <MouseMove> at the screen cell of 'View changelist'.
+  local p = screen_of('View changelist')
+  child.lua(([[
+    local getchar, getmouse = vim.fn.getcharstr, vim.fn.getmousepos
+    _G.pending = { vim.keycode('<MouseMove>') }
+    vim.fn.getcharstr = function(...) return table.remove(_G.pending, 1) or getchar(...) end
+    vim.fn.getmousepos = function() return { screenrow = %d, screencol = %d } end
+    _G.restore = function() vim.fn.getcharstr, vim.fn.getmousepos = getchar, getmouse end
+  ]]):format(p.row, p.col))
+  child.type_keys('<Down>') -- wakes the menu (→ Diff all files); then it reads the move
+  wait(sel .. " == 'View changelist'")
+  child.lua('_G.restore()')
+  child.type_keys('<CR>')
+  wait(FLOAT_LINES .. ' ~= nil') -- the K popup
+  H.expect.no_equality(
+    table.concat(child.lua_get(FLOAT_LINES), '\n'):find('second line', 1, true),
+    nil
+  )
+  H.eq(child.o.mousemoveevent, false) -- restored
+  child.type_keys('q')
+  -- a confirmation starts on its default, so <CR> alone still means the default
+  child.lua([[vim.schedule(function()
+    _G.r = require('perforated.ui.prompt').confirm('Sure?', '&Yes\n&No', 2)
+  end)]])
+  wait([[require('perforated.ui.float').active ~= nil]])
+  H.eq(child.lua_get(sel), 'No  (<CR>)')
+  child.type_keys('k', '<CR>')
+  wait('_G.r == 1')
+end
+
 T['client view']['right-click opens the menu of the clicked line, not the cursor line'] = function()
   child.o.mouse = 'a'
   open_view()
