@@ -1450,9 +1450,12 @@ fstat cache — the first time it ran.
 | Time-lapse step, 20k lines × 200 revisions | 5 ms |
 
 Timings take the **best of several runs** (and, for pure-Lua loops, the best of three fresh
-Neovim processes) to filter out machine noise; the memory figures are the best of three fresh
-Neovims too (a single sample also counts whatever async work is still alive); budgets are about the plugin's cost, not the
-CI machine's mood. The time-lapse benchmark also prints a breakdown (transition / edits /
+Neovim processes) to filter out machine noise; budgets are about the plugin's cost, not the
+CI machine's mood. The active-workspace memory figure is a **trimmed mean of 7** fresh
+Neovims (dormant and active, interleaved; highest and lowest dropped): each reading varies by
+about ±13 KB from allocator state a full GC leaves behind, and min-of-3 − min-of-3 was both
+twice as spread out and ~5 KB low, which made CI fail falsely now and then. The per-buffer
+figure (100 more files per run) stays min-of-3. The time-lapse benchmark also prints a breakdown (transition / edits /
 decorate).
 
 ## 25. Debugging
