@@ -144,6 +144,9 @@ Some habits that save time:
   that run later — the user may have closed things.
 - **`vim.bo[buf].x`** only works for buffer options, **`vim.wo[win].x`** for window options.
   Some options are *global-local* (see [§14](#14-traps-we-fell-into)).
+- **Set window options with `vim.wo[win][0].x = …`** (`:setlocal`). Plain `vim.wo[win].x = …`
+  is `:set`: it also changes the *global* default that every new window and newly shown
+  buffer starts from.
 - **`vim.fn` returns Vimscript types**: 0/1 for booleans, `''` for "nothing".
   `vim.fn.executable(x) == 1`, not `if vim.fn.executable(x) then`.
 - **Type annotations** (`---@param`, `---@class`) are read by lua-language-server; this
@@ -356,6 +359,7 @@ Every one of these cost at least one bug report. Read them once.
 |---|---|---|
 | Autocommands don't nest | `bufload()` from inside a `CursorMoved` callback didn't trigger `BufReadCmd`: empty buffer. | `nested = true` on the outer autocmd, or do the work directly (`uri.buffer` loads content itself). |
 | `readonly` buffers warn on change | Filling a read-only buffer (even from the API) shows `W10: Warning: Changing a readonly file`. | Turn `readonly` off while writing, back on after. |
+| `vim.wo[win].x = v` is `:set` | It sets the window *and the global default*: the client view's `number = false` turned line numbers off in every window opened afterwards (only "sometimes", since buffers shown before keep theirs). Aliases (`local wo = vim.wo[win]`) leak the same way. | Always `vim.wo[win][0].x = v` (`:setlocal`); a test checks views leave the globals alone. |
 | Global-local options | `vim.wo[w].winbar = ''` doesn't remove a *global* winbar; the window uses the global one. | Give the window its own non-empty value, or budget for the line. |
 | `nowait` and buffer-local prefixes | With buffer-local `d` and `dw`, `d` waits `timeoutlen` despite `nowait`. | Avoid buffer-local keys that are prefixes of other buffer-local keys (`gw` instead of `dw`). |
 | Tab handles vs numbers | `win_getid(winnr, tabnr)` wants a tab *number*; `nvim_win_get_tabpage` returns a *handle*. They often coincide — until they don't. | Get window ids directly (`nvim_open_win` with `split`). |

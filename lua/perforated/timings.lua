@@ -124,7 +124,7 @@ function M.show()
     footer = ' gr refresh · q close ',
     footer_pos = 'right',
   })
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
   for _, lhs in ipairs({ 'q', '<Esc>' }) do
     vim.keymap.set('n', lhs, function()
       pcall(vim.api.nvim_win_close, win, true)

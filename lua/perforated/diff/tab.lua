@@ -169,12 +169,12 @@ open_tab = function(ws, title, entries, identical)
     vim.bo[b].bufhidden = 'wipe'
   end
   vim.api.nvim_win_set_width(panel, math.min(50, math.floor(vim.o.columns * 0.3)))
-  vim.wo[panel].winfixwidth = true
-  vim.wo[panel].number = false
-  vim.wo[panel].relativenumber = false
-  vim.wo[panel].signcolumn = 'no'
-  vim.wo[panel].cursorline = true
-  vim.wo[panel].wrap = false
+  vim.wo[panel][0].winfixwidth = true
+  vim.wo[panel][0].number = false
+  vim.wo[panel][0].relativenumber = false
+  vim.wo[panel][0].signcolumn = 'no'
+  vim.wo[panel][0].cursorline = true
+  vim.wo[panel][0].wrap = false
 
   local state = { current = nil }
   local keyed = {} -- buffers given this tab's keys (the user's files too, scoped to the tab)

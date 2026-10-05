@@ -45,7 +45,7 @@ local function open_float(opts)
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_win_set_buf(win, buf)
     vim.api.nvim_win_set_config(win, frame)
-    vim.wo[win].cursorline = false
+    vim.wo[win][0].cursorline = false
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
   else
     local width = math.min(math.max(72, vim.fn.strdisplaywidth(opts.title) + 6), vim.o.columns - 6)
@@ -64,10 +64,10 @@ local function open_float(opts)
       })
     )
   end
-  vim.wo[win].wrap = true
-  vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  vim.wo[win][0].wrap = true
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
   -- Soft ruler where Swarm/P4V truncate the summary line.
-  vim.wo[win].colorcolumn = '73'
+  vim.wo[win][0].colorcolumn = '73'
 
   local closed = false
   local function close()

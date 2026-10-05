@@ -156,7 +156,7 @@ function M.toggle_info(view, on)
       { split = 'below', win = view.win, height = cfg.info_height or 12 }
     )
   view.ipos = right and 'right' or 'bottom'
-  local wo = vim.wo[win]
+  local wo = vim.wo[win][0] -- window-local (:setlocal), never the global default
   wo.number, wo.relativenumber, wo.signcolumn, wo.foldcolumn = false, false, 'no', '0'
   wo.wrap, wo.linebreak, wo.cursorline, wo.list = true, true, false, false
   if right then
@@ -343,7 +343,7 @@ function M.update_diff(view)
   end
   local r = tl.revs[view.a] or {}
   local t = tonumber(r.time)
-  vim.wo[view.dwin].winbar = (' ◆ #%d · CL %s · %s · %s'):format(
+  vim.wo[view.dwin][0].winbar = (' ◆ #%d · CL %s · %s · %s'):format(
     view.a,
     r.change or '?',
     r.user or '?',

@@ -67,7 +67,7 @@ function Footer:place()
     vim.api.nvim_win_set_config(self.fwin, cfg)
   else
     self.fwin = vim.api.nvim_open_win(self.fbuf, false, cfg)
-    vim.wo[self.fwin].winhighlight = 'NormalFloat:PerforatedFooter'
+    vim.wo[self.fwin][0].winhighlight = 'NormalFloat:PerforatedFooter'
   end
 end
 

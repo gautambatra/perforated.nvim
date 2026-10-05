@@ -205,7 +205,7 @@ function M.header(win, ws, side)
   local function esc(str)
     return (str:gsub('%%', '%%%%'))
   end
-  vim.wo[win].winbar = ('%%#PerforatedDiffHeader# %s %%#PerforatedDiffHeaderKind#%s%%*'):format(
+  vim.wo[win][0].winbar = ('%%#PerforatedDiffHeader# %s %%#PerforatedDiffHeaderKind#%s%%*'):format(
     esc(path),
     esc(what)
   )
