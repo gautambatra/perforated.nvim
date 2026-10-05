@@ -894,6 +894,28 @@ T['client view']['action menu: a click chooses an item; a click outside cancels'
   H.eq(child.lua_get(FLOAT_LINES), vim.NIL)
 end
 
+T['client view']['right-click opens the menu of the clicked line, not the cursor line'] = function()
+  child.o.mouse = 'a'
+  open_view()
+  goto_line('Pending') -- the cursor stays here
+  local row = goto_line('CL 2  Fix parser')
+  goto_line('Pending')
+  local pos = child.fn.screenpos(child.api.nvim_get_current_win(), row, 7)
+  child.api.nvim_input_mouse('right', 'press', '', 0, pos.row - 1, pos.col - 1)
+  wait([[require('perforated.ui.float').active ~= nil]])
+  local menu = child.lua_get([[(function()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_config(w).relative ~= '' then
+        local l = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)
+        if l[1] and l[1]:find('Submit', 1, true) then return l end
+      end
+    end
+  end)()]])
+  H.neq(menu, vim.NIL) -- the changelist's menu (starts with Submit…)
+  child.type_keys('<Esc>')
+  H.eq(child.api.nvim_win_get_cursor(0)[1], row)
+end
+
 T['client view']['a changelist resolves only with unresolved files; S, g<Del> act on its shelf'] = function()
   open_view()
   H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Resolve'), false)
