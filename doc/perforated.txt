@@ -569,6 +569,7 @@ can override them:
   PerforatedKey                Special
   PerforatedLoading            Comment
   PerforatedMark               Todo
+  PerforatedMenuSel            PmenuSel
   PerforatedModified           Changed
   PerforatedOffline            DiagnosticError
   PerforatedPath               Normal

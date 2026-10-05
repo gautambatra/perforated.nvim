@@ -1,6 +1,7 @@
 --- Small floating UI helpers: the single-key modal menu (check-out / add prompts, `.` menus).
---- Items are chosen by key or by a left click; a click outside the menu cancels it (and a
---- right-click there is passed on, so it can open another menu).
+--- Items are chosen by key, by a left click, or by highlighting one (j/k, arrows or the mouse
+--- pointer) and pressing <CR>; a click outside the menu cancels it (and a right-click there is
+--- passed on, so it can open another menu).
 
 local M = {}
 
@@ -134,7 +135,6 @@ function M.menu(opts)
   end
   local win = vim.api.nvim_open_win(buf, false, win_opts)
   vim.wo[win].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
-  vim.cmd.redraw()
 
   M.active = opts.title -- observable while waiting (tests, statusline)
   local by_key = {}
@@ -155,6 +155,50 @@ function M.menu(opts)
     end
     return false
   end
+  -- Hit test: the menu line under the mouse, or nil when the mouse is outside the menu.
+  -- Against the menu's own screen rectangle (inside its 1-cell border): getmousepos() only
+  -- knows focusable floats, and this one must never take focus.
+  local function mouse_line()
+    local pos = vim.fn.getmousepos()
+    local at = vim.api.nvim_win_get_position(win)
+    local line, col = pos.screenrow - at[1] - 1, pos.screencol - at[2] - 1
+    if line >= 1 and line <= #lines and col >= 1 and col <= width then
+      return line
+    end
+  end
+
+  -- The highlighted item: moved by j/k/arrows or the mouse pointer, chosen by <CR>. It starts on
+  -- the item <CR> already chose (a default), so <CR> alone behaves as it always did.
+  local item_lines, line_of = {}, {}
+  for l = 1, #lines do
+    if by_line[l] then
+      item_lines[#item_lines + 1] = l
+      line_of[by_line[l]] = #item_lines
+    end
+  end
+  local sel = line_of[by_key['<CR>']] or 1
+  local sel_id
+  local function highlight(i)
+    sel = math.max(1, math.min(i, #item_lines))
+    local l = item_lines[sel]
+    if not l then
+      return
+    end
+    sel_id = vim.api.nvim_buf_set_extmark(buf, M.ns, l - 1, 0, {
+      id = sel_id,
+      line_hl_group = 'PerforatedMenuSel',
+      priority = 10,
+    })
+    M.selected = by_line[l].label -- observable (tests)
+  end
+  highlight(sel)
+  vim.cmd.redraw() -- the one redraw that shows the menu
+  local NEXT = { j = 1, ['<Down>'] = 1, ['<C-N>'] = 1, k = -1, ['<Up>'] = -1, ['<C-P>'] = -1 }
+  -- Pointer movement arrives as <MouseMove> keys only with 'mousemoveevent': on while the menu
+  -- is open, restored after.
+  local mme = vim.o.mousemoveevent
+  vim.o.mousemoveevent = true
+
   local grace = opts.grace or 0
   local opened = vim.uv.now()
   local replay = {}
@@ -168,15 +212,21 @@ function M.menu(opts)
     local key = vim.fn.keytrans(raw)
     if vim.uv.now() - opened < grace then
       replay[#replay + 1] = raw
+    elseif key == '<MouseMove>' then
+      local line = mouse_line()
+      if line and by_line[line] and item_lines[sel] ~= line then
+        highlight(line_of[by_line[line]])
+        vim.cmd.redraw()
+      end
+    elseif typed == '' and NEXT[key] and not by_key[key] then
+      highlight(sel + NEXT[key])
+      vim.cmd.redraw()
+    elseif typed == '' and key == '<CR>' and item_lines[sel] then
+      choice = by_line[item_lines[sel]]
+      break
     elseif key == '<LeftMouse>' or key == '<RightMouse>' then
-      -- Hit-tested against the menu's own screen rectangle (inside its 1-cell border):
-      -- getmousepos() only knows focusable floats, and this one must never take focus.
-      local pos = vim.fn.getmousepos()
-      local at = vim.api.nvim_win_get_position(win)
-      local line = pos.screenrow - at[1] - 1
-      local col = pos.screencol - at[2] - 1
-      local inside = line >= 1 and line <= #lines and col >= 1 and col <= width
-      if not inside then
+      local line = mouse_line()
+      if not line then
         -- Outside: cancel. A right-click is handed back, so the line it hit gets its own menu.
         if key == '<RightMouse>' then
           vim.api.nvim_feedkeys(raw, 'mt', false)
@@ -206,7 +256,8 @@ function M.menu(opts)
       end
     end
   end
-  M.active = nil
+  M.active, M.selected = nil, nil
+  vim.o.mousemoveevent = mme
   pcall(vim.api.nvim_win_close, win, true)
   vim.cmd.redraw()
   return choice, table.concat(replay)

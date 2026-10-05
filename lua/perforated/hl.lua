@@ -14,6 +14,7 @@ local LINKS = {
   PerforatedChangelist = 'Identifier',
   PerforatedFloat = 'NormalFloat',
   PerforatedFloatBorder = 'FloatBorder',
+  PerforatedMenuSel = 'PmenuSel', -- the highlighted item of an action menu
   PerforatedToast = 'NormalFloat',
   PerforatedToastBorder = 'DiagnosticWarn',
   PerforatedToastInfoBorder = 'DiagnosticInfo', -- informational toasts (e.g. "no differences")
