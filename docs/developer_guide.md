@@ -1051,7 +1051,9 @@ overrides (`keys = { <id> = {...} | false }`, `keys.p4v = false`). `applies(acti
 checks `kinds` and `when`. `attach(buf, actions, view)` creates one raw keymap per key (raw
 `nvim_buf_set_keymap` is faster than `vim.keymap.set`); keys shared by several actions
 dispatch to the first that applies to the node under the cursor (so `x` reverts a file but
-stops a reconcile scan). `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
+stops a reconcile scan). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
+clicked line (`cursor_to_mouse`), since the mapping replaces Vim's own cursor move; a click
+outside the view does nothing. `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
 footer). `menu_items` builds the `.` menu: valid actions in definition order, unless the view
 has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change` and
 `.opened_file`). A layout

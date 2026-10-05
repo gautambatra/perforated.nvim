@@ -95,6 +95,19 @@ function M.dispatch(a, view)
   a.run(items, { tree = tree, node = node, nodes = nodes, view = view })
 end
 
+--- Move the cursor to the mouse position, if the mouse is over a window showing `buf`.
+---@param buf integer
+---@return boolean moved
+function M.cursor_to_mouse(buf)
+  local pos = vim.fn.getmousepos()
+  if pos.winid == 0 or pos.line < 1 or vim.api.nvim_win_get_buf(pos.winid) ~= buf then
+    return false
+  end
+  vim.api.nvim_set_current_win(pos.winid)
+  vim.api.nvim_win_set_cursor(pos.winid, { pos.line, math.max(pos.column - 1, 0) })
+  return true
+end
+
 --- Install buffer-local keymaps for a view's actions.
 ---@param buf integer
 ---@param actions perforated.Action[]
@@ -114,12 +127,18 @@ function M.attach(buf, actions, view)
   end
   for _, lhs in ipairs(order) do
     local list = by_key[lhs]
+    local mouse = lhs:find('Mouse', 1, true) ~= nil
     -- Raw API: vim.keymap.set's argument processing costs ~50µs per map on first paint.
     vim.api.nvim_buf_set_keymap(buf, 'n', lhs, '', {
       noremap = true,
       nowait = true,
       desc = 'perforated: ' .. list[1].desc,
       callback = function()
+        -- A mapped click (right-click → menu) replaces Vim's own cursor move: act on the line
+        -- that was clicked, not wherever the cursor was. Clicks outside the view do nothing.
+        if mouse and not M.cursor_to_mouse(buf) then
+          return
+        end
         local node = view.tree:node_at()
         local marked = view.tree:marked()
         local function mark_applies(a)
