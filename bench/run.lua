@@ -74,7 +74,7 @@ do
     H.write(('%s/src/f%d.c'):format(root, i), 'x')
   end
   local gc = 'collectgarbage(); collectgarbage(); return collectgarbage("count")'
-  local function measure(active)
+  local function measure(active, per_buffer)
     local c = H.child({
       fake = {
         rules = {
@@ -101,6 +101,10 @@ do
     end
     H.wait(c, 'false', 300)
     local one = c.lua(gc)
+    if not per_buffer then
+      c.stop()
+      return one - before
+    end
     for i = 2, 101 do
       c.cmd(('edit %s/src/f%d.c'):format(root, i))
     end
@@ -109,17 +113,38 @@ do
     c.stop()
     return one - before, (many - one) / 100
   end
-  -- Best of 3 fresh Neovims each: a single sample also catches whatever async work (p4 output
-  -- buffers, pending callbacks) happens to be alive, which swings it by ±15 KB.
-  local d_one, d_per, a_one, a_per = math.huge, math.huge, math.huge, math.huge
-  for _ = 1, 3 do
-    local one, per = measure(false)
-    d_one, d_per = math.min(d_one, one), math.min(d_per, per)
-    one, per = measure(true)
-    a_one, a_per = math.min(a_one, one), math.min(a_per, per)
+  -- Each fresh Neovim's reading after opening a file varies by about ±13 KB, dormant and
+  -- active alike: allocator state a full GC doesn't undo (waiting for in-flight p4 work to
+  -- finish made no difference). So: 7 runs of each, interleaved, and a trimmed mean (drop
+  -- the highest and lowest). Measured on 20+20 samples, that halves the spread of the result
+  -- compared with min-of-3 − min-of-3 (sd 3.7 vs 7.6 KB), whose low dormant outliers caused
+  -- the false failures. The minimum also read ~5 KB low; this doesn't.
+  local function trimmed(xs)
+    table.sort(xs)
+    local sum = 0
+    for i = 2, #xs - 1 do
+      sum = sum + xs[i]
+    end
+    return sum / (#xs - 2)
   end
-  record('Lua memory: active workspace (code+state)', a_one - d_one, 'KB', 250)
-  record('Lua memory: per attached buffer', math.max(a_per - d_per, 0), 'KB', 2)
+  -- The per-buffer figure (100 more files) is slow to take and has never been flaky: only in the
+  -- first 3 runs, and as before, min − min.
+  local d_one, d_per, a_one, a_per = {}, {}, {}, {}
+  for run = 1, 7 do
+    local per_buffer = run <= 3
+    local one, per = measure(false, per_buffer)
+    d_one[#d_one + 1], d_per[#d_per + 1] = one, per
+    one, per = measure(true, per_buffer)
+    a_one[#a_one + 1], a_per[#a_per + 1] = one, per
+  end
+  record('Lua memory: active workspace (code+state)', trimmed(a_one) - trimmed(d_one), 'KB', 250)
+  local min = math.min
+  record(
+    'Lua memory: per attached buffer',
+    math.max(min(unpack(a_per)) - min(unpack(d_per)), 0),
+    'KB',
+    2
+  )
 end
 
 -- 4. Sign refresh for a 10k-line file with ~100 hunks: main-thread cost only (read lines,

@@ -842,7 +842,7 @@ Budgets are enforced by `make bench` in CI:
 | Opening a file outside a workspace | < 0.3 ms | ~0.002 ms |
 | Opening a workspace file (synchronous part) | < 0.3 ms | ~0.015 ms |
 | Sign refresh, 10k-line file (UI time, debounced) | ≤ 5 ms | ~2–3 ms |
-| Lua memory for an active workspace | ≤ 250 KB | ~210–220 KB |
+| Lua memory for an active workspace | ≤ 250 KB | ~230–240 KB |
 | Lua memory per attached buffer | ≤ 2 KB | ~1.5 KB |
 | Client view: render 5000 rows | ≤ 15 ms | ~10–12 ms |
 | Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
