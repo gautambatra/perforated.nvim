@@ -359,6 +359,7 @@ function M.pair(ws, left, right, info)
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
   M.diffthis({ lwin, rwin })
+  require('perforated.diff.look').apply({ [lwin] = 'code', [rwin] = 'code' })
 
   M.header(lwin, ws, left)
   M.header(rwin, ws, right)

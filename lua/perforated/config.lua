@@ -30,7 +30,17 @@ local defaults = {
     delay = 150,
     format = 'CL {change} • {user} • {date} • {desc}',
   },
-  diff = { tool = 'builtin', external_terminal = 'auto' },
+  diff = {
+    tool = 'builtin',
+    external_terminal = 'auto',
+    --- Colours of diff views (both sides, the file panel, the headers), per window only:
+    --- 'colorscheme' (yours) or 'perforated' (the plugin's own light palette, after onedark's
+    --- light style); a table overrides single palette colours, e.g. { diff_add = '#d8f5dc' }.
+    colors = 'colorscheme',
+    --- Syntax colouring (Vim syntax, treesitter, LSP) in the diff sides. Off: plain text, so
+    --- only the diff colours stand out. The buffers themselves keep it elsewhere.
+    syntax = false,
+  },
   client_view = {
     kind = 'tab',
     submitted_limit = 20,
@@ -145,7 +155,19 @@ function M.unknown_keys()
     end
   end
   local g = vim.g.perforated
-  walk(vim.tbl_deep_extend('force', type(g) == 'table' and g or {}, user_opts or {}), defaults, '')
+  local merged_user = vim.tbl_deep_extend('force', type(g) == 'table' and g or {}, user_opts or {})
+  local colors = (merged_user.diff or {}).colors
+  if type(colors) == 'table' then
+    local palette = require('perforated.diff.look').PALETTE
+    for k in pairs(colors) do
+      if palette[k] == nil then
+        out[#out + 1] = 'diff.colors.' .. tostring(k)
+      end
+    end
+  elseif colors ~= nil and colors ~= 'colorscheme' and colors ~= 'perforated' then
+    out[#out + 1] = ('diff.colors = %q'):format(tostring(colors))
+  end
+  walk(merged_user, defaults, '')
   table.sort(out)
   return out
 end

@@ -417,6 +417,33 @@ do
   print('  time-lapse step breakdown: ' .. ms[2])
 end
 
+-- 9. Diff look: (re)building the highlight namespaces, done when a diff opens and on
+--    :colorscheme. ~1300 groups, as in a config with a full colorscheme and many plugins.
+do
+  local c = H.child()
+  local ms = c.lua([[
+    for i = 1, 900 do
+      vim.api.nvim_set_hl(0, ('BenchGroup%d'):format(i), { fg = '#123456' })
+    end
+    local look = require('perforated.diff.look')
+    local worst = 0 -- the slower of the two looks, each its best of 5
+    for _, colors in ipairs({ 'colorscheme', 'perforated' }) do
+      require('perforated.config').set({ diff = { colors = colors, syntax = false } })
+      look.build()
+      local best = math.huge
+      for _ = 1, 5 do
+        local t = vim.uv.hrtime()
+        look.build()
+        best = math.min(best, (vim.uv.hrtime() - t) / 1e6)
+      end
+      worst = math.max(worst, best)
+    end
+    return { worst, vim.tbl_count(vim.api.nvim_get_hl(0, {})) }
+  ]])
+  c.stop()
+  record(('diff look: build (%d groups)'):format(ms[2]), ms[1], 'ms', 10)
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))

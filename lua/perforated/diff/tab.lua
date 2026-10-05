@@ -175,6 +175,7 @@ open_tab = function(ws, title, entries, identical)
   vim.wo[panel][0].signcolumn = 'no'
   vim.wo[panel][0].cursorline = true
   vim.wo[panel][0].wrap = false
+  require('perforated.diff.look').apply({ [panel] = 'ui', [lwin] = 'code', [rwin] = 'code' })
 
   local state = { current = nil }
   local keyed = {} -- buffers given this tab's keys (the user's files too, scoped to the tab)

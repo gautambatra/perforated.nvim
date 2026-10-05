@@ -101,6 +101,7 @@ for _, s in ipairs({
   { 'Keymaps for your files', 'perforated-keymaps' },
   { 'Configuration', 'perforated-config' },
   { 'Highlight groups', 'perforated-highlights' },
+  { 'Diff colours', 'perforated-diff-colors' },
   { 'Events', 'perforated-events' },
   { 'License', 'perforated-license' },
 }) do
@@ -233,6 +234,18 @@ for _, g in ipairs(groups) do
     or (require('perforated.hl').COLORS[g] and require('perforated.hl').COLORS[g].fg)
     or 'annotate age gradient (annotate.gradient)'
   add(('  %-28s %s'):format(g, target))
+end
+
+header('DIFF COLOURS', 'perforated-diff-colors')
+wrap(
+  'Diff views use `diff.colors` and `diff.syntax`, per window: other windows and tabs keep your theme. `diff.colors = "colorscheme"` (default) keeps your colours; `"perforated"` uses the palette below (after onedark\'s light style), for the sides, the file panel and the headers. A table changes single colours of the palette, e.g. `diff = { colors = { diff_add = "#d8f5dc" } }`. `diff.syntax = false` (default) shows the diff sides without Vim syntax, treesitter or LSP colouring. Palette names and defaults:'
+)
+add()
+local palette = require('perforated.diff.look').PALETTE
+local names = vim.tbl_keys(palette)
+table.sort(names)
+for _, n in ipairs(names) do
+  add(('  %-28s %s'):format(n, palette[n]))
 end
 
 header('EVENTS', 'perforated-events')

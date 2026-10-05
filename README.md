@@ -290,6 +290,14 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 <details>
 <summary><b>🔍 Diffs</b></summary>
 
+- **Diff colours.** By default diff views use your colorscheme with syntax colouring turned
+  off in the two sides, so only the diff colours stand out. `diff.colors = 'perforated'`
+  switches the whole diff view (both sides, the file panel, the headers) to the plugin's own
+  light palette, after onedark's light style. A table changes single colours of it
+  (`{ diff_add = '#d8f5dc' }`; names in `:h perforated-diff-colors`). `diff.syntax = true` brings
+  syntax colouring back. Only the diff windows change: other tabs and windows keep your theme,
+  even when they show the same file, and switching your theme (by hand or with
+  auto-dark-mode) leaves a `'perforated'` diff light.
 - **Identical files don't open a diff.** Every diff (`:P4 diff`, `d`, `w`, history, describe,
   annotate) first checks whether the two sides are identical and just says so if they are. For
   a set of files (`D` on a changelist, a shelf, `:P4 diff -a`), identical files are listed
@@ -769,6 +777,8 @@ opts = {
   diff = {
     tool = 'builtin', -- 'external' = always use $P4DIFF
     external_terminal = 'auto', -- true: terminal tab; false: detached GUI; auto: guess from tool name
+    colors = 'colorscheme', -- 'perforated': the plugin's light palette; a table overrides its colours
+    syntax = false, -- syntax / treesitter / LSP colouring in the diff sides
   },
   change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
   merge = { tool = nil }, -- merge tool command (default: $P4MERGE), run as `tool base theirs yours merged`
@@ -848,6 +858,7 @@ Budgets are enforced by `make bench` in CI:
 | Client view: first paint of `:P4` | ≤ 16 ms (one frame) | ~4 ms |
 | Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.3 / ~10 ms |
 | Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~2 ms |
+| Diff colours: build the highlight namespaces, ~1300 groups | ≤ 10 ms | ~3 ms |
 
 A memory soak test (1000 workspace files opened and closed) checks that nothing in the plugin
 grows with the number of buffers.

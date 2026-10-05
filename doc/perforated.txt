@@ -12,6 +12,7 @@ CONTENTS                                                 *perforated-contents*
   Keymaps for your files                  |perforated-keymaps|
   Configuration                           |perforated-config|
   Highlight groups                        |perforated-highlights|
+  Diff colours                            |perforated-diff-colors|
   Events                                  |perforated-events|
   License                                 |perforated-license|
 
@@ -462,7 +463,9 @@ keys):
         max_kb = 5120
       },
       diff = {
+        colors = "colorscheme",
         external_terminal = "auto",
+        syntax = false,
         tool = "builtin"
       },
       history = {
@@ -593,6 +596,37 @@ can override them:
   PerforatedToastInfoBorder    DiagnosticInfo
   PerforatedUnchanged          between Normal and Comment
   PerforatedUnresolved         #ff8700
+
+==============================================================================
+DIFF COLOURS                                          *perforated-diff-colors*
+
+Diff views use `diff.colors` and `diff.syntax`, per window: other windows and
+tabs keep your theme. `diff.colors = "colorscheme"` (default) keeps your
+colours; `"perforated"` uses the palette below (after onedark's light style),
+for the sides, the file panel and the headers. A table changes single colours
+of the palette, e.g. `diff = { colors = { diff_add = "#d8f5dc" } }`.
+`diff.syntax = false` (default) shows the diff sides without Vim syntax,
+treesitter or LSP colouring. Palette names and defaults:
+
+  bg                           #fafafa
+  bg1                          #f0f0f0
+  bg2                          #e6e6e6
+  bg3                          #dcdcdc
+  blue                         #4078f2
+  cyan                         #0184bc
+  diff_add                     #e2fbe4
+  diff_change                  #e2ecfb
+  diff_delete                  #fce2e5
+  diff_text                    #cad3e0
+  fg                           #383a42
+  green                        #50a14f
+  grey                         #a0a1a7
+  light_grey                   #818387
+  orange                       #c18401
+  purple                       #a626a4
+  red                          #e45649
+  search                       #e2c792
+  yellow                       #986801
 
 ==============================================================================
 EVENTS                                                     *perforated-events*

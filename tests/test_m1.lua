@@ -391,6 +391,11 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   H.eq(child.api.nvim_get_option_value('readonly', { buf = left }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[1] }), true)
   H.eq(child.api.nvim_get_option_value('diff', { win = wins[2] }), true)
+  -- both sides get the diff look (default: the colorscheme without syntax colouring)
+  local code = child.lua_get([[require('perforated.diff.look').ns_code]])
+  for _, w in ipairs(wins) do
+    H.eq(child.lua_get(('vim.api.nvim_get_hl_ns({ winid = %d })'):format(w)), code)
+  end
   child.api.nvim_set_current_win(wins[1])
   child.type_keys('q')
   H.eq(#child.api.nvim_list_tabpages(), 1)

@@ -1147,6 +1147,98 @@ T['client view']['views and diff tabs leave global window options alone'] = func
   H.eq(child.wo.wrap, true)
 end
 
+--- Open the diff tab of the default changelist (b.txt changed); returns its window ids.
+local function open_diff_tab()
+  open_view()
+  H.write(root .. '/b.txt', 'b2\n')
+  goto_line('default')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  wait(
+    [[#vim.tbl_filter(function(w) return vim.wo[w].diff end, vim.api.nvim_tabpage_list_wins(0)) == 2]]
+  )
+  return child.lua_get([[(function()
+    local out = {}
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_get_config(w).relative == '' then
+        local kind = vim.wo[w].diff and 'side' or 'panel'
+        out[kind] = out[kind] or {}
+        table.insert(out[kind], w)
+      end
+    end
+    return out
+  end)()]])
+end
+
+local function win_ns(w)
+  return child.lua_get(('vim.api.nvim_get_hl_ns({ winid = %d })'):format(w))
+end
+
+T['client view']['diff look: default is the colorscheme without syntax, diff windows only'] = function()
+  local wins = open_diff_tab()
+  local code = child.lua_get([[require('perforated.diff.look').ns_code]])
+  H.eq(#wins.side, 2)
+  for _, w in ipairs(wins.side) do
+    H.eq(win_ns(w), code)
+  end
+  H.eq(win_ns(wins.panel[1]), -1) -- the panel keeps the colorscheme
+  child.cmd('tabnext 1')
+  H.eq(win_ns(child.api.nvim_get_current_win()), -1) -- other windows untouched
+  -- kept: UI groups fall back to the colorscheme; syntax is blanked (verified on screen: plain text)
+  H.eq(child.lua_get([[require('perforated.diff.look')._kept('DiffAdd')]]), true)
+  H.eq(child.lua_get([[require('perforated.diff.look')._kept('String')]]), false)
+  H.eq(
+    child.lua_get(
+      [[vim.api.nvim_get_hl(require('perforated.diff.look').ns_code, { name = 'Normal' })]]
+    ),
+    {}
+  )
+end
+
+T['client view']['diff look: colors = perforated covers sides, panel and headers; survives :colorscheme'] = function()
+  child.lua([[require('perforated.config').set({ diff = { colors = 'perforated' } })]])
+  local wins = open_diff_tab()
+  local look = [[require('perforated.diff.look')]]
+  local code, ui = child.lua_get(look .. '.ns_code'), child.lua_get(look .. '.ns_ui')
+  for _, w in ipairs(wins.side) do
+    H.eq(win_ns(w), code)
+  end
+  H.eq(win_ns(wins.panel[1]), ui)
+  local function hl(ns, name)
+    return child.lua_get(('vim.api.nvim_get_hl(%d, { name = %q })'):format(ns, name))
+  end
+  H.eq(hl(code, 'Normal').bg, 0xfafafa)
+  H.eq(hl(code, 'DiffAdd').bg, 0xe2fbe4)
+  H.eq(hl(code, 'WinBar').bg, 0xf0f0f0) -- the headers
+  H.eq(hl(ui, 'Normal').bg, 0xfafafa)
+  H.eq(hl(ui, 'Comment').fg, 0xa0a1a7) -- the panel keeps (palette) colours
+  -- a colorscheme switch (your light/dark toggle) rebuilds; the diff stays light
+  child.cmd('colorscheme default')
+  H.eq(hl(code, 'Normal').bg, 0xfafafa)
+  H.eq(win_ns(wins.side[1]), code)
+end
+
+T['client view']['diff look: colorscheme with syntax leaves diff windows alone; overrides'] = function()
+  child.lua(
+    [[require('perforated.config').set({ diff = { colors = 'colorscheme', syntax = true } })]]
+  )
+  local wins = open_diff_tab()
+  for _, w in ipairs(vim.list_extend(wins.side, wins.panel)) do
+    H.eq(win_ns(w), -1)
+  end
+  child.cmd('tabclose')
+  child.lua(
+    [[require('perforated.config').set({ diff = { colors = { diff_add = '#123456' }, syntax = false } })]]
+  )
+  child.cmd('tabnext 2')
+  goto_line('default')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  local code = child.lua_get([[require('perforated.diff.look').ns_code]])
+  H.eq(child.lua_get(('vim.api.nvim_get_hl(%d, { name = "DiffAdd" }).bg'):format(code)), 0x123456)
+  H.eq(child.lua_get(('vim.api.nvim_get_hl(%d, { name = "Normal" }).bg'):format(code)), 0xfafafa)
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up

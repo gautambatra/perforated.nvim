@@ -229,15 +229,80 @@ with it — *but only against global mappings*; see [§14](#14-traps-we-fell-int
 
 ## 7. Highlights, extmarks and decorations
 
-**Highlight groups:** define your own names and link them to standard ones, with `default =
-true`, so colorschemes and users can override them:
+### 7.1 Highlight groups and colours: a primer
+
+**A highlight group is a named set of attributes**: foreground (`fg`), background (`bg`), a
+special colour for underlines (`sp`), and styles (`bold`, `italic`, `underline`, `undercurl`,
+`strikethrough`, `reverse`). Text never carries colours itself; it carries group *names*, and
+the group decides how it looks. Change the group and every place using it changes.
 
 ```lua
-vim.api.nvim_set_hl(0, 'PerforatedModified', { link = 'Changed', default = true })
+vim.api.nvim_set_hl(0, 'MyGroup', { fg = '#e45649', bold = true }) -- define
+vim.api.nvim_get_hl(0, { name = 'MyGroup' })                       -- read: { fg = 14964297, bold = true }
 ```
 
-Re-apply them on `ColorScheme` (colorschemes clear highlights). This plugin keeps all links in
-`hl.lua`.
+**Links.** A group can point at another instead of having its own attributes:
+`{ link = 'Comment' }`. A plugin should define its own names (`PerforatedStale`) and link them
+to standard ones (`DiagnosticWarn`), so it follows any colorscheme automatically. Add
+`default = true`: a default definition never overwrites an existing one, so a colorscheme or
+the user can restyle `PerforatedStale` and the plugin won't undo it. This plugin keeps all of
+them in `hl.lua` (`LINKS`; the few fixed colours, like orange for unresolved, in `COLORS`).
+
+**Where colours come from:**
+
+| Source | What it is | How it names its groups |
+|---|---|---|
+| The colorscheme | A script (`:colorscheme onedark`) that defines most standard groups. | `Normal`, `Comment`, `DiffAdd`, `CursorLine`… (`:h highlight-groups` lists the UI ones) |
+| `'background'` | `dark` or `light`: a hint to the colorscheme, which may pick a palette from it. It doesn't recolour anything by itself (onedark needs its own `set_options('style')`). | — |
+| Vim syntax | Regex rules per filetype (`:syntax on`). | language groups like `luaComment`, usually linked to standard ones (`Comment`) |
+| Treesitter | A parser per language; highlighting is on per buffer (`vim.treesitter.start`). | *captures*: `@keyword.return.lua`. Undefined, a capture falls back by dropping the last part: `@keyword.return` → `@keyword` |
+| LSP semantic tokens | The language server's own classification, per buffer. | `@lsp.type.function.c`, `@lsp.typemod.variable.readonly.cpp`, same fallback |
+| Plugins | Signs, virtual text, their windows. | their own names, ideally linked to standard groups |
+
+**Colours: GUI and terminal.** With `'termguicolors'` (the norm today) Neovim sends 24-bit
+colours (`fg = '#rrggbb'`); without it, it uses the terminal's 256-colour palette (`ctermfg`,
+`ctermbg`). A fixed colour should set both (`hl.lua`'s orange: `#ff8700` / 208).
+
+**How they combine on screen.** A cell can be covered by several highlights: the window's
+`Normal`, a whole-line highlight (`CursorLine`, a diff line's `DiffAdd`), syntax or treesitter,
+then extmarks (by `priority`). Later layers override only the attributes they *set*: a syntax
+group with just an `fg` keeps the diff line's `bg`. That's why a group meant to sit on top of
+others should set as little as possible.
+
+**`:colorscheme` resets everything.** It runs `:highlight clear` (all groups back to Neovim's
+defaults) and fires the `ColorScheme` autocommand. Anything a plugin defined is gone unless it
+re-applies on `ColorScheme`, which `hl.setup()` does. Defining with `default = true` keeps the
+colorscheme's own definition of the plugin's groups, if it has one.
+
+**Window highlight namespaces.** Groups live in namespace 0 (global). `nvim_set_hl(ns, …)`
+defines groups in another namespace, and `nvim_win_set_hl_ns(win, ns)` makes one *window*
+look them up there first, falling back to the global definition for anything the namespace
+doesn't define. It's the only way to give one window different colours without touching the
+others (Neovim has no per-tab colorscheme: `'background'`, `:colorscheme` and `:syntax` are
+global). Behaviour checked in a real terminal for `diff/look.lua`:
+- a link resolves through the namespace: a global `luaComment → Comment` link picks up the
+  namespace's `Comment`;
+- treesitter/LSP fallback does too: `@lsp.type.function.c` uses the namespace's
+  `@lsp.type.function`;
+- an empty definition (`{}`) means **no colour** (plain text), *not* "use the global one" —
+  so a namespace entry can't be removed; start a new namespace instead;
+- `'winhighlight'` (per-window remapping, `Normal:MyNormal`) is older and remaps only the
+  groups listed; a window namespace takes precedence over it.
+
+**Inspecting.** `:Inspect` (cursor) lists every highlight at a position — syntax, treesitter,
+semantic tokens, extmarks. `:hi Name` shows a group, `vim.api.nvim_get_hl(0, { name = 'X',
+link = false })` resolves links, `:so $VIMRUNTIME/syntax/hitest.vim` shows them all. To see
+what a terminal actually *draws*, see [§13](#13-testing-a-plugin) (replay the terminal
+output); `nvim__inspect_cell` is internal and unreliable for this.
+
+**Rules this plugin follows:**
+- Own group names, linked with `default = true`; fixed colours only where no standard group
+  means the right thing.
+- Never change a global colour, `'background'`, `:syntax` or a buffer's treesitter/LSP state:
+  the user's other windows show the same buffers. Per-window looks use a window namespace
+  (`diff/look.lua`).
+- Re-apply on `ColorScheme`; derive colours (`PerforatedUnchanged`, between `Normal` and
+  `Comment`) at that point, not at load time.
 
 **Namespaces and extmarks.** An extmark is a mark on a buffer position that moves with edits
 and can carry decorations: a highlight over a range, a sign in the gutter, virtual text at the
@@ -351,6 +416,25 @@ The practical approach, used here: **drive a real Neovim from tests**.
 
 Part II's [§23](#23-testing) shows how this repository does it.
 
+**What headless tests can't see.** A headless child has no UI attached, and some behaviour only
+exists with one: pointer movement (`<MouseMove>`), mouse hit-testing of floats
+(`getmousepos()` reports floats only through the UI compositor), and above all *what is drawn*
+— colours, which highlight wins in a cell. A test that fakes the missing input can pass while
+the real thing is broken (it happened: menu hover, 2026-10-05). For these, also run Neovim in a
+real terminal and read the screen back:
+
+```sh
+# Run nvim in a pseudo-terminal, send it input, capture everything it draws.
+( sleep 1; printf '\e[<35;20;5M' ) |            # SGR mouse motion to column 20, row 5
+  timeout 3 script -q -c "stty rows 24 cols 100; nvim --clean -c 'luafile probe.lua'" out.raw
+```
+
+`probe.lua` sets up the scene and writes anything it observes to a file (close it: writes are
+buffered). To read colours, replay `out.raw` through a terminal emulator library such as
+Python's `pyte` and look at the cells (`screen.buffer[y][x].fg` / `.bg`). Let the timeout end
+Neovim rather than `:qa`: quitting redraws and scrolls the terminal. SGR mouse input is
+`\e[<B;COL;ROWM` (press/motion; `m` = release): `B` = 0 left press, 35 motion with no button.
+
 ## 14. Traps we fell into
 
 Every one of these cost at least one bug report. Read them once.
@@ -372,6 +456,9 @@ Every one of these cost at least one bug report. Read them once.
 | Version differences | `vim.text.diff` is new; 0.11 has `vim.diff`. `.txt` has no filetype in 0.11. Progress messages need `source` in 0.12. | `(vim.text and vim.text.diff) or vim.diff`; test on the whole version matrix. |
 | JSON `level` isn't severity | p4 `{data, level}` messages use `level` for something else (34 for "Diff chunks"). | Only `severity >= 3` is an error. |
 | Floats count as windows | `nvim_tabpage_list_wins` includes footer floats. | Filter by `relative == ''`, or count tabs instead. |
+| `getcharstr()` swallows pointer moves | With `'mousemoveevent'` on, the terminal reports movement, but a key loop never gets `<MouseMove>`; only `getmousepos()` changes. Headless Neovim produces no movement at all, so a test that fakes the key passes anyway. | Poll `getmousepos()` on a short timer while the loop runs (`ui/float.lua`); verify in a real terminal ([§13](#13-testing-a-plugin)). |
+| `{}` in a highlight namespace | `nvim_set_hl(ns, 'X', {})` doesn't undo a definition: it means "no colour", and the window shows plain text, not the global `X`. | Blank on purpose with it; for different settings, create a new namespace. |
+| Reading colours back | `nvim__inspect_cell` is internal: it gave different answers for the same cell across runs, and treesitter colours arrive asynchronously. | Replay the terminal output through an emulator (`pyte`) after a short wait ([§13](#13-testing-a-plugin)). |
 
 ---
 
@@ -444,6 +531,7 @@ lua/perforated/
     engine.lua               in-process diff (worker thread for big files) → hunks
     view.lua                 side-by-side diff tab, $P4DIFF launcher, revision specs
     tab.lua                  multi-file diff tab with a file panel
+    look.lua                 colours of diff windows (diff.colors / diff.syntax), per window
   same.lua                   "are these sides identical?" (digests / p4 diff -sr / content)
   revs.lua                   helpers for comparison sides (spec / path / empty)
   history.lua                filelog, annotate (+cache), Swarm URL
@@ -967,6 +1055,31 @@ with `same.check`: identical files go to an "Identical (N):" section; if all are
 the tab doesn't open. Sources: `open_change` (pending, shelved, submitted), `open_opened`
 (`:P4 diff -a`), `open_shelf_vs_workspace`.
 
+#### `diff/look.lua`
+How diff windows look (`diff.colors`, `diff.syntax`), done entirely with window highlight
+namespaces (primer: [§7.1](#71-highlight-groups-and-colours-a-primer)), so nothing global
+changes and other tabs keep their theme. Two namespaces: `ns_code` for the diff sides and
+`ns_ui` for the file panel. `build()` fills them from the current groups (`nvim_get_hl(0,
+{})`):
+- **No syntax** (`syntax = false`): every group not in `KEEP` (UI groups by name prefix: line
+  numbers, cursor line, selection, search, diff colours, diagnostics, LSP references, spell,
+  winbar, signs, `Perforated*`…) is set to `{}` — no colour, so the text is plain and the diff
+  line backgrounds still show. Treesitter and LSP keep running on the buffer, so the same file
+  in another window stays coloured.
+- **The plugin's palette** (`colors = 'perforated'` or a table of overrides over `PALETTE`,
+  onedark's light style): UI groups and the classic syntax groups from the palette; treesitter
+  and LSP captures map onto those by their first component (`CAPTURE`: `@keyword.return` →
+  `Keyword`, `@lsp.type.class` → `Type`, variables plain). The panel always gets syntax
+  colours, since its tree uses them for its own UI.
+- `colors = 'colorscheme'` with `syntax = true` sets no namespace at all.
+
+`apply({ [win] = 'code' | 'ui' })` is called by `diff/view.lua` (both sides) and
+`diff/tab.lua` (sides and panel). It rebuilds first, picking up groups plugins created since
+(about 3 ms for 1300 groups, benchmarked), and the `ColorScheme` autocmd rebuilds after a
+theme switch. A namespace's entries can't be removed (`{}` means "no colour"), so each settings
+combination gets its own namespaces. The windows close with their tab, so a namespace never
+outlives the diff.
+
 #### `same.lua`
 `check(ws, pairs, cb)` answers "identical?" for many pairs, cheaply: depot-vs-depot by digest
 (one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call), and
@@ -1452,6 +1565,7 @@ fstat cache — the first time it ran.
 | Client view: render 5000 rows / first paint | 15 ms / 16 ms |
 | Annotate: parse / render 20k lines | 20 / 25 ms |
 | Time-lapse step, 20k lines × 200 revisions | 5 ms |
+| Diff look: build the highlight namespaces, ~1300 groups | 10 ms |
 
 Timings take the **best of several runs** (and, for pure-Lua loops, the best of three fresh
 Neovim processes) to filter out machine noise; budgets are about the plugin's cost, not the
