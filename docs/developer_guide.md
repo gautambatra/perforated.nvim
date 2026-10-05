@@ -1070,7 +1070,9 @@ moves (per-window statuslines are hidden with `laststatus=3`, so a float is used
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep
 processing). A `<LeftMouse>` chooses the item under it (hit-tested against the menu's screen
-rectangle, since `getmousepos()` ignores non-focusable floats); a click elsewhere cancels.
+rectangle, since `getmousepos()` ignores non-focusable floats); a click elsewhere cancels,
+and a `<RightMouse>` there is fed back (`feedkeys`) so the view's mapping opens the menu of
+the line it hit.
 An item `{ separator = true }` draws a full-width rule; an item's `hint` goes in a
 right-hand column, aligned across items. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
 per item, and a *grace period* during which keys are captured for replay (for the check-out
