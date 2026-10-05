@@ -223,7 +223,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     `<C-w>` close, `<F5>` refresh, `<C-1>`/`<C-2>` jump to a section).
   - `.` or right-click opens a menu of what you can do with the line under the cursor
     (`<Space>` is left alone because many people use it as their leader key; remap with
-    `keys = { menu = { '<your key>' } }`). Right-click opens the menu of the line you click.
+    `keys = { menu = { '<your key>' } }`). Right-click opens the menu of the line you click (right-clicking another
+    line while a menu is open switches to that line's menu).
     Choose an item by its key or by clicking it; a click outside closes the menu. Menus list only what applies, in groups separated
     by rules, with each action's Ctrl shortcut in an aligned column on the right (none with
     `keys.p4v = false`):

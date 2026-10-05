@@ -1,5 +1,6 @@
 --- Small floating UI helpers: the single-key modal menu (check-out / add prompts, `.` menus).
---- Items are chosen by key or by a left click; a click outside the menu cancels it.
+--- Items are chosen by key or by a left click; a click outside the menu cancels it (and a
+--- right-click there is passed on, so it can open another menu).
 
 local M = {}
 
@@ -167,18 +168,23 @@ function M.menu(opts)
     local key = vim.fn.keytrans(raw)
     if vim.uv.now() - opened < grace then
       replay[#replay + 1] = raw
-    elseif key == '<LeftMouse>' then
-      -- A click chooses the item under it; a click anywhere else cancels. Hit-tested against
-      -- the menu's own screen rectangle (inside its 1-cell border): getmousepos() only knows
-      -- focusable floats, and this one must never take focus.
+    elseif key == '<LeftMouse>' or key == '<RightMouse>' then
+      -- Hit-tested against the menu's own screen rectangle (inside its 1-cell border):
+      -- getmousepos() only knows focusable floats, and this one must never take focus.
       local pos = vim.fn.getmousepos()
       local at = vim.api.nvim_win_get_position(win)
       local line = pos.screenrow - at[1] - 1
       local col = pos.screencol - at[2] - 1
-      if line < 1 or line > #lines or col < 1 or col > width then
+      local inside = line >= 1 and line <= #lines and col >= 1 and col <= width
+      if not inside then
+        -- Outside: cancel. A right-click is handed back, so the line it hit gets its own menu.
+        if key == '<RightMouse>' then
+          vim.api.nvim_feedkeys(raw, 'mt', false)
+        end
         break
       end
-      if by_line[line] then
+      -- Inside: a left click chooses the item under it; a right click does nothing.
+      if key == '<LeftMouse>' and by_line[line] then
         choice = by_line[line]
         break
       end

@@ -912,8 +912,32 @@ T['client view']['right-click opens the menu of the clicked line, not the cursor
     end
   end)()]])
   H.neq(menu, vim.NIL) -- the changelist's menu (starts with Submit…)
-  child.type_keys('<Esc>')
   H.eq(child.api.nvim_win_get_cursor(0)[1], row)
+  -- right-clicking another line while the menu is open replaces it with that line's menu
+  local brow
+  for i, l in ipairs(lines()) do
+    if l:find('b.txt', 1, true) then
+      brow = i
+      break
+    end
+  end
+  local bpos = child.fn.screenpos(child.api.nvim_get_current_win(), brow, 12)
+  child.api.nvim_input_mouse('right', 'press', '', 0, bpos.row - 1, bpos.col - 1)
+  wait(
+    ([[vim.api.nvim_win_get_cursor(0)[1] == %d and require('perforated.ui.float').active ~= nil]]):format(
+      brow
+    )
+  )
+  local first = child.lua_get([[(function()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_config(w).relative ~= '' then
+        local l = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, 1, false)[1]
+        if l and l:find('Open file', 1, true) then return l end
+      end
+    end
+  end)()]])
+  H.neq(first, vim.NIL) -- the file's menu (starts with Open file)
+  child.type_keys('<Esc>')
 end
 
 T['client view']['a changelist resolves only with unresolved files; S, g<Del> act on its shelf'] = function()
