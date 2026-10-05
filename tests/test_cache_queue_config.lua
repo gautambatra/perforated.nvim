@@ -105,4 +105,18 @@ T['config']['merges vim.g and setup(), reports unknown keys'] = function()
   config._reset()
 end
 
+T['config']['diff.colors: palette names and values are checked'] = function()
+  local config = require('perforated.config')
+  config._reset()
+  config.set({ diff = { colors = { diff_add = '#d8f5dc', difadd = '#000000' } } })
+  H.eq(config.unknown_keys(), { 'diff.colors.difadd' })
+  config._reset()
+  config.set({ diff = { colors = 'light' } })
+  H.eq(config.unknown_keys(), { 'diff.colors = "light"' })
+  config._reset()
+  config.set({ diff = { colors = 'perforated', syntax = true } })
+  H.eq(config.unknown_keys(), {})
+  config._reset()
+end
+
 return T
