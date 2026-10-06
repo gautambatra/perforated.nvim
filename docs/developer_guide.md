@@ -1048,8 +1048,10 @@ a message instead (`same.lua`).
 
 #### `diff/tab.lua`
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
-next one is prefetched); `<Tab>`/`<S-Tab>` step files; `q` (any window) and `:q` (any of the
-three windows) close the whole tab. Shelf-vs-workspace puts the shelf left, the workspace file
+next one is prefetched); `<Tab>`/`<S-Tab>` step files; in the panel `j`/`k`/`<Down>`/`<Up>`
+step with wrap-around, and the `CursorMoved` handler clamps any other motion back onto the
+file rows (3 … #entries + 2); `q` (any window) and `:q` (any of the three windows) close the
+whole tab. Shelf-vs-workspace puts the shelf left, the workspace file
 right. Before opening, every pair is checked
 with `same.check`: identical files go to an "Identical (N):" section; if all are identical,
 the tab doesn't open. Sources: `open_change` (pending, shelved, submitted), `open_opened`

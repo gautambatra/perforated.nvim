@@ -260,10 +260,14 @@ open_tab = function(ws, title, entries, identical)
     -- FileType, OptionSet 'diff' for user diff settings, …).
     nested = true,
     callback = function()
+      -- The cursor stays on the file list (rows 3 … #entries + 2): any motion that leaves it
+      -- (gg, G, a click on the title or the "Identical" section, a search) comes back.
       local row = vim.api.nvim_win_get_cursor(panel)[1]
-      if row >= 3 then
-        show_entry(row - 2)
+      local clamped = math.max(3, math.min(row, #entries + 2))
+      if clamped ~= row then
+        vim.api.nvim_win_set_cursor(panel, { clamped, 0 })
       end
+      show_entry(clamped - 2)
     end,
   })
   -- Closing any of the three windows (`:q` in a diff side too) closes the whole tab.
@@ -301,6 +305,17 @@ open_tab = function(ws, title, entries, identical)
   pmap('<Tab>', function()
     state.step(1)
   end)
+  -- Up and down move between files and wrap around at both ends.
+  for _, lhs in ipairs({ 'j', '<Down>' }) do
+    pmap(lhs, function()
+      state.step(vim.v.count1)
+    end)
+  end
+  for _, lhs in ipairs({ 'k', '<Up>' }) do
+    pmap(lhs, function()
+      state.step(-vim.v.count1)
+    end)
+  end
   pmap('<S-Tab>', function()
     state.step(-1)
   end)
