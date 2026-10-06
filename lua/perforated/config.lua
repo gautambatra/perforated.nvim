@@ -67,6 +67,9 @@ local defaults = {
   changes = { page_size = 50 },
   change = { template = nil, allow_force = false },
   merge = { tool = nil },
+  --- 'auto': the first installed of telescope, fzf-lua, snacks, mini.pick, else the plugin's own
+  --- list; or force one: 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'perforated' | 'select'
+  --- (vim.ui.select, e.g. for dressing.nvim).
   picker = 'auto',
   picker_mode = 'normal', -- pickers open in 'normal' mode (move with j/k, i to type) or 'insert'
   keymaps = false,

@@ -576,6 +576,7 @@ can override them:
   PerforatedModified           Changed
   PerforatedOffline            DiagnosticError
   PerforatedPath               Normal
+  PerforatedPickerMatch        Special
   PerforatedPreviewAdd         DiffAdd
   PerforatedPreviewDelete      DiffDelete
   PerforatedRev                Comment

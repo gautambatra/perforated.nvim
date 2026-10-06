@@ -444,6 +444,63 @@ do
   record(('diff look: build (%d groups)'):format(ms[2]), ms[1], 'ms', 10)
 end
 
+-- 10. The plugin's own picker: opening a 500-item list (with preview) — below one frame — and
+--     the slowest keystroke while typing a filter into 5000 items that all match the first
+--     word (the worst case: nothing narrows until the second). Neovim's matcher (C) alone takes
+--     7–10 ms there; real lists narrow sooner, and the debounce filters once per burst.
+do
+  local c = H.child()
+  local ms = c.lua([[
+    require('perforated.config').set({ picker = 'perforated' })
+    local list = require('perforated.picker.list')
+    local words = { 'Fix', 'parser', 'crash', 'lexer', 'tests', 'docs', 'cache', 'login' }
+    local function items(n)
+      local out = {}
+      for i = 1, n do
+        out[i] = ('#%-4d %-8d alice %s %s %s'):format(i, 100000 + i, words[i % 8 + 1], words[(i * 3) % 8 + 1], words[(i * 5) % 8 + 1])
+      end
+      return out
+    end
+    local function open(n)
+      return list.open({
+        title = 'Bench', items = items(n),
+        format = function(s) return s end,
+        preview = function(s) return { s } end,
+        on_choice = function() end,
+      }, function() end)
+    end
+    local t_open = math.huge
+    for _ = 1, 5 do
+      local t = vim.uv.hrtime()
+      local p = open(500)
+      vim.cmd.redraw()
+      t_open = math.min(t_open, (vim.uv.hrtime() - t) / 1e6)
+      p.close(nil)
+    end
+    -- Typing a query one character at a time (each keystroke narrows the previous matches):
+    -- the slowest keystroke, best of 3 fresh pickers.
+    local worst = math.huge
+    for _ = 1, 3 do
+      local p = open(5000)
+      local run_worst = 0
+      local q = 'alice parser'
+      for k = 1, #q do
+        p.query = q:sub(1, k)
+        local t = vim.uv.hrtime()
+        p.apply_filter()
+        vim.cmd.redraw()
+        run_worst = math.max(run_worst, (vim.uv.hrtime() - t) / 1e6)
+      end
+      p.close(nil)
+      worst = math.min(worst, run_worst)
+    end
+    return { t_open, worst }
+  ]])
+  c.stop()
+  record('picker: open 500 items (+preview)', ms[1], 'ms', 16)
+  record('picker: typing a filter, 5000 items', ms[2], 'ms', 25)
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))

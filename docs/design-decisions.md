@@ -186,7 +186,8 @@ Where it's used:
 - **Commands:** `:P4 debug snapshot` dumps workspaces, buffers, queue and recent p4 calls for bug reports; also `:P4 debug open|clear|off`.
 
 ## Pickers
-- Telescope is the author's primary, but a **picker-agnostic adapter** (telescope, fzf-lua, snacks, mini.pick, fallback `vim.ui.select`).
+- Telescope is the author's primary, but a **picker-agnostic adapter** (telescope, fzf-lua, snacks, mini.pick).
+- **Without a picker plugin, the plugin's own list** *(2026-10-06)* instead of `vim.ui.select` (a numbered command-line list, against "pop-ups never use the command line"): a filter line (fuzzy, `matchfuzzy`, debounced), the list and a preview, as floats; `j`/`k` wrap, `<CR>`/double-click choose, `m` marks (multi), leaving cancels. Installed pickers still win by default (`picker = 'auto'`): the user chose them. `picker = 'perforated'` forces the plugin's list, `'select'` forces `vim.ui.select`; with `toast.backend = 'notify'` the fallback is `vim.ui.select`. A picker plugin that fails falls back to the same choice.
 - Pickers open in **normal mode** (`picker_mode = 'normal'`, the default; `'insert'` starts in the prompt) *(2026-10-02)*: telescope `initial_mode`, snacks `focus = 'list'`. fzf-lua and mini.pick have no normal mode.
 
 ## Extras (roadmap)

@@ -559,6 +559,7 @@ lua/perforated/
   picker/
     init.lua                 picker abstraction over telescope/fzf-lua/snacks/mini/select
     sources.lua              :P4 pick sources
+    list.lua                 the plugin's own picker (fallback without a picker plugin)
   views/
     base.lua                 shared scaffolding for tree views
     client.lua               the client view (:P4)
@@ -1250,14 +1251,36 @@ them) and status glyphs in Nerd Font or ASCII style (overridable via `icons.glyp
 
 ### Pickers
 
-#### `picker/init.lua`, `picker/sources.lua`
+#### `picker/init.lua`, `picker/sources.lua`, `picker/list.lua`
 `pick({ title, items, format, preview, multi, on_choice })` over telescope, fzf-lua,
-snacks.picker, mini.pick or `vim.ui.select` (auto-detected, or `picker = '…'`); `once()`
+snacks.picker, mini.pick, the plugin's own list or `vim.ui.select` (auto-detected, or
+`picker = '…'`). `backend()` picks the first installed picker plugin, else `fallback()`: the
+own list, or `vim.ui.select` with `toast.backend = 'notify'`; a backend that errors (e.g. a
+picker plugin that fails to load: LuaJIT then leaves a marker in `package.loaded`, so it
+still looks installed) falls back the same way. `once()`
 guarantees `on_choice` runs exactly once, even with backends that report cancel and choice
 in odd orders. `picker_mode` (default `'normal'`) opens telescope (`initial_mode`) and snacks
 (`focus = 'list'`) with the list focused. Sources for `:P4 pick {pending|opened|submitted|users}`, and `revision(ws, rec, title, on_rev)`:
 one file's history (`filelog`, have revision marked), used by the client view's "Get revision…"
 and "Diff against revision…".
+
+`list.lua` is the plugin's own picker: a filter line (a `prompt` buffer), the list and an
+optional preview, as focusable floats, so Neovim's own motions and mouse clicks work in the
+list. Filtering is fuzzy and built to stay within a frame:
+- `matchfuzzy` on plain strings, without positions — asking for positions (`matchfuzzypos`)
+  converts one list per match to Lua, which cost as much as the match itself; matching
+  tables by key is about twice as slow as strings. Results map back to items through a
+  text → index table built once (duplicates handled separately).
+- Each extra character only narrows: the query searches the longest earlier query's matches
+  (a cache per query typed), so only the first keystroke searches everything.
+- Matched characters are highlighted by a decoration provider for the rows being drawn,
+  computing their positions then (one string each).
+- `TextChangedI` + a 15 ms debounce filter once per burst; `<CR>` reads the filter line
+  itself, since typed-ahead keys run before `TextChangedI` fires.
+- It calls `hl.setup()`: `:P4 pick` can open outside any workspace.
+
+Verified in a real terminal (filtering, wrap-around, double-click, clicking outside); tests
+drive it headless with keys.
 
 ### Views
 
@@ -1570,6 +1593,8 @@ fstat cache — the first time it ran.
 | Annotate: parse / render 20k lines | 20 / 25 ms |
 | Time-lapse step, 20k lines × 200 revisions | 5 ms |
 | Diff look: build the highlight namespaces, ~1300 groups | 10 ms |
+| Picker: open 500 items (with preview) | 16 ms |
+| Picker: slowest keystroke typing a filter into 5000 items that all match (worst case; the C matcher alone takes 7–10 ms) | 25 ms |
 
 Timings take the **best of several runs** (and, for pure-Lua loops, the best of three fresh
 Neovim processes) to filter out machine noise; budgets are about the plugin's cost, not the

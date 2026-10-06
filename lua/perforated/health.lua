@@ -186,6 +186,17 @@ local function check_integrations()
     local found = pcall(require, mod)
     h.info(('%-18s %s'):format(mod, found and 'found' or 'not installed'))
   end
+  local backend = require('perforated.picker').backend()
+  local what = {
+    perforated = "the plugin's own list",
+    select = 'vim.ui.select',
+  }
+  h.info(
+    ('pickers use: %s (picker = %q)'):format(
+      what[backend] or backend,
+      tostring(require('perforated.config').get().picker)
+    )
+  )
 end
 
 local function check_terminal()
