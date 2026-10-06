@@ -234,6 +234,8 @@ open_tab = function(ws, title, entries, identical)
       end
     end
     dv.diffthis({ lwin, rwin })
+    -- :diffoff / :diffthis fire OptionSet: a user hook may have reset the windows' colours.
+    require('perforated.diff.look').apply({ [lwin] = 'code', [rwin] = 'code' }, { rebuild = false })
     vim.api.nvim_buf_clear_namespace(panel_buf, ns_current, 0, -1)
     vim.api.nvim_buf_set_extmark(panel_buf, ns_current, i + 1, 0, { line_hl_group = 'Visual' })
     prefetch(i + 1)

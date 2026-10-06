@@ -375,13 +375,18 @@ function M.active()
 end
 
 --- Rebuild for a new diff (groups plugins created since the last build), then give each
---- window its namespace.
+--- window its namespace. `opts.rebuild = false` only (re)assigns the namespaces: after a diff
+--- tab switches files, since `:diffoff` / `:diffthis` fire OptionSet, and a user's hook there
+--- may have reset the window's namespace.
 ---@param wins table<integer, 'code'|'ui'>  window → kind
-function M.apply(wins)
+---@param opts { rebuild: boolean? }?
+function M.apply(wins, opts)
   if not M.active() then
     return -- the colorscheme, with syntax: nothing to do
   end
-  M.build()
+  if built == nil or not (opts and opts.rebuild == false) then
+    M.build()
+  end
   for win, kind in pairs(wins) do
     local ns = M.ns(kind)
     if ns and vim.api.nvim_win_is_valid(win) then
