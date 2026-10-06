@@ -1264,6 +1264,41 @@ T['client view']['diff look: colorscheme with syntax leaves diff windows alone; 
   H.eq(child.lua_get(('vim.api.nvim_get_hl(%d, { name = "Normal" }).bg'):format(code)), 0xfafafa)
 end
 
+T['client view']['diff tab panel: the cursor stays on the files; j/k/arrows wrap around'] = function()
+  open_view()
+  H.write(root .. '/b.txt', 'b2\n')
+  H.write(root .. '/c.txt', 'c-mine\n')
+  goto_line('default')
+  child.type_keys('D')
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  local wins = child.api.nvim_tabpage_list_wins(0)
+  local function row()
+    return child.api.nvim_win_get_cursor(0)[1]
+  end
+  local function shown()
+    return vim.fs.basename(child.api.nvim_buf_get_name(child.api.nvim_win_get_buf(wins[3])))
+  end
+  H.eq(row(), 3) -- rows 1-2: title and a blank line; files on 3 and 4
+  H.eq(shown(), 'b.txt')
+  child.type_keys('k') -- up from the first file wraps to the last
+  H.eq({ row(), shown() }, { 4, 'c.txt' })
+  child.type_keys('j') -- down from the last wraps to the first
+  H.eq({ row(), shown() }, { 3, 'b.txt' })
+  child.type_keys('<Up>')
+  H.eq(row(), 4)
+  child.type_keys('<Down>')
+  H.eq(row(), 3)
+  child.type_keys('2j') -- a count moves that many files
+  H.eq(row(), 3)
+  -- other motions can't leave the list
+  child.type_keys('gg')
+  H.eq(row(), 3)
+  child.type_keys('G')
+  wait('vim.api.nvim_win_get_cursor(0)[1] == 4')
+  child.api.nvim_win_set_cursor(0, { 1, 0 }) -- e.g. a click on the title
+  wait('vim.api.nvim_win_get_cursor(0)[1] == 3')
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up
