@@ -293,7 +293,7 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **Diff colours.** By default diff views use your colorscheme with syntax colouring turned
   off in the two sides, so only the diff colours stand out. `diff.colors = 'perforated'`
   switches the whole diff view (both sides, the file panel, the headers) to the plugin's own
-  light palette, after onedark's light style. A table changes single colours of it
+  light palette, after onedark's light style, with crisp black window separators. A table changes single colours of it
   (`{ diff_add = '#d8f5dc' }`; names in `:h perforated-diff-colors`). `diff.syntax = true` brings
   syntax colouring back. Only the diff windows change: other tabs and windows keep your theme,
   even when they show the same file, and switching your theme (by hand or with
