@@ -1218,6 +1218,28 @@ T['client view']['diff look: colors = perforated covers sides, panel and headers
   H.eq(win_ns(wins.side[1]), code)
 end
 
+T['client view']['diff look: a user OptionSet diff hook that resets namespaces cannot undo it'] = function()
+  -- The snippet suggested for the author's config: reset on diffoff, apply only when unset.
+  child.lua([[
+    require('perforated.config').set({ diff = { colors = 'perforated' } })
+    vim.api.nvim_create_autocmd('OptionSet', { pattern = 'diff', callback = function()
+      local win = vim.api.nvim_get_current_win()
+      if vim.wo[win].diff then
+        if vim.api.nvim_get_hl_ns({ winid = win }) == -1 then
+          require('perforated.diff.look').apply({ [win] = 'code' })
+        end
+      else
+        vim.api.nvim_win_set_hl_ns(win, 0)
+      end
+    end })
+  ]])
+  local wins = open_diff_tab()
+  local code = child.lua_get([[require('perforated.diff.look').ns_code]])
+  for _, w in ipairs(wins.side) do
+    H.eq(win_ns(w), code)
+  end
+end
+
 T['client view']['diff look: colorscheme with syntax leaves diff windows alone; overrides'] = function()
   child.lua(
     [[require('perforated.config').set({ diff = { colors = 'colorscheme', syntax = true } })]]

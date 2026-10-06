@@ -1074,7 +1074,9 @@ changes and other tabs keep their theme. Two namespaces: `ns_code` for the diff 
 - `colors = 'colorscheme'` with `syntax = true` sets no namespace at all.
 
 `apply({ [win] = 'code' | 'ui' })` is called by `diff/view.lua` (both sides) and
-`diff/tab.lua` (sides and panel). It rebuilds first, picking up groups plugins created since
+`diff/tab.lua` (sides and panel), and again by the diff tab after every file switch with
+`{ rebuild = false }`: switching runs `:diffoff` / `:diffthis`, which fire `OptionSet`, and a
+user's hook there may reset the window's namespace. It rebuilds first, picking up groups plugins created since
 (about 3 ms for 1300 groups, benchmarked), and the `ColorScheme` autocmd rebuilds after a
 theme switch. A namespace's entries can't be removed (`{}` means "no colour"), so each settings
 combination gets its own namespaces. The windows close with their tab, so a namespace never
