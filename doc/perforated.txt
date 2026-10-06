@@ -626,6 +626,7 @@ treesitter or LSP colouring. Palette names and defaults:
   purple                       #a626a4
   red                          #e45649
   search                       #e2c792
+  separator                    #000000
   yellow                       #986801
 
 ==============================================================================

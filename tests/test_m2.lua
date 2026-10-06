@@ -1210,6 +1210,9 @@ T['client view']['diff look: colors = perforated covers sides, panel and headers
   H.eq(hl(code, 'Normal').bg, 0xfafafa)
   H.eq(hl(code, 'DiffAdd').bg, 0xe2fbe4)
   H.eq(hl(code, 'WinBar').bg, 0xf0f0f0) -- the headers
+  -- crisp separators: a black line on the light background (not the colorscheme's dark one)
+  H.eq(hl(code, 'WinSeparator'), { fg = 0x000000, bg = 0xfafafa })
+  H.eq(hl(ui, 'WinSeparator'), { fg = 0x000000, bg = 0xfafafa })
   H.eq(hl(ui, 'Normal').bg, 0xfafafa)
   H.eq(hl(ui, 'Comment').fg, 0xa0a1a7) -- the panel keeps (palette) colours
   -- a colorscheme switch (your light/dark toggle) rebuilds; the diff stays light

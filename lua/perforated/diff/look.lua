@@ -42,6 +42,7 @@ M.PALETTE = {
   diff_delete = '#fce2e5',
   diff_change = '#e2ecfb',
   diff_text = '#cad3e0',
+  separator = '#000000', -- window separators: a crisp line
 }
 
 -- Groups that aren't syntax: kept (with `colors = 'colorscheme'` they keep the colorscheme's
@@ -144,7 +145,10 @@ local function ui_groups(c)
     Conceal = { fg = c.grey },
     WinBar = { fg = c.fg, bg = c.bg1, bold = true },
     WinBarNC = { fg = c.light_grey, bg = c.bg1 },
-    WinSeparator = { fg = c.bg3 },
+    -- A separator cell doesn't take the window's Normal background: give it the palette's,
+    -- or it shows the colorscheme's (a dark stripe between light windows).
+    WinSeparator = { fg = c.separator, bg = c.bg },
+    VertSplit = { fg = c.separator, bg = c.bg },
     Title = { fg = c.blue, bold = true },
     Directory = { fg = c.blue },
     QuickFixLine = { bg = c.bg2 },
