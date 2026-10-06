@@ -557,10 +557,23 @@ A `User PerforatedStatus` event fires whenever they change.
 
 Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
 use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**,
-detected in that order, falling back to `vim.ui.select`. Set `picker = 'telescope'` (etc.) to
-choose one explicitly. Pickers open in **normal mode** (move with `j`/`k`, `i` to type a
-filter); `picker_mode = 'insert'` starts in the prompt instead. That applies to telescope and
-snacks.picker: fzf-lua and mini.pick have no normal mode.
+detected in that order. Without one, the plugin uses **its own list**: a filter line, the list
+and a preview, in pop-ups like the rest of the plugin.
+
+- `j`/`k`/arrows move (wrapping around), `<CR>` or a double-click chooses, `q`/`<Esc>`
+  cancel; `i` or `/` types in the filter line (fuzzy; arrows still move the list, `<CR>`
+  chooses, `<Esc>` goes back to the list); `m` marks several where that's allowed
+  (`:P4 pick opened`). Leaving the pop-up cancels it.
+- Fast: about 2 ms to open 500 items, and a keystroke in the filter takes a few milliseconds
+  (worst case, 5000 items that all match: 12–16 ms).
+
+Set `picker = 'telescope'` (etc.) to choose one explicitly, `picker = 'perforated'` for the
+plugin's own list even with a picker installed, or `picker = 'select'` for `vim.ui.select`
+(e.g. with dressing.nvim). With `toast.backend = 'notify'` the fallback is `vim.ui.select`.
+`:checkhealth perforated` shows which one is used. Pickers open in **normal mode** (move with
+`j`/`k`, `i` to type a filter); `picker_mode = 'insert'` starts in the filter line instead.
+That applies to the plugin's list, telescope and snacks.picker: fzf-lua and mini.pick have no
+normal mode.
 
 #### Icons
 
@@ -860,6 +873,7 @@ Budgets are enforced by `make bench` in CI:
 | Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.3 / ~10 ms |
 | Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~2 ms |
 | Diff colours: build the highlight namespaces, ~1300 groups | ≤ 10 ms | ~3 ms |
+| Picker: open 500 items / typing a filter, 5000 items (worst case) | ≤ 16 / 25 ms | ~2 / ~13 ms |
 
 A memory soak test (1000 workspace files opened and closed) checks that nothing in the plugin
 grows with the number of buffers.

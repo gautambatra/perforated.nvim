@@ -9,8 +9,9 @@
 ---     on_choice = function(items) … end,                    -- nil when cancelled
 ---   })
 ---
---- Backend: `picker = 'auto'` (telescope → fzf-lua → snacks → mini.pick → vim.ui.select) or
---- one of 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'select'.
+--- Backend: `picker = 'auto'` (telescope → fzf-lua → snacks → mini.pick → the plugin's own
+--- list, `picker/list.lua`; vim.ui.select with `toast.backend = 'notify'`) or one of
+--- 'telescope' | 'fzf_lua' | 'snacks' | 'mini' | 'perforated' | 'select'.
 ---
 --- `picker_mode = 'normal'` (the default) opens telescope and snacks with the list focused in
 --- normal mode (j/k move, i types a filter); 'insert' starts in the prompt. fzf-lua (a terminal
@@ -55,6 +56,10 @@ backends.select = function(spec)
   vim.ui.select(spec.items, { prompt = spec.title, format_item = spec.format }, function(choice)
     finish(choice and { choice } or nil)
   end)
+end
+
+backends.perforated = function(spec)
+  require('perforated.picker.list').open(spec, once(spec))
 end
 
 backends.telescope = function(spec)
@@ -231,7 +236,14 @@ function M.backend()
       return b[1]
     end
   end
-  return 'select'
+  return M.fallback()
+end
+
+--- Without a picker plugin (or when one fails): the plugin's own list — unless messages go
+--- through vim.notify, where questions use Neovim's own UI too (vim.ui.select).
+---@return 'perforated'|'select'
+function M.fallback()
+  return require('perforated.config').get().toast.backend == 'notify' and 'select' or 'perforated'
 end
 
 ---@param spec perforated.PickSpec
@@ -240,8 +252,11 @@ function M.pick(spec)
   local fn = backends[name] or backends.select
   local ok, err = pcall(fn, spec)
   if not ok then
+    -- e.g. a picker plugin that fails to load (LuaJIT then keeps a marker in package.loaded,
+    -- so it still looks installed): the usual fallback instead.
     require('perforated.core.debug').warn('picker', '%s failed: %s; falling back', name, err)
-    backends.select(spec)
+    local fb = name == 'perforated' and 'select' or M.fallback()
+    backends[fb](spec)
   end
 end
 

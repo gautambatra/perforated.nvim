@@ -100,15 +100,122 @@ T['picker']['telescope backend: choose and cancel'] = function()
   wait_choice(vim.NIL)
 end
 
-T['picker']['auto prefers an installed picker, falls back to vim.ui.select'] = function()
-  child.lua([[package.preload['telescope'] = nil]])
-  H.eq(
-    child.lua_get([[(function()
+T['picker']['auto prefers an installed picker, else the plugin list (vim.ui.select with notify)'] = function()
+  local backend = [[(function()
     require('perforated.config').set({ picker = 'auto' })
     return require('perforated.picker').backend()
-  end)()]]),
-    'mini'
-  ) -- mini.nvim is on the test rtp; telescope isn't
+  end)()]]
+  H.eq(child.lua_get(backend), 'mini') -- mini.nvim is on the test rtp; telescope isn't
+  -- no picker plugin at all
+  child.lua([[package.loaded['mini.pick'] = nil
+    vim.opt.runtimepath:remove(vim.g.perforated_test_root .. '/.deps/mini.nvim')]])
+  H.eq(child.lua_get(backend), 'perforated')
+  child.lua([[require('perforated.config').set({ toast = { backend = 'notify' } })]])
+  H.eq(child.lua_get(backend), 'select')
+end
+
+--- The plugin's own list (`picker = 'perforated'`).
+local LIST = [[require('perforated.picker.list')._active]]
+
+local function start_list(opts)
+  child.lua(([[require('perforated.config').set({ picker = 'perforated' })
+    _G.choice, _G.calls = 'pending', 0
+    local items = {}
+    for _, n in ipairs({ 'alpha', 'bravo', 'charlie', 'delta' }) do items[#items + 1] = { name = n } end
+    require('perforated.picker').pick({
+      title = 'Test',
+      items = items,
+      multi = %s,
+      format = function(it) return it.name end,
+      preview = function(it) return { 'about ' .. it.name } end,
+      on_choice = function(chosen)
+        _G.calls = _G.calls + 1
+        _G.choice = chosen and table.concat(vim.tbl_map(function(c) return c.name end, chosen), ',') or vim.NIL
+      end,
+    })]]):format(tostring(opts and opts.multi or false)))
+end
+
+local function list_row()
+  return child.lua_get(('vim.api.nvim_win_get_cursor(%s.list_win)[1]'):format(LIST))
+end
+
+T['picker']['perforated list: j/k wrap, preview follows, <CR> chooses, q cancels once'] = function()
+  start_list()
+  H.eq(child.lua_get(LIST .. ' ~= nil'), true)
+  H.eq(list_row(), 1)
+  child.type_keys('k') -- wraps to the last
+  H.eq(list_row(), 4)
+  child.type_keys('j') -- and back to the first
+  H.eq(list_row(), 1)
+  child.type_keys('<Down>', '<Down>')
+  H.eq(list_row(), 3)
+  local preview = child.lua_get(
+    ([[vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(%s.prev_win), 0, -1, false)]]):format(
+      LIST
+    )
+  )
+  H.eq(preview, { 'about charlie' })
+  child.type_keys('<CR>')
+  wait_choice('charlie')
+  H.eq(child.lua_get(LIST), vim.NIL) -- closed
+  start_list()
+  child.type_keys('q')
+  wait_choice(vim.NIL)
+  H.eq(child.lua_get('_G.calls'), 1)
+end
+
+T['picker']['perforated list: typing filters (fuzzy); <CR> right after typing uses it'] = function()
+  start_list()
+  local function shown()
+    return child.lua_get(([[vim.api.nvim_buf_get_lines(%s.list_buf, 0, -1, false)]]):format(LIST))
+  end
+  child.type_keys('i', 'cre') -- fuzzy: c…r…e in that order matches only charlie
+  vim.uv.sleep(100) -- past the debounce
+  H.eq(shown(), { '  charlie' })
+  child.type_keys('<BS>', '<BS>', '<BS>', 'zz')
+  vim.uv.sleep(100)
+  H.eq(shown(), { '  no matches' })
+  child.type_keys('<BS>', '<BS>', 'elt')
+  vim.uv.sleep(100)
+  H.eq(shown(), { '  delta' })
+  child.type_keys('<CR>')
+  wait_choice('delta')
+  -- Enter in the same burst as the typing (before TextChangedI / the debounce)
+  start_list()
+  child.type_keys('i')
+  child.api.nvim_input('brav<CR>')
+  wait_choice('bravo')
+  -- arrows move the list from the filter line; <Esc> goes back to the list
+  start_list()
+  child.type_keys('i', 'a')
+  vim.uv.sleep(100)
+  child.type_keys('<Down>')
+  local second = vim.trim(shown()[2])
+  child.type_keys('<Esc>')
+  H.eq(child.lua_get(('vim.api.nvim_get_current_win() == %s.list_win'):format(LIST)), true)
+  H.eq(list_row(), 2)
+  child.type_keys('<CR>')
+  wait_choice(second)
+end
+
+T['picker']['a picker plugin that fails falls back to the plugin list, not vim.ui.select'] = function()
+  child.lua([[require('perforated.config').set({ picker = 'telescope' })]]) -- not installed
+  child.lua([[vim.ui.select = function() _G.used_select = true end]])
+  child.lua([[require('perforated.picker').pick({ title = 'T', items = { 'x' },
+    format = function(s) return s end, on_choice = function() end })]])
+  H.eq(child.lua_get(LIST .. ' ~= nil'), true)
+  H.eq(child.lua_get('_G.used_select'), vim.NIL)
+end
+
+T['picker']['perforated list: m marks several (multi); leaving the picker cancels'] = function()
+  start_list({ multi = true })
+  child.type_keys('m', 'j', 'm') -- alpha, then charlie (m also moves down)
+  child.type_keys('<CR>')
+  wait_choice('alpha,charlie')
+  start_list()
+  child.cmd('wincmd p') -- another window
+  wait_choice(vim.NIL)
+  H.eq(child.lua_get(LIST), vim.NIL)
 end
 
 -- ---------------------------------------------------------------------------------------------
