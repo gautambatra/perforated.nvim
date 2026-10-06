@@ -551,7 +551,10 @@ A `User PerforatedStatus` event fires whenever they change.
 </details>
 
 <details>
-<summary><b>🧩 Integrations: pickers, icons, P4V tools, code actions</b></summary>
+<summary><b>🧩 Integrations: pickers, icons, code actions</b></summary>
+
+Every plugin that changes how perforated looks or behaves, and what you get without it:
+[docs/integrations.md](docs/integrations.md).
 
 #### Pickers
 
