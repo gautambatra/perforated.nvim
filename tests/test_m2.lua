@@ -1264,6 +1264,68 @@ T['client view']['diff look: colorscheme with syntax leaves diff windows alone; 
   H.eq(child.lua_get(('vim.api.nvim_get_hl(%d, { name = "Normal" }).bg'):format(code)), 0xfafafa)
 end
 
+T['client view']['diffs: no gutter signs; sides in line (first change / your position)'] = function()
+  local text = {}
+  for n = 1, 60 do
+    text[n] = 'm line ' .. n
+  end
+  -- (its own changelist: the default one holds files that can't be submitted)
+  H.write(root .. '/m.txt', table.concat(text, '\n') .. '\n')
+  local out = server:p4({ 'change', '-i' }, {
+    client = 'alice_ws',
+    cwd = root,
+    stdin = 'Change: new\nDescription:\n\tadd m\n',
+  }).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4({ 'add', '-c', cl, root .. '/m.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'submit', '-c', cl }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'edit', root .. '/m.txt' }, { client = 'alice_ws', cwd = root })
+  text[40] = 'm CHANGED'
+  H.write(root .. '/m.txt', table.concat(text, '\n') .. '\n')
+  child.o.signcolumn = 'yes'
+  -- m.txt was being read further down: its window remembers line 55
+  child.cmd('edit ' .. root .. '/m.txt')
+  child.api.nvim_win_set_cursor(0, { 55, 0 })
+  child.cmd('edit ' .. root .. '/d.txt')
+  child.cmd('P4 diff -a')
+  wait([[#vim.api.nvim_list_tabpages() == 2]])
+  goto_line('m.txt')
+  local sides =
+    [[vim.tbl_filter(function(w) return vim.wo[w].diff end, vim.api.nvim_tabpage_list_wins(0))]]
+  local function state()
+    return child.lua_get(([[vim.tbl_map(function(w)
+      return { vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w))),
+        vim.api.nvim_win_get_cursor(w)[1], vim.fn.line('w0', w), vim.wo[w].signcolumn }
+    end, %s)]]):format(sides))
+  end
+  -- both sides at the first change, scrolled in line, without a sign column
+  wait(([[(function()
+    local s = %s
+    return #s == 2 and vim.api.nvim_win_get_cursor(s[1])[1] == 40 and vim.api.nvim_win_get_cursor(s[2])[1] == 40
+  end)()]]):format(sides))
+  local s = state()
+  H.eq({ s[1][2], s[2][2] }, { 40, 40 })
+  H.eq(s[1][3], s[2][3]) -- same top line
+  H.eq({ s[1][4], s[2][4] }, { 'no', 'no' })
+  child.type_keys('q')
+  -- the user's file doesn't keep the hidden sign column
+  child.cmd('edit ' .. root .. '/m.txt')
+  H.eq(child.wo.signcolumn, 'yes')
+  -- :P4 diff keeps your place in your file; the revision lines up with it
+  child.api.nvim_win_set_cursor(0, { 55, 0 })
+  child.cmd('P4 diff')
+  wait([[#vim.api.nvim_list_tabpages() == 2]])
+  wait(([[(function()
+    local s = %s
+    return #s == 2 and vim.fn.line('w0', s[1]) == vim.fn.line('w0', s[2])
+      and vim.b[vim.api.nvim_win_get_buf(s[1])].perforated_loaded == true
+  end)()]]):format(sides))
+  s = state()
+  H.eq(s[2][2], 55) -- your file: still at line 55
+  H.eq(s[1][3], s[2][3])
+  H.eq({ s[1][4], s[2][4] }, { 'no', 'no' })
+end
+
 T['client view']['diff tab panel: the cursor stays on the files; j/k/arrows wrap around'] = function()
   open_view()
   H.write(root .. '/b.txt', 'b2\n')

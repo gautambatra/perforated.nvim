@@ -221,6 +221,7 @@ open_tab = function(ws, title, entries, identical)
       if vim.api.nvim_win_is_valid(w) then
         vim.api.nvim_win_set_buf(w, b)
         dv.header(w, ws, sd)
+        dv.side_win(w)
         if not keyed[b] then
           keyed[b] = true
           dv.tab_key(tab, b, 'q', close_tab, 'Close diff tab')
@@ -234,6 +235,14 @@ open_tab = function(ws, title, entries, identical)
       end
     end
     dv.diffthis({ lwin, rwin })
+    -- Each file opens at its first change, both sides in line — again once drawn (diff folds
+    -- settle on the first redraw and can scroll a window).
+    dv.align(rwin, lwin, true)
+    vim.schedule(function()
+      if state.current == i then
+        dv.align(rwin, lwin, vim.w[rwin].perforated_first_change)
+      end
+    end)
     -- :diffoff / :diffthis fire OptionSet: a user hook may have reset the windows' colours.
     require('perforated.diff.look').apply({ [lwin] = 'code', [rwin] = 'code' }, { rebuild = false })
     vim.api.nvim_buf_clear_namespace(panel_buf, ns_current, 0, -1)

@@ -279,7 +279,7 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
   diff on the right ("Opening diff view…" shows until it's ready); moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
   window. In the panel the cursor stays on the file list, and `j`/`k`/arrows wrap around at
-  both ends. It works for pending changelists, shelves and submitted changelists. Each file loads
+  both ends. Each file opens at its first change, both sides scrolled in line. It works for pending changelists, shelves and submitted changelists. Each file loads
   when you select it, and the next one is fetched ahead of time. `:P4 diff -a` opens the same
   view for every opened file.
 - **`:P4 changes [-u user] [-m N] [path]`: submitted changelists,** newest first. Scoped to

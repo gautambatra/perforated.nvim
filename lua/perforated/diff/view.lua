@@ -211,13 +211,23 @@ function M.header(win, ws, side)
   )
 end
 
---- Drop a diff window's header before it shows another buffer or closes: Neovim remembers a
---- window's local options per buffer, and the user's file must not take our winbar with it.
+--- A diff side shows no sign column: the diff colours already mark every change, and gutter
+--- signs (the plugin's hunk signs, diagnostics) would only repeat them and take width.
+---@param win integer
+function M.side_win(win)
+  if vim.api.nvim_win_is_valid(win) then
+    vim.wo[win][0].signcolumn = 'no'
+  end
+end
+
+--- Drop what the plugin set on a diff window (its header, the hidden sign column) before it
+--- shows another buffer or closes: Neovim remembers a window's local options per buffer, and
+--- the user's file must not take them along.
 ---@param win integer
 function M.clear_header(win)
   if vim.api.nvim_win_is_valid(win) then
     pcall(vim.api.nvim_win_call, win, function()
-      vim.cmd('set winbar<')
+      vim.cmd('set winbar< signcolumn<')
     end)
   end
 end
@@ -310,6 +320,39 @@ local function side_buf(ws, side)
 end
 M.side_buf = side_buf
 
+--- Line up the two sides of a diff. Scroll-bound windows only follow a window that scrolls
+--- itself, so a side shown with a remembered position (the user's file, read further down) or
+--- filled later (a revision arriving from p4) would stay out of line until the cursor went
+--- there. `ref` is the side the other one follows; with `first_change` it moves to the first
+--- change first (diff tab: each file opens at its first change).
+--- A revision still on its way from p4 is empty, so against it every line is a change: the
+--- window remembers it wants the first change (`w:perforated_first_change`) and the fetch
+--- that fills the other side aligns again with it (once).
+---@param ref integer   window
+---@param other integer window
+---@param first_change boolean?
+function M.align(ref, other, first_change)
+  if not (vim.api.nvim_win_is_valid(ref) and vim.api.nvim_win_is_valid(other)) then
+    return
+  end
+  vim.w[ref].perforated_first_change = first_change or nil
+  pcall(vim.api.nvim_win_call, ref, function()
+    if first_change then
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      if vim.fn.diff_hlID(1, 1) == 0 and vim.fn.diff_filler(1) == 0 then
+        vim.cmd('silent! normal! ]c')
+      end
+    end
+    vim.cmd('syncbind')
+  end)
+  -- The other side's cursor: the same distance below its (now aligned) top line. Cursorbind
+  -- keeps them together from the next movement on.
+  local offset = vim.api.nvim_win_get_cursor(ref)[1] - vim.fn.line('w0', ref)
+  local n = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(other))
+  local line = math.max(1, math.min(vim.fn.line('w0', other) + offset, n))
+  pcall(vim.api.nvim_win_set_cursor, other, { line, 0 })
+end
+
 --- Turn diff mode on in windows, tolerating user OptionSet autocmds that throw.
 ---@param wins integer[]
 function M.diffthis(wins)
@@ -342,11 +385,20 @@ end
 ---@return table data  event payload
 function M.pair(ws, left, right, info)
   local rbuf = side_buf(ws, right)
+  -- Diffing the file you're in: keep your place in it (a new window would take the buffer's
+  -- last remembered position, possibly from another window).
+  local from_view
+  if vim.api.nvim_get_current_buf() == rbuf then
+    from_view = vim.fn.winsaveview()
+  end
   vim.cmd('tabnew')
   local scratch = vim.api.nvim_get_current_buf()
   local rwin = vim.api.nvim_get_current_win()
   require('perforated.views.base').code_win(rwin) -- the left side (vnew) copies it
   vim.api.nvim_win_set_buf(rwin, rbuf)
+  if from_view then
+    vim.fn.winrestview(from_view)
+  end
   if vim.api.nvim_buf_is_valid(scratch) and scratch ~= rbuf then
     pcall(vim.api.nvim_buf_delete, scratch, { force = true })
   end
@@ -360,9 +412,17 @@ function M.pair(ws, left, right, info)
   end
   M.diffthis({ lwin, rwin })
   require('perforated.diff.look').apply({ [lwin] = 'code', [rwin] = 'code' })
+  -- The revision follows the user's place in their file — again once the diff has been drawn
+  -- (diff folds settle on the first redraw and can scroll the window).
+  M.align(rwin, lwin)
+  vim.schedule(function()
+    M.align(rwin, lwin)
+  end)
 
   M.header(lwin, ws, left)
   M.header(rwin, ws, right)
+  M.side_win(lwin)
+  M.side_win(rwin)
 
   local tab = vim.api.nvim_get_current_tabpage()
   local data = {

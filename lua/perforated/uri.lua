@@ -141,6 +141,14 @@ function M._fetch(buf, spec, gen)
         vim.api.nvim_win_call(win, function()
           vim.cmd('diffupdate')
         end)
+        -- It was empty when the diff opened: line it up with the other side now.
+        for _, other in ipairs(vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win))) do
+          if other ~= win and vim.wo[other].diff then
+            require('perforated.diff.view').align(other, win, vim.w[other].perforated_first_change)
+            vim.w[other].perforated_first_change = nil -- once: from now on the user moves
+            break
+          end
+        end
       end
     end
   end)
