@@ -1042,7 +1042,17 @@ side closes the whole tab; fires `User PerforatedDiffOpen/Close`). Every diff wi
 winbar header from `side_label` (a side's optional `label`, else derived: `@=N (shelved)`,
 `(workspace)`); `clear_header` drops it before the window shows another buffer or closes,
 because Neovim remembers window-local options per buffer and the user's file would keep it.
-`tab_key(tab, buf, lhs, fn)` maps keys that act only inside one diff tab, so `q` works in the
+`side_win(win)` hides a diff side's sign column (window-local; `clear_header` restores it
+with the winbar, before the window shows another buffer or closes). `align(ref, other,
+first_change)` lines up the two sides: scroll-bound windows only follow a window that
+scrolls, so a side shown at a remembered position, or filled later, would stay out of line
+until the cursor went there. It moves `ref` to its first change if asked (`]c`), runs
+`:syncbind` in it, and puts `other`'s cursor at the same distance below its top. `pair` aligns
+on the user's place (copying the view of the window it was opened from, if that shows the same
+file) and the diff tab on each file's first change, both again on the next event-loop turn
+(diff folds settle on the first redraw), and `uri` again when a revision arrives (it was empty
+before, so every line looked changed: the window remembers it still wants its first change,
+`w:perforated_first_change`). `tab_key(tab, buf, lhs, fn)` maps keys that act only inside one diff tab, so `q` works in the
 user's own file there and does its usual job everywhere else; `external` launches the user's `$P4DIFF` with their
 environment (a terminal tab for terminal tools, detached for GUI tools). Identical sides give
 a message instead (`same.lua`).
