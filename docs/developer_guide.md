@@ -1046,8 +1046,11 @@ because Neovim remembers window-local options per buffer and the user's file wou
 with the winbar, before the window shows another buffer or closes). `align(ref, other,
 first_change)` lines up the two sides: scroll-bound windows only follow a window that
 scrolls, so a side shown at a remembered position, or filled later, would stay out of line
-until the cursor went there. It moves `ref` to its first change if asked (`]c`), runs
-`:syncbind` in it, and puts `other`'s cursor at the same distance below its top. `pair` aligns
+until the cursor went there. If asked, it puts both cursors on the first change, found by
+diffing the two buffers with `diff/engine.lua` (`]c` depends on when Neovim last recomputed
+its diff: on 0.11 not yet, right after a revision was filled in; `]c` remains the fallback
+above 20000 lines). It runs `:syncbind` in `ref`; without a first change, `other`'s cursor
+goes the same distance below its top as `ref`'s. `pair` aligns
 on the user's place (copying the view of the window it was opened from, if that shows the same
 file) and the diff tab on each file's first change, both again on the next event-loop turn
 (diff folds settle on the first redraw), and `uri` again when a revision arrives (it was empty
