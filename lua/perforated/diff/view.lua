@@ -336,8 +336,24 @@ function M.align(ref, other, first_change)
     return
   end
   vim.w[ref].perforated_first_change = first_change or nil
+  local rbuf, obuf = vim.api.nvim_win_get_buf(ref), vim.api.nvim_win_get_buf(other)
+  -- The first change from our own diff of the two buffers: `]c` depends on when Neovim last
+  -- recomputed its diff (on 0.11 not yet, right after a revision was filled in).
+  local first
+  if first_change then
+    local rn, on = vim.api.nvim_buf_line_count(rbuf), vim.api.nvim_buf_line_count(obuf)
+    if rn <= 20000 and on <= 20000 then
+      local h = require('perforated.diff.engine').hunks(
+        vim.api.nvim_buf_get_lines(obuf, 0, -1, false),
+        vim.api.nvim_buf_get_lines(rbuf, 0, -1, false)
+      )[1]
+      first = h and { math.max(h.b_start, 1), math.max(h.a_start, 1) } or { 1, 1 }
+    end
+  end
   pcall(vim.api.nvim_win_call, ref, function()
-    if first_change then
+    if first then
+      vim.api.nvim_win_set_cursor(0, { first[1], 0 })
+    elseif first_change then
       vim.api.nvim_win_set_cursor(0, { 1, 0 })
       if vim.fn.diff_hlID(1, 1) == 0 and vim.fn.diff_filler(1) == 0 then
         vim.cmd('silent! normal! ]c')
@@ -345,11 +361,16 @@ function M.align(ref, other, first_change)
     end
     vim.cmd('syncbind')
   end)
-  -- The other side's cursor: the same distance below its (now aligned) top line. Cursorbind
-  -- keeps them together from the next movement on.
-  local offset = vim.api.nvim_win_get_cursor(ref)[1] - vim.fn.line('w0', ref)
-  local n = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(other))
-  local line = math.max(1, math.min(vim.fn.line('w0', other) + offset, n))
+  -- The other side's cursor: its own first change, else the same distance below its (now
+  -- aligned) top line. Cursorbind keeps them together from the next movement on.
+  local line
+  if first then
+    line = first[2]
+  else
+    local offset = vim.api.nvim_win_get_cursor(ref)[1] - vim.fn.line('w0', ref)
+    line = vim.fn.line('w0', other) + offset
+  end
+  line = math.max(1, math.min(line, vim.api.nvim_buf_line_count(obuf)))
   pcall(vim.api.nvim_win_set_cursor, other, { line, 0 })
 end
 
