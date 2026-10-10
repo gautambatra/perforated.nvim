@@ -1308,13 +1308,17 @@ T['client view']['diffs: no gutter signs; sides in line (first change / your pos
   H.eq(s[1][3], s[2][3]) -- same top line
   H.eq({ s[1][4], s[2][4] }, { 'no', 'no' })
   child.type_keys('q')
+  wait([[#vim.api.nvim_list_tabpages() == 1]])
   -- the user's file doesn't keep the hidden sign column
   child.cmd('edit ' .. root .. '/m.txt')
   H.eq(child.wo.signcolumn, 'yes')
   -- :P4 diff keeps your place in your file; the revision lines up with it
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
   child.api.nvim_win_set_cursor(0, { 55, 0 })
   child.cmd('P4 diff')
-  wait([[#vim.api.nvim_list_tabpages() == 2]])
+  if not H.wait(child, [[#vim.api.nvim_list_tabpages() == 2]], 15000) then
+    error('no diff tab; messages: ' .. child.cmd_capture('messages'), 0)
+  end
   wait(([[(function()
     local s = %s
     return #s == 2 and vim.fn.line('w0', s[1]) == vim.fn.line('w0', s[2])
