@@ -181,6 +181,20 @@ function H.record_busy(child)
   ]])
 end
 
+--- Stand in for the modal pop-ups (`ui.float.menu`, which waits for a key): each call is
+--- recorded in `_G.menus` ({ title, header, keys }) and answered with its first choice.
+---@param child table
+function H.stub_menu(child)
+  child.lua([[
+    _G.menus = {}
+    require('perforated.ui.float').menu = function(opts)
+      table.insert(_G.menus, { title = opts.title, header = opts.header or {},
+        keys = vim.tbl_map(function(i) return i.key end, opts.items) })
+      return opts.items[1], ''
+    end
+  ]])
+end
+
 function H.wait(child, expr, timeout)
   return child.lua(
     ('return vim.wait(%d, function() return (%s) and true or false end, 10)'):format(

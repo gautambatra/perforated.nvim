@@ -98,6 +98,7 @@ It is also available as the command `:P4 change [N]` (no N means the current fil
 
 ## Resolve
 - Behaves like `p4 resolve`: run `-am` first; for remaining conflicts launch the external merge tool ($P4MERGE / configured) asynchronously with base/theirs/yours; on success `resolve -ay` with the merged result. **No merge intelligence in the plugin.**
+- Feedback *(2026-10-10)*: a **centred busy pop-up** while p4 resolves (closed while the merge tool runs, so it isn't covered), then the **result in a centred pop-up that waits for a key**: merged automatically / with the merge tool / left unresolved (each file with its reason; `c` opens quickfix). Not modal: the editor stays usable ("never block the editor"); still a job in `:P4 jobs`, without its start/result notices.
 
 ## Stale / unresolved checks
 - Batched check **when a workspace activates** (idle), plus **manual `:P4 status` / `:P4 stale`**. Per-buffer fstat on open shows stale state for free.

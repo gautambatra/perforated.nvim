@@ -455,8 +455,11 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   Each remaining conflict opens your merge tool (`$P4MERGE`, or `merge.tool`) as
   `tool base theirs yours merged`, asynchronously. When it exits 0 with a changed result, the
   result is written (through the buffer if it's open) and accepted. Anything else stays
-  unresolved and goes to quickfix, where `R` on an entry tries again; a pop-up always says
-  how many were resolved and how many are left. It runs as a job (`:P4 jobs`, `:P4 cancel`)
+  unresolved and goes to quickfix, where `R` on an entry tries again. While p4 works a
+  **centred busy pop-up** says so (it closes while your merge tool runs, so it doesn't cover
+  it); at the end a **centred pop-up that waits for a key** says what happened: merged
+  automatically, merged with your merge tool, and every file left unresolved with the reason
+  (`c` opens the quickfix list). The editor stays usable throughout. It runs as a job (`:P4 jobs`, `:P4 cancel`)
   without the usual call timeout, since `resolve -am` merges on your machine and can take a
   while. There's no merge logic in the plugin.
 - **Delete and move:** `:P4 delete [file…]` (after a confirmation; the buffer is closed) and

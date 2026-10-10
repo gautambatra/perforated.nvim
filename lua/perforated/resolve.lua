@@ -13,8 +13,10 @@
 ---
 --- It runs as a job (`:P4 jobs`, `:P4 cancel`): `resolve -am` merges on this machine after
 --- fetching each file's revisions, which can take far longer than the usual call timeout on a
---- real server. The job's result pop-up always says what happened, including "N left
---- unresolved".
+--- real server. While p4 works a centred busy pop-up says so (closed while the merge tool
+--- runs, so it doesn't cover it); at the end a centred pop-up that waits for a key says what
+--- happened: merged automatically, with the merge tool, and every file left unresolved with
+--- its reason.
 
 local M = {}
 
@@ -128,6 +130,31 @@ local function merge_one(ws, rec, tool, cb)
   end)
 end
 
+--- The result, centred, waiting for a key (vim.notify with `toast.backend = 'notify'`).
+---@param lines string[]
+---@param has_list boolean  files left in quickfix: offer to open it
+---@param level integer
+local function report(lines, has_list, level)
+  if require('perforated.config').get().toast.backend == 'notify' then
+    return vim.notify('[perforated] ' .. table.concat(lines, '\n'), level)
+  end
+  local items = { { key = '<CR>', label = 'OK', value = 'ok', aliases = { 'o' } } }
+  if has_list then
+    items[#items + 1] = { key = 'c', label = 'Open the quickfix list', value = 'list' }
+  end
+  local choice = require('perforated.ui.float').menu({
+    title = 'Resolve',
+    header = lines,
+    header_hl = false,
+    items = items,
+    relative = 'editor',
+  })
+  if choice and choice.value == 'list' then
+    vim.cmd('copen')
+  end
+end
+M._report = report
+
 --- Resolve files (nil = every file that needs it).
 ---@param ws perforated.Workspace
 ---@param paths string[]?
@@ -142,15 +169,30 @@ function M.run(ws, paths, cb)
   local what = paths and #paths == 1 and vim.fn.fnamemodify(paths[1], ':t')
     or paths and ('%d files'):format(#paths)
     or 'workspace'
-  local job, run_opts = jobs.start(ws, 'resolve ' .. what)
+  local job, run_opts = jobs.start(ws, 'resolve ' .. what, { quiet = true })
+  local toast = require('perforated.ui.toast')
+  local unbusy = toast.busy(
+    paths and ('Resolving %s…'):format(#paths == 1 and what or (#paths .. ' file(s)'))
+      or 'Resolving every file that needs it…'
+  )
+  local function rel(path)
+    if ws.root and path:sub(1, #ws.root + 1) == ws.root .. '/' then
+      return path:sub(#ws.root + 2)
+    end
+    return path
+  end
   ws:run({ 'resolve', '-am' }, vim.tbl_extend('force', opts, run_opts), function(res)
     if res.cancelled then
+      unbusy()
       jobs.finish(job, 'resolve stopped', 'warn')
+      toast.notify('[perforated] resolve stopped', vim.log.levels.WARN)
       co.changed(ws)
       return cb(0, 0)
     end
     if not res.ok and #res.records == 0 and #res.errors > 0 then
+      unbusy()
       jobs.finish(job, 'resolve failed: ' .. res.errors[1], true)
+      report({ 'Resolve failed:', '  ' .. vim.trim(res.errors[1]) }, false, vim.log.levels.ERROR)
       return cb(0, 0)
     end
     local attempted = {}
@@ -173,6 +215,7 @@ function M.run(ws, paths, cb)
         local left = {} ---@type { path: string, reason: string, rec: table }[]
         local merged = 0
         local function finish()
+          unbusy()
           local parts = {}
           if auto + merged > 0 then
             parts[#parts + 1] = ('resolved %d file(s)%s'):format(
@@ -181,7 +224,6 @@ function M.run(ws, paths, cb)
             )
           end
           if #left > 0 then
-            -- Never silent: the quickfix list is replaced, which is easy to miss.
             parts[#parts + 1] = ('%d file(s) left unresolved (quickfix): %s'):format(
               #left,
               left[1].reason
@@ -192,6 +234,28 @@ function M.run(ws, paths, cb)
             #parts > 0 and table.concat(parts, '; ') or 'nothing to resolve',
             #left > 0 and 'warn' or nil
           )
+          -- The result, centred: never silent (the quickfix list is easy to miss).
+          local lines = {}
+          if auto > 0 then
+            lines[#lines + 1] = ('%d file(s) merged automatically'):format(auto)
+          end
+          if merged > 0 then
+            lines[#lines + 1] = ('%d file(s) merged with your merge tool'):format(merged)
+          end
+          if #left > 0 then
+            lines[#lines + 1] = ('%d file(s) left unresolved:'):format(#left)
+            for k = 1, math.min(#left, 6) do
+              lines[#lines + 1] = ('  %s  (%s)'):format(rel(left[k].path), left[k].reason)
+            end
+            if #left > 6 then
+              lines[#lines + 1] = ('  … and %d more'):format(#left - 6)
+            end
+            lines[#lines + 1] = ''
+            lines[#lines + 1] = 'They are in the quickfix list: R there resumes.'
+          end
+          if #lines == 0 then
+            lines[1] = 'Nothing to resolve.'
+          end
           if #left > 0 then
             local qf = require('perforated.ui.qf')
             local items = {}
@@ -213,11 +277,13 @@ function M.run(ws, paths, cb)
           for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
             require('perforated.buffer').refresh(b)
           end
+          report(lines, #left > 0, #left > 0 and vim.log.levels.WARN or vim.log.levels.INFO)
           cb(auto + merged, #left)
         end
         if #conflicts == 0 then
           return finish()
         end
+        unbusy() -- the merge tool needs the screen
         require('perforated.tools').merge_tool(ws, function(tool)
           local i = 0
           local function step()
