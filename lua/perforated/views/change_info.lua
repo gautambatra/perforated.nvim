@@ -124,7 +124,9 @@ function M.show(ws, item, d, shelved)
     border = 'rounded',
     title = ' ' .. title .. ' ',
     title_pos = 'left',
-    footer = ' q close · <CR> describe · D diff all files' .. (editable and ' · C edit ' or ' '),
+    footer = ' q close · <CR> describe · D diff all files'
+      .. ((#shelved > 0 and ws.mode ~= 'connection') and ' · S unshelve' or '')
+      .. (editable and ' · C edit ' or ' '),
     footer_pos = 'right',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
@@ -148,6 +150,14 @@ function M.show(ws, item, d, shelved)
     close()
     require('perforated.diff.tab').open_change(ws, item)
   end, { buffer = buf, nowait = true })
+  if #shelved > 0 and ws.mode ~= 'connection' then
+    -- Unshelve the whole shelf, anyone's: into this changelist if it's yours here, else one
+    -- you pick.
+    vim.keymap.set('n', 'S', function()
+      close()
+      require('perforated.ops').unshelve(ws, rec.change, nil, nil)
+    end, { buffer = buf, nowait = true })
+  end
   if editable then
     vim.keymap.set('n', 'C', function()
       require('perforated.views.change_editor').edit(ws, rec.change, {
