@@ -856,7 +856,7 @@ opts = {
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
   qf = { open = true }, -- open the quickfix window when a list has results
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
-  poll = { interval = 30, focus_throttle = 30, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
+  poll = { interval = 30, focus_throttle = 2, bufenter_throttle = 60 }, -- seconds; 0 disables the timer
   toast = { timeout = 3000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
   statusline = {
     format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)

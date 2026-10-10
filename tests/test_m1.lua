@@ -806,6 +806,33 @@ T['stale']['files opened elsewhere (no submit) show up after the background chec
   wait(text .. ':find("b.txt", 1, true) ~= nil')
 end
 
+T['stale']['an unshelve elsewhere shows up on return, even soon after the last return'] = function()
+  -- A shelf of b.txt, made from another terminal and reverted there.
+  local out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tshelf\n' }
+  ).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4({ 'edit', '-c', cl, root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-c', cl }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'revert', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  child.cmd('P4')
+  local view =
+    [[require('perforated.views.client')._get(require('perforated.core.workspace').list()[1].key)]]
+  wait(('(%s or {}).data ~= nil and not (%s).loading'):format(view, view))
+  local text = ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n")'):format(
+    view
+  )
+  -- Away and back (a focus check runs), then away again for a few seconds.
+  child.cmd('doautocmd FocusLost')
+  child.cmd('doautocmd FocusGained')
+  vim.uv.sleep(2100) -- past the 2 s throttle, well inside the old 30 s one
+  child.cmd('doautocmd FocusLost')
+  server:p4({ 'unshelve', '-s', cl }, { client = 'alice_ws', cwd = root })
+  child.cmd('doautocmd FocusGained')
+  wait(text .. ':find("b.txt", 1, true) ~= nil')
+end
+
 T['stale']['changelists created or described elsewhere show up after the background check'] = function()
   local probe = [[require('perforated.poll').probe(require('perforated.core.workspace').list()[1])]]
   child.lua(probe) -- baseline of the pending changelists

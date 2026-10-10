@@ -79,7 +79,7 @@ local defaults = {
   commands = { aliases = true },
   qf = { open = true },
   startup_check = true,
-  poll = { interval = 30, focus_throttle = 30, bufenter_throttle = 60 },
+  poll = { interval = 30, focus_throttle = 2, bufenter_throttle = 60 },
   toast = { timeout = 3000, backend = 'float', history = 50 },
   statusline = {
     -- File part. Tokens: {client} {action} (icon, action@CL) {change} {modified} (marker when
