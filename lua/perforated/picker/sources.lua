@@ -144,7 +144,8 @@ end
 ---@param rec table  fstat record: depotFile, haveRev
 ---@param title string
 ---@param on_rev fun(rev: perforated.Rev)
-function M.revision(ws, rec, title, on_rev)
+---@param this string?  a revision to mark "(this one)" instead (diffing a history row)
+function M.revision(ws, rec, title, on_rev, this)
   require('perforated.history').filelog(
     ws,
     rec.depotFile,
@@ -166,7 +167,9 @@ function M.revision(ws, rec, title, on_rev)
             date(r.time),
             r.user or '',
             first_line(r.desc),
-            tostring(r.rev) == tostring(rec.haveRev) and '  (have)' or ''
+            (this and tostring(r.rev) == tostring(this) and '  (this one)')
+              or (tostring(r.rev) == tostring(rec.haveRev) and '  (have)')
+              or ''
           )
         end,
         preview = desc_lines,

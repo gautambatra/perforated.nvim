@@ -1334,11 +1334,18 @@ unified diff inline (two prints, computed only when expanded; files above 20k li
 `d`"). Pending changelists of this client diff against the workspace file; shelved files
 against their base (`w` workspace, `gh` head). Actions include submit, delete, integrate,
 sync-to-CL, copy the Swarm URL, quickfix of the files.
+`S` unshelves (`ops.unshelve`): the shelved file(s) under the cursor or marked, or the whole
+shelf from the header / Shelved section, for any user's or client's shelf; the `K` pop-up
+(`change_info.lua`) has `S` for the whole shelf.
 
 #### `views/history.lua`
 `:P4 filelog`: a float listing revisions (with a "branched from" section), paged (`gn` or
 reaching the end), `<CR>` opens the action menu; `rev_actions(ctx)` is shared with the picker
-and quickfix presenters (`history.presenter`). A directory's history is its changelists.
+and quickfix presenters (`history.presenter`), including `gD` "Diff against revision…" (the
+other revision from `picker.sources.revision`, which marks the row's own one "(this one)"). The
+float also has marks (`m`/`u`) with `D` diffing the two marked, and a visual-mode `D` diffing
+the first and last selected rows; `diff_two` puts the older (lower changelist) on the left. A
+directory's history is its changelists.
 
 #### `views/annotate.lua`
 `:P4 annotate`: a scroll- and cursor-bound split left of the file with the changelist, user

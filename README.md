@@ -342,12 +342,18 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   (workspace paths when mapped). It works for submitted and pending changelists (your pending
   files are diffed against the workspace) and for shelves: `d` compares the shelf with its base,
   `w` with your workspace file and `gh` with the head revision (`w` on the Shelved line: every
-  shelved file against the workspace, in a diff tab). `:P4 describe` with no number uses the
-  current file's changelist.
+  shelved file against the workspace, in a diff tab). `S` **unshelves**, anyone's shelf (another
+  user's or another client's too): on a shelved file that file, on the header or the Shelved
+  line the whole shelf. It goes into the changelist itself when it's yours in this workspace,
+  otherwise you pick one (default, an existing one or a new one). The `K` pop-up has `S` too.
+  `:P4 describe` with no number uses the current file's changelist.
 - **`:P4 filelog [path]` (`gL` / `<C-t>`): file history.** A float lists the revisions, with
   the files a branch came from. `<CR>` opens the action menu: `d` diff against the previous
   revision, `w` against your workspace file, `gd` describe, `K` view changelist, `o` open the
-  revision read-only, `b` annotate it. Pages load as you reach the end (or `gn`). `Q` moves
+  revision read-only, `b` annotate it. **Two revisions:** mark them with `m` (`u` clears) or
+  select them with `V`, then `D` diffs them (older on the left); `gD` "Diff against
+  revision…" picks the other one from the file's history. Pages load as you reach the end (or
+  `gn`). `Q` moves
   the list to the location list. Set `history.presenter` to `'picker'` or `'quickfix'` to
   use those instead. A directory's history is its list of changelists.
 - **`:P4 annotate` (`b`):** a split left of the file shows the changelist, user and date that

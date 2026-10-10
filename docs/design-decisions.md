@@ -56,11 +56,13 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 
 ## History / annotate / time-lapse
 - Filelog `<CR>` opens an **action menu**: diff vs previous rev, diff vs workspace file, view submitted CL, open revision read-only. Presentation configurable (float / picker / quickfix).
+- Filelog: **diff any two revisions** *(2026-10-10)*: mark two (`m`, `u` clears) or select them (`V`), then `D` (older left); `gD` "Diff against revision…" picks the other one from the file's history (like `gD` on an opened file).
 - Annotate: **scrollbound left split**, age-coloured; `<CR>` describe, `~` re-annotate before this line's change.
 - Time-lapse: **time-machine buffer first**, P4V-style slider in a later milestone. Engine: one `annotate -a -c` + one `filelog`.
 
 ## CL lookup
 - `:P4 describe N` → **Magit-style buffer**: header, file list, `<Tab>` lazily expands inline diff, `D` opens all in diff tab. Works for pending/shelved/submitted.
+- **Unshelve anyone's shelf** from the describe buffer and the `K` pop-up (`S`) *(2026-10-10)*: another user's or client's shelf goes into a changelist you pick; your own (in this workspace) into itself. On a shelved file `S` takes that file, on the header / Shelved line the whole shelf.
 - Submitted lists: **last 50, scoped to client view, paginated** (`@<oldest`).
 
 ## Operations in scope

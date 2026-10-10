@@ -171,6 +171,41 @@ T['m3']['describe Q: files to quickfix (workspace paths when mapped)'] = functio
   H.eq(names, { root .. '/a.txt', root .. '/b.txt' })
 end
 
+T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = function()
+  child.cmd('P4 filelog')
+  wait_text('initial import')
+  -- mark #3 and #1, D
+  goto_line('#3')
+  child.type_keys('m')
+  goto_line('#1 ')
+  child.type_keys('m', 'D')
+  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#3' })
+  child.cmd('tabclose')
+  -- the marks were cleared: D with nothing marked does nothing
+  child.type_keys('D')
+  H.eq(#child.api.nvim_list_tabpages(), 1)
+  -- select #3 … #2 with V, D
+  goto_line('#3')
+  child.type_keys('V', 'j', 'D')
+  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#2', 'perforated:////depot/a.txt#3' })
+  child.cmd('tabclose')
+  -- gD on #2: pick another revision (#1) from the file's history
+  child.lua([[require('perforated.picker').pick = function(spec)
+    _G.picked = vim.tbl_map(spec.format, spec.items)
+    for _, it in ipairs(spec.items) do
+      if tostring(it.rev) == '1' then return spec.on_choice({ it }) end
+    end
+  end]])
+  goto_line('#2')
+  child.type_keys('gD')
+  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#2' })
+  local picked = table.concat(child.lua_get('_G.picked'), '\n')
+  H.neq(picked:find('(this one)', 1, true), nil) -- #2 is marked as the one you started from
+end
+
 T['m3']['history: float, d diffs vs previous, gd describes, paging, Q loclist'] = function()
   child.lua([[require('perforated.config').set({ history = { limit = 2 } })]])
   child.cmd('P4 filelog')

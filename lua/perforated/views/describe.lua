@@ -522,6 +522,32 @@ local function actions(view)
       end,
     },
     {
+      -- Any shelf, yours or another user's / client's: into its own changelist when it's yours
+      -- in this workspace, else into one you pick (ops.unshelve).
+      id = 'unshelve',
+      desc = 'Unshelve',
+      keys = { 'S' },
+      multi = true,
+      when = function(_, node)
+        if not (view.data and #(view.data.shelved or {}) > 0) or ws.mode == 'connection' then
+          return false
+        end
+        -- a shelved file (or marked ones): those; the header or the Shelved section: all
+        return node ~= nil
+          and (node.kind == 'describe_shelved' or node.kind == 'header' or node.id == 'sec:shelved')
+      end,
+      run = function(_, ctx)
+        local files = {}
+        for _, n in ipairs(ctx.nodes) do
+          if n.kind == 'describe_shelved' then
+            files[#files + 1] = n.item.depotFile
+          end
+        end
+        require('perforated.ops').unshelve(ws, view.item.change, #files > 0 and files or nil, nil)
+        view.tree.marks = {}
+      end,
+    },
+    {
       id = 'submit',
       desc = 'Submit',
       keys = { 'P' },

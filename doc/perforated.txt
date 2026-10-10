@@ -253,6 +253,7 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   b               Annotate
   C               Edit description
   y               Copy CL number
+  S               Unshelve
   P <C-s>         Submit
   <Del>           Delete changelist
   g@              Sync workspace to this CL
@@ -271,6 +272,7 @@ File history (:P4 filelog)                                *perforated-history*
   . <RightMouse> <CR>  Action menu
   d <C-d>              Diff against previous revision
   w                    Diff against workspace file
+  gD                   Diff against revision…
   gd                   Describe changelist
   K                    View changelist
   o                    Open revision (read-only)

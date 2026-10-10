@@ -28,6 +28,19 @@ local function this_side(r)
   return { spec = r.depotFile .. '#' .. r.rev }
 end
 
+--- Diff two revisions, the older (lower changelist) on the left.
+---@param ws perforated.Workspace
+---@param a perforated.Rev
+---@param b perforated.Rev
+local function diff_two(ws, a, b)
+  local older, newer = a, b
+  if (tonumber(a.change) or 0) > (tonumber(b.change) or 0) then
+    older, newer = b, a
+  end
+  revs.diff(ws, this_side(older), this_side(newer))
+end
+M._diff_two = diff_two
+
 ---@param r perforated.Rev
 ---@return string
 local function rev_text(r)
@@ -84,6 +97,27 @@ function M.rev_actions(ctx)
         revs.where(ws, { r.depotFile }, function(map)
           go(map[r.depotFile])
         end)
+      end,
+    },
+    {
+      id = 'diff_revision',
+      desc = 'Diff against revision…',
+      keys = { 'gD' },
+      kinds = K,
+      when = function(item)
+        return item ~= nil and not is_deleted(item)
+      end,
+      run = function(items)
+        local r = items[1]
+        require('perforated.picker.sources').revision(
+          ws,
+          { depotFile = r.depotFile },
+          ('Diff #%s of %s against'):format(r.rev, vim.fs.basename(r.depotFile)),
+          function(other)
+            diff_two(ws, r, other)
+          end,
+          r.rev
+        )
       end,
     },
     {
@@ -408,6 +442,42 @@ function M.open(ws, path, opts)
   end
   view.actions = base.nav(view, 'History', { expand_menu = true })
   vim.list_extend(view.actions, M.rev_actions(ctx))
+  -- Two revisions: mark them (m) or select them (V), then D.
+  vim.list_extend(view.actions, {
+    {
+      id = 'mark',
+      desc = 'Mark / unmark (two marked: D diffs them)',
+      keys = { 'm' },
+      nomenu = true,
+      run = function()
+        view.tree:mark()
+        vim.cmd('normal! j')
+      end,
+    },
+    {
+      id = 'unmark_all',
+      desc = 'Clear marks',
+      keys = { 'u' },
+      nomenu = true,
+      run = function()
+        view.tree:clear_marks()
+      end,
+    },
+    {
+      id = 'diff_marked',
+      desc = 'Diff the two marked revisions',
+      keys = { 'D' },
+      kinds = { rev = true },
+      when = function()
+        return #view.tree:marked() == 2
+      end,
+      run = function()
+        local m = view.tree:marked()
+        diff_two(ws, m[1].item, m[2].item)
+        view.tree:clear_marks()
+      end,
+    },
+  })
   vim.list_extend(view.actions, {
     {
       id = 'more',
@@ -432,6 +502,16 @@ function M.open(ws, path, opts)
     },
   })
   base.finish(view)
+  -- Selecting two revisions (V…) and D diffs the first and last selected.
+  vim.keymap.set('x', 'D', function()
+    local a, b = vim.fn.line('v'), vim.fn.line('.')
+    vim.cmd('normal! ' .. vim.keycode('<Esc>'))
+    local first, last = view.tree:node_at(math.min(a, b)), view.tree:node_at(math.max(a, b))
+    if not (first and last and first.kind == 'rev' and last.kind == 'rev') or first == last then
+      return notify('select two revisions (or mark them with m), then D', vim.log.levels.WARN)
+    end
+    diff_two(ws, first.item, last.item)
+  end, { buffer = buf, desc = 'perforated: diff the first and last selected revisions' })
   vim.api.nvim_create_autocmd('CursorMoved', {
     buffer = buf,
     callback = function()

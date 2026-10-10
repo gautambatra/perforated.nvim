@@ -676,6 +676,65 @@ T['m4']['a file with p4 wildcards in its name: add, attach, check out, revert'] 
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
 end
 
+T['m4']["describe: S unshelves another user's shelf (all, or one file) into a picked CL"] = function()
+  setup()
+  server:p4({ 'sync' }, { client = 'bob_ws', user = 'bob', cwd = bob })
+  local out = server:p4({ 'change', '-i' }, {
+    client = 'bob_ws',
+    user = 'bob',
+    cwd = bob,
+    stdin = 'Change: new\nDescription:\n\tbob shelf\n',
+  }).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4(
+    { 'edit', '-c', cl, bob .. '/main/a.txt', bob .. '/main/b.txt' },
+    { client = 'bob_ws', user = 'bob', cwd = bob }
+  )
+  H.write(bob .. '/main/b.txt', 'bob b\n')
+  server:p4({ 'shelve', '-c', cl }, { client = 'bob_ws', user = 'bob', cwd = bob })
+  -- the target: the picker answers "default"
+  child.lua([[require('perforated.checkout').pick_change = function(_, cb) cb('default') end]])
+  -- the last line containing `text` (files are listed under Files, then under Shelved)
+  local function goto_text(text)
+    local row
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find(text, 1, true) then
+        row = i
+      end
+    end
+    assert(row, 'no line with ' .. text)
+    child.api.nvim_win_set_cursor(0, { row, 0 })
+  end
+  child.cmd('P4 describe ' .. cl)
+  wait([[vim.api.nvim_buf_get_name(0):find('describe', 1, true) ~= nil]])
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('Shelved (2)', 1, true) ~= nil]]
+  )
+  -- one shelved file
+  goto_text('//depot/main/b.txt') -- the Shelved section is open
+  child.type_keys('S')
+  H.eq(
+    vim.wait(10000, function()
+      return opened()['//depot/main/b.txt'] ~= nil
+    end, 100),
+    true
+  )
+  H.eq(opened()['//depot/main/a.txt'], nil) -- only that one
+  H.eq(vim.fn.readfile(root .. '/main/b.txt'), { 'bob b' })
+  -- the whole shelf, from the header
+  p4({ 'revert', root .. '/main/b.txt' })
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+  child.type_keys('S')
+  H.eq(
+    vim.wait(10000, function()
+      local o = opened()
+      return o['//depot/main/a.txt'] ~= nil and o['//depot/main/b.txt'] ~= nil
+    end, 100),
+    true
+  )
+  H.eq(opened()['//depot/main/a.txt'].change, 'default')
+end
+
 T['m4']["delete changelist: another client's CL with opened files is refused, its shelf kept"] = function()
   setup({ change = { allow_force = true } })
   server:p4({ 'sync' }, { client = 'bob_ws', user = 'bob', cwd = bob })
