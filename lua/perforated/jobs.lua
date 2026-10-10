@@ -81,8 +81,9 @@ end
 ---   ws:run(args, vim.tbl_extend('force', opts, job.run_opts), cb)
 ---@param ws perforated.Workspace
 ---@param title string
+---@param opts { quiet: boolean? }?  quiet: no start / result pop-ups (the caller shows its own)
 ---@return perforated.Job job, table run_opts
-function M.start(ws, title)
+function M.start(ws, title, opts)
   next_id = next_id + 1
   local job = {
     id = next_id,
@@ -90,7 +91,8 @@ function M.start(ws, title)
     title = title,
     started = vim.uv.hrtime(),
     count = 0,
-    prog = progress.start('p4', title .. '…  (:P4 jobs to watch, :P4 cancel to stop)'),
+    prog = not (opts and opts.quiet)
+      and progress.start('p4', title .. '…  (:P4 jobs to watch, :P4 cancel to stop)'),
   }
   jobs[#jobs + 1] = job
   ensure_timer()
@@ -126,7 +128,9 @@ function M.finish(job, msg, failed)
       break
     end
   end
-  progress.finish(job.prog, msg .. (' (%s)'):format(elapsed(job)), failed)
+  if job.prog then
+    progress.finish(job.prog, msg .. (' (%s)'):format(elapsed(job)), failed)
+  end
   render_float()
 end
 

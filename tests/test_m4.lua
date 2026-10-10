@@ -433,6 +433,7 @@ T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = fu
     { true, true }
   )
   -- R on an entry resolves it (clean merge for a.txt) and the entry leaves the list.
+  H.stub_menu(child) -- the result pop-up
   child.api.nvim_win_set_cursor(0, { 1, 0 })
   child.type_keys('R')
   H.eq(
@@ -502,11 +503,21 @@ T['m4']['resolve: -am takes clean merges; conflicts go to the merge tool'] = fun
   child.cmd('write')
   bob_submits('main/a.txt', 'l1\nbob2\nl3\nl4\nl5\n')
   p4({ 'sync' })
+  H.stub_menu(child)
+  H.record_busy(child)
   child.lua(
     [[require('perforated.resolve').run(require('perforated').workspace(), nil, function(n, left) _G.r = { n, left } end)]]
   )
   wait('_G.r ~= nil')
   H.eq(child.lua_get('_G.r'), { 1, 0 })
+  -- a centred busy pop-up while p4 worked, then the result, centred, waiting for a key
+  H.eq(
+    child.lua_get('_G.busy'),
+    { { msg = 'Resolving every file that needs it…', open = false } }
+  )
+  H.eq(child.lua_get('_G.menus[1].title'), 'Resolve')
+  H.eq(child.lua_get('_G.menus[1].header'), { '1 file(s) merged automatically' })
+  H.eq(child.lua_get('_G.menus[1].keys'), { '<CR>' })
   H.eq(p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }), '')
   -- conflict on line 1: the tool writes the result and exits 0
   wait([[vim.api.nvim_buf_get_lines(0, 1, 2, false)[1] == 'bob2']]) -- reloaded after -am
@@ -528,6 +539,7 @@ T['m4']['resolve: -am takes clean merges; conflicts go to the merge tool'] = fun
   )
   wait('_G.r ~= nil')
   H.eq(child.lua_get('_G.r'), { 1, 0 })
+  H.eq(child.lua_get('_G.menus[#_G.menus].header'), { '1 file(s) merged with your merge tool' })
   local args = vim.fn.readfile(log)
   H.eq(#args, 4)
   H.eq(args[1]:match('a%.txt%.base$') ~= nil, true) -- base, theirs, yours, merged
@@ -546,6 +558,7 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   child.cmd('write')
   bob_submits('main/a.txt', 'bob1\nl2\nl3\nl4\nl5\n')
   p4({ 'sync' })
+  H.stub_menu(child)
   child.lua(
     [[require('perforated.resolve').run(require('perforated').workspace(), nil, function(n, left) _G.r = { n, left } end)]]
   )
@@ -555,19 +568,12 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   H.eq(#qf, 1)
   H.neq(qf[1].text:find('exited with 1', 1, true), nil)
   H.neq(p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }), '')
-  -- Never silent: a job pop-up when it starts, and a warning with the outcome.
-  local msgs = child.lua_get([[vim.tbl_map(function(t) return t.title .. ': ' .. t.lines[1] end,
-    require('perforated.ui.toast').history())]])
-  H.eq(
-    msgs[#msgs - 1],
-    'Perforce: p4: resolve workspace…  (:P4 jobs to watch, :P4 cancel to stop)'
-  )
-  H.neq(
-    msgs[#msgs]:find(
-      '^Perforce: warning: p4: 1 file%(s%) left unresolved %(quickfix%): merge tool exited with 1'
-    ),
-    nil
-  )
+  -- Never silent: the centred result names the file and why, and offers the quickfix list.
+  local menu = child.lua_get('_G.menus[#_G.menus]')
+  H.eq(menu.title, 'Resolve')
+  H.eq(menu.header[1], '1 file(s) left unresolved:')
+  H.eq(menu.header[2], '  main/a.txt  (merge tool exited with 1)')
+  H.eq(menu.keys, { '<CR>', 'c' })
 end
 
 T['m4'][':P4 reopen moves the current file to another changelist'] = function()
@@ -808,6 +814,7 @@ T['m4']['integrate: preview, confirm, integrate into a branch, resolve'] = funct
     require('perforated.ui.prompt').input = function(_, cb) cb('//depot/rel/...') end
     vim.ui.select = function(items, _, cb) cb(items[1]) end -- default changelist
   ]])
+  H.stub_menu(child) -- resolve's result pop-up
   child.lua(
     ([[require('perforated.integrate').run(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
       fix

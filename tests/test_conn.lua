@@ -118,6 +118,7 @@ T['offline']['resolve runs as a job: a slow resolve -am is not cut off by the ca
     env = { P4CONFIG = '.p4config' },
     config = { p4 = H.fake_p4, runner = { timeout = 300 } },
   })
+  H.stub_menu(child) -- the result pop-up
   child.lua(([[
     _G.ws = require('perforated.core.activation').for_dir(%q)
     _G.ws.conn:_set('online')

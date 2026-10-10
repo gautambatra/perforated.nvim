@@ -1151,10 +1151,13 @@ buffer), move (renames the buffer and keeps unsaved edits), delete a pending cha
 remaining conflicts; for each content conflict, base and theirs are printed to temp files and
 the merge tool (`merge.tool` or `$P4MERGE`) runs as `tool base theirs yours merged`; exit 0
 with a changed result → written through the buffer and accepted with `resolve -ay`.
-Everything else goes to quickfix, where `R` retries. It runs as a job (`resolve -am` has no
-call timeout: it fetches revisions and merges locally), and the job's result pop-up always
-reports the outcome — `jobs.finish(job, msg, 'warn')` when files are left. No merge logic in
-the plugin.
+Everything else goes to quickfix, where `R` retries. It runs as a quiet job
+(`jobs.start(ws, title, { quiet = true })`: listed in `:P4 jobs`, stoppable, but without the
+start and result notices; `resolve -am` has no call timeout: it fetches revisions and merges
+locally). Instead a centred `toast.busy` pop-up shows while p4 works (closed before the merge
+tool runs) and `report` shows the outcome in a centred `float.menu` that waits for a key
+(merged automatically / with the tool / left, with reasons; `c` opens quickfix; plain
+`vim.notify` with `toast.backend = 'notify'`). No merge logic in the plugin.
 
 #### `integrate.lua`
 Cherry-pick: the source is the changelist's common directory; the target is a path or
@@ -1600,7 +1603,9 @@ mixed-case path. CI runs this leg on Linux.
   stashing the fix and watching the new test fail.
 - **Blocking menus**: a float menu or `vim.fn.confirm` blocks the child. Stub `confirm`
   (`child.lua('vim.fn.confirm = function() return 1 end')`) or, for float menus, `lua_notify`
-  the action, sleep, then `type_keys`.
+  the action, sleep, then `type_keys`. `H.stub_menu(child)` replaces `ui.float.menu`: each
+  call is recorded in `_G.menus` (title, header, keys) and answered with its first choice, so
+  a test can check what a pop-up said (resolve's and sync's results) without blocking.
 - **Windows vs tabs**: footers and other floats count as windows; count tabs or filter.
 - **Neovim versions**: behaviour differs across 0.11/0.12/nightly (filetypes, events); make
   assertions version-agnostic (e.g. compare with `vim.filetype.match` in the child).
