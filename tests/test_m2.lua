@@ -1112,7 +1112,7 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
   goto_line('Shelved (1)')
   child.type_keys('w')
   wait(
-    [[vim.tbl_contains(vim.tbl_map(function(t) return table.concat(t.lines, ' '):find('Not in Shelf (2): b.txt, c.txt', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
+    [[vim.tbl_contains(vim.tbl_map(function(t) return table.concat(t.lines, '|'):find('Not in Shelf (2):|  b.txt|  c.txt', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
   )
   H.eq(#child.api.nvim_list_tabpages(), 2)
   -- Every opened file in the shelf: no section, and no pop-up line for it.
