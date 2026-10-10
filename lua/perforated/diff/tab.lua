@@ -90,17 +90,11 @@ function M.open(ws, title, entries, opts)
         #entries == 1 and (title .. ': the file is identical')
           or ('%s: all %d files are identical'):format(title, #entries),
       }
-      for _, sec in ipairs(extra) do
-        lines[#lines + 1] = ('%s (%d): %s'):format(
-          sec.title,
-          #sec.entries,
-          table.concat(
-            vim.tbl_map(function(e)
-              return e.label
-            end, sec.entries),
-            ', '
-          )
-        )
+      for _, sec in ipairs(extra) do -- one file per line, indented under the section name
+        lines[#lines + 1] = ('%s (%d):'):format(sec.title, #sec.entries)
+        for _, e in ipairs(sec.entries) do
+          lines[#lines + 1] = '  ' .. e.label
+        end
       end
       return require('perforated.ui.toast').show(
         'Perforce: identical, nothing to diff',
