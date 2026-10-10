@@ -54,14 +54,7 @@ function M.pending(ws)
           end
           return ('%-8s %s  (%d files)'):format(c.change, first_line(c.desc), #c.files)
         end,
-        preview = function(c)
-          local out = c.change == 'default' and { 'default changelist', '' } or desc_lines(c)
-          out[#out + 1] = ''
-          for _, f in ipairs(c.files) do
-            out[#out + 1] = ('%-10s %s'):format(f.action or '', f.depotFile)
-          end
-          return out
-        end,
+        preview_buf = require('perforated.views.change_info').previewer(ws), -- the `K` popup
         on_choice = function(chosen)
           if chosen then
             require('perforated.diff.tab').open_change(ws, chosen[1])
@@ -128,7 +121,7 @@ function M.submitted(ws, opts)
             first_line(c.desc)
           )
         end,
-        preview = desc_lines,
+        preview_buf = require('perforated.views.change_info').previewer(ws), -- the `K` popup
         on_choice = function(chosen)
           if chosen then
             require('perforated.diff.tab').open_change(ws, chosen[1])

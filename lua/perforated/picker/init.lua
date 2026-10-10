@@ -5,6 +5,8 @@
 ---     items = { … },
 ---     format = function(item) return 'text shown / matched' end,
 ---     preview = function(item) return { 'lines', … } end,   -- optional
+---     preview_buf = function(item, buf) … end,              -- optional: fills the preview
+---                                                           -- buffer itself (may be async)
 ---     multi = false,                                        -- allow multi-select
 ---     on_choice = function(items) … end,                    -- nil when cancelled
 ---   })
@@ -24,6 +26,8 @@ local M = {}
 ---@field items any[]
 ---@field format fun(item: any): string
 ---@field preview (fun(item: any): string[])?
+---@field preview_buf (fun(item: any, buf: integer))?  wins over `preview` where the picker
+---  previews in a buffer (telescope, snacks, mini.pick, the plugin's own list)
 ---@field multi boolean?
 ---@field on_choice fun(items: any[]?)
 
@@ -70,10 +74,14 @@ backends.telescope = function(spec)
   local state = require('telescope.actions.state')
   local finish = once(spec)
   local previewer
-  if spec.preview then
+  if spec.preview_buf or spec.preview then
     previewer = require('telescope.previewers').new_buffer_previewer({
       title = spec.title,
       define_preview = function(self, entry)
+        if spec.preview_buf then
+          vim.wo[self.state.winid][0].wrap = true -- like the popups it mirrors
+          return spec.preview_buf(entry.value, self.state.bufnr)
+        end
         vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, spec.preview(entry.value) or {})
       end,
     })
@@ -161,15 +169,26 @@ backends.snacks = function(spec)
       idx = i,
       text = text,
       value = item,
-      preview = spec.preview and { text = table.concat(spec.preview(item) or {}, '\n') } or nil,
+      preview = not spec.preview_buf and spec.preview and {
+        text = table.concat(spec.preview(item) or {}, '\n'),
+      } or nil,
     }
+  end
+  local preview = spec.preview and 'preview' or 'none'
+  if spec.preview_buf then
+    preview = function(ctx)
+      ctx.preview:reset() -- may switch the window to its scratch buffer: fill that one
+      ctx.preview:minimal()
+      ctx.preview:wo({ wrap = true })
+      spec.preview_buf(ctx.item.value, ctx.preview.win.buf)
+    end
   end
   require('snacks').picker.pick({
     title = spec.title,
     focus = normal_mode() and 'list' or 'input',
     items = items,
     format = 'text',
-    preview = spec.preview and 'preview' or 'none',
+    preview = preview,
     confirm = function(picker, item)
       local sel = spec.multi and picker:selected({ fallback = true }) or { item }
       -- Before close: its on_close would report a cancel first otherwise.
@@ -206,7 +225,10 @@ backends.mini = function(spec)
           return i.value
         end, marked))
       end or nil,
-      preview = spec.preview and function(buf, item)
+      preview = (spec.preview_buf or spec.preview) and function(buf, item)
+        if spec.preview_buf then
+          return spec.preview_buf(item.value, buf)
+        end
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, spec.preview(item.value) or {})
       end or nil,
     },

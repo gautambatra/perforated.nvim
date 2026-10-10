@@ -370,6 +370,48 @@ T['changes'][':P4 pick pending opens the chosen CL in the diff tab'] = function(
   H.eq(child.lua_get('_G.labels')[1], 'default  (1 files)')
 end
 
+T['changes']['changelist pickers preview the K popup: description, files, shelf'] = function()
+  -- CL 7: pending, b.txt opened in it and shelved.
+  local out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tparser fix\n' }
+  ).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4({ 'edit', '-c', cl, root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-c', cl }, { client = 'alice_ws', cwd = root })
+  child.lua([[require('perforated.config').set({ picker = 'perforated' })]])
+  child.cmd('P4 pick pending')
+  H.eq(H.wait(child, LIST .. ' ~= nil'), true)
+  local text = ([[table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(%s.prev_win), 0, -1, false), '\n')]]):format(
+    LIST
+  )
+  -- The default changelist first (nothing opened in it), then CL 7.
+  H.eq(H.wait(child, text .. [[:find('default changelist · pending', 1, true) ~= nil]]), true)
+  child.type_keys('j')
+  H.eq(H.wait(child, text .. [[:find('Shelved (1)', 1, true) ~= nil]]), true)
+  local preview = child.lua_get(text)
+  H.neq(preview:find(('CL %s · pending · alice@alice_ws'):format(cl), 1, true), nil)
+  H.neq(preview:find('  parser fix', 1, true), nil)
+  H.neq(preview:find('Files (1)', 1, true), nil)
+  H.neq(preview:find('//depot/b.txt#1', 1, true), nil)
+  -- … in the popup's colours.
+  local groups = child.lua_get(
+    ([[vim.tbl_map(function(m) return m[4].line_hl_group end,
+    vim.api.nvim_buf_get_extmarks(vim.api.nvim_win_get_buf(%s.prev_win), -1, 0, -1, { details = true }))]]):format(
+      LIST
+    )
+  )
+  H.eq(vim.tbl_contains(groups, 'PerforatedTitle'), true)
+  H.eq(vim.tbl_contains(groups, 'PerforatedShelved'), true)
+  child.type_keys('q')
+  -- Submitted changelists too.
+  child.cmd('P4 pick submitted')
+  H.eq(H.wait(child, LIST .. ' ~= nil'), true)
+  H.eq(H.wait(child, text .. [[:find('· submitted ·', 1, true) ~= nil]]), true)
+  H.neq(child.lua_get(text):find('Files (1)', 1, true), nil)
+  child.type_keys('q')
+end
+
 T['changes']['quickfix window: x reverts and M moves the entry'] = function()
   server:p4({ 'edit', root .. '/a.txt', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
   server:p4(

@@ -150,6 +150,7 @@ function M.run(ws, change, cb)
                   vim.trim((c.desc or ''):match('[^\n]*') or '')
                 )
               end,
+              preview_buf = require('perforated.views.change_info').previewer(ws), -- the `K` popup
               on_choice = function(chosen)
                 if chosen then
                   M.run(ws, chosen[1].change, cb)

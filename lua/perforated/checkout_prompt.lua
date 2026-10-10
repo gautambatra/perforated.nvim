@@ -63,12 +63,7 @@ function M.pick_change(ws, cb, opts)
         end
         return ('%-8s %s'):format(c.change, vim.trim((c.desc or ''):match('[^\n]*') or ''))
       end,
-      preview = function(c)
-        if c.change == 'default' or c.change == 'new' then
-          return {}
-        end
-        return vim.split(c.desc or '', '\n', { plain = true })
-      end,
+      preview_buf = require('perforated.views.change_info').previewer(ws), -- the `K` popup
       on_choice = function(chosen)
         local choice = chosen and chosen[1]
         if not choice then

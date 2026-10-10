@@ -14,38 +14,65 @@ local function date(t)
   return t and os.date('%Y-%m-%d %H:%M', t) or ''
 end
 
+--- What the popup shows: the changelist (`describe -s`) and, for a pending one, its shelf.
 ---@param ws perforated.Workspace
 ---@param item table  client-view change item { change, rec?, files?, shelved? } or a `p4 changes` record
-function M.open(ws, item)
+---@param cb fun(d: { rec: table, files: table[] }?, shelved: table[]?)  nil: couldn't describe
+function M.fetch(ws, item, cb)
   local change = item.change
   if change == 'default' then
-    return M.show(ws, item, {
-      rec = { change = 'default', status = 'pending', user = ws:user(), client = ws:client() },
-      files = item.files or {},
-    }, item.shelved or {})
+    local function done(files)
+      cb({
+        rec = { change = 'default', status = 'pending', user = ws:user(), client = ws:client() },
+        files = files,
+      }, {})
+    end
+    if item.files then
+      return done(item.files)
+    end
+    -- e.g. a changelist chooser's "default" entry: its opened files.
+    return require('perforated.p4').fstat_opened(ws, { priority = 3 }, function(recs)
+      done(vim.tbl_filter(function(r)
+        return r.change == 'default'
+      end, recs or {}))
+    end)
   end
+  -- A client-view item carries its shelved files; a `p4 changes` record only a "shelved" flag.
+  local shelved = type(item.shelved) == 'table' and item.shelved or nil
   cls.describe(ws, { change }, {}, function(by)
     local d = by[change]
     if not d then
-      return require('perforated.ui.toast').notify(
-        '[perforated] could not describe CL ' .. change,
-        vim.log.levels.ERROR
-      )
+      return cb(nil)
     end
-    if item.shelved == nil and d.rec.status == 'pending' then
+    if not shelved and d.rec.status == 'pending' then
       return cls.shelved_files(ws, { change }, function(sh)
-        M.show(ws, item, d, sh[change] or {})
+        cb(d, sh[change] or {})
       end)
     end
-    M.show(ws, item, d, item.shelved or {})
+    cb(d, shelved or {})
   end)
 end
 
 ---@param ws perforated.Workspace
+---@param item table  client-view change item { change, rec?, files?, shelved? } or a `p4 changes` record
+function M.open(ws, item)
+  M.fetch(ws, item, function(d, shelved)
+    if not d then
+      return require('perforated.ui.toast').notify(
+        '[perforated] could not describe CL ' .. item.change,
+        vim.log.levels.ERROR
+      )
+    end
+    M.show(ws, item, d, shelved)
+  end)
+end
+
+--- The popup's lines and their highlights (row → group), for the popup and picker previews.
 ---@param item table
 ---@param d { rec: table, files: table[] }
 ---@param shelved table[]
-function M.show(ws, item, d, shelved)
+---@return string[] lines, table<integer, string> hls, string title
+function M.render(item, d, shelved)
   local rec = d.rec
   local lines, hls = {}, {}
   local function add(text, hl)
@@ -95,6 +122,65 @@ function M.show(ws, item, d, shelved)
       )
     end
   end
+  return lines, hls, title
+end
+
+---@param buf integer
+---@param lines string[]
+---@param hls table<integer, string>
+local function fill(buf, lines, hls)
+  local modifiable = vim.bo[buf].modifiable
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = modifiable
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  for row, hl in pairs(hls) do
+    vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { line_hl_group = hl })
+  end
+end
+
+--- A picker's changelist preview: the popup's content in the picker's preview buffer. Filled
+--- once fetched (each changelist once per picker); a buffer moved on to another entry by then
+--- is left alone.
+---@param ws perforated.Workspace
+---@return fun(item: table, buf: integer)
+function M.previewer(ws)
+  require('perforated.hl').setup()
+  local cache = {} ---@type table<string, { lines: string[], hls: table<integer, string> }>
+  return function(item, buf)
+    local change = item and item.change
+    if not change or change == 'new' then
+      return fill(buf, {}, {})
+    end
+    vim.b[buf].perforated_cl_preview = change
+    if cache[change] then
+      return fill(buf, cache[change].lines, cache[change].hls)
+    end
+    fill(
+      buf,
+      { change == 'default' and 'default changelist…' or ('CL %s…'):format(change) },
+      {}
+    )
+    M.fetch(ws, item, function(d, shelved)
+      local lines, hls = { 'could not describe CL ' .. change }, {}
+      if d then
+        lines, hls = M.render(item, d, shelved)
+        cache[change] = { lines = lines, hls = hls }
+      end
+      if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].perforated_cl_preview == change then
+        fill(buf, lines, hls)
+      end
+    end)
+  end
+end
+
+---@param ws perforated.Workspace
+---@param item table
+---@param d { rec: table, files: table[] }
+---@param shelved table[]
+function M.show(ws, item, d, shelved)
+  local rec = d.rec
+  local lines, hls, title = M.render(item, d, shelved)
 
   -- Your own changelists (or anyone's with change.allow_force); never the default one.
   local editable = rec.change ~= 'default'
@@ -102,12 +188,9 @@ function M.show(ws, item, d, shelved)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  fill(buf, lines, hls)
   vim.bo[buf].modifiable = false
   vim.bo[buf].filetype = 'perforated-changelist'
-  for row, hl in pairs(hls) do
-    vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { line_hl_group = hl })
-  end
   local width = 40
   for _, l in ipairs(lines) do
     width = math.max(width, vim.fn.strdisplaywidth(l) + 2)

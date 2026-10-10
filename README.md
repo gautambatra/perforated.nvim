@@ -593,6 +593,10 @@ use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.p
 detected in that order. Without one, the plugin uses **its own list**: a filter line, the list
 and a preview, in pop-ups like the rest of the plugin.
 
+Lists of changelists (`:P4 pick pending|submitted`, choosing a changelist, `:P4 sync @`,
+integrate) preview what `K` shows: the header, the full description, the files and the shelved
+files, in the same colours. fzf-lua shows no preview.
+
 - `j`/`k`/arrows move (wrapping around), `<CR>` or a double-click chooses, `q`/`<Esc>`
   cancel; `i` or `/` types in the filter line (fuzzy; arrows still move the list, `<CR>`
   chooses, `<Esc>` goes back to the list); `m` marks several where that's allowed

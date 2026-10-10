@@ -27,6 +27,10 @@ Every step that chooses from a list uses a picker:
 - **`:P4 pick`:** `pending` and `submitted` (then a diff tab), `opened` (several at once),
   `users` (then their submitted changelists).
 
+Lists of changelists preview the `K` pop-up's content (header, description, files, shelved
+files, in its colours) in telescope, snacks.picker, mini.pick (`<Tab>`) and the plugin's own
+list. fzf-lua shows no preview.
+
 The action menus (`.`, right-click), the check-out prompt's single keys, confirmations and
 text inputs never use a picker: they're the plugin's own pop-ups.
 
