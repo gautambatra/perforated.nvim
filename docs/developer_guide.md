@@ -1323,8 +1323,10 @@ The client view ([§18.7](#187-you-open-the-client-view-p4)). `file_node` render
 (action, icon, path, `#have/#head`, stale/unresolved badges, the `●`/dimmed changed marker,
 and in "Needs attention" the changelist). `build(view, data)` assembles the sections: header,
 Sync CL, Pending (per changelist, with shelves), Needs attention, Workspace reconcile (lazy,
-scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted, with blank
-spacer rows between sections. `refresh(view)` runs the queries in parallel and redraws as each
+scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted (the latest
+`client_view.submitted_limit`, then a `submitted_all` row: `<CR>` there or `gn` in the section
+opens `views/changes.lua` with `{ user, anywhere = true }`), with blank spacer rows between
+sections. `refresh(view)` runs the queries in parallel and redraws as each
 answers (coalescing refreshes: one in flight, one queued). `switch_client(view)` (`W`) picks
 another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's message on
 failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view, and `M.MENU_LAYOUT` the order and grouping

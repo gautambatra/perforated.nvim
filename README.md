@@ -202,7 +202,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   #have`), above the sections; `gd`, `K` and `y` work on it.
 - **Sections:** pending changelists (the default changelist first, then the newest) with their
   files and shelved files, files needing attention (stale or unresolved), workspace reconcile,
-  and your recent submits (from any client, anywhere in the depot). Reconcile is expensive on
+  and your recent submits (from any client, anywhere in the depot; the latest
+  `client_view.submitted_limit`, 20 by default). The section's last row, "… all my submitted
+  changelists", opens the full list (`<CR>` there, or `gn` anywhere in the section): `:P4
+  changes` for all your clients, loaded a page at a time as you scroll. Reconcile is expensive on
   large workspaces, so it only scans when you expand it (`l`), and `x` stops a running scan
   (so do `:P4 jobs` and `:P4 cancel`). To scan only the parts you care about, set
   `client_view.reconcile.paths` (e.g. `{ 'src/myteam' }`, relative to the client root; local
@@ -819,7 +822,7 @@ opts = {
   picker_mode = 'normal', -- open pickers in normal mode ('insert' to start typing); telescope, snacks
   client_view = {
     kind = 'tab', -- 'tab' | 'float' | 'split'
-    submitted_limit = 20,
+    submitted_limit = 20, -- "Recent submitted": how many of your latest (gn: the full list)
     reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved

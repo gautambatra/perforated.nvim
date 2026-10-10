@@ -202,6 +202,7 @@ Client view (:P4)                                     *perforated-client-view*
   gy              Get latest file revisions
   gy              Get latest revisions of these files
   gY <C-S-g>      Sync workspace
+  gn              All my submitted changelists
   g@              Sync workspace to this CL
   I               Integrate (cherry-pick) into this workspace
   gd              Describe changelist

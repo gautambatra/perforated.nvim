@@ -29,9 +29,10 @@ end
 
 local function render(view)
   local roots = {}
-  local title = ('Submitted changelists%s%s'):format(
+  local title = ('Submitted changelists%s%s%s'):format(
     view.opts.user and (' · ' .. view.opts.user) or '',
-    view.opts.path and (' · ' .. view.opts.path) or ''
+    view.opts.path and (' · ' .. view.opts.path) or '',
+    view.opts.anywhere and ' · all clients' or ''
   )
   roots[1] = { id = 'hdr', kind = 'header', text = { { title, 'PerforatedTitle' } } }
   for _, c in ipairs(view.changes) do
@@ -62,6 +63,7 @@ local function load_page(view)
   cls.submitted_changes(view.ws, {
     user = view.opts.user,
     path = view.opts.path,
+    anywhere = view.opts.anywhere,
     max = page,
     before = oldest and (tonumber(oldest.change) - 1) or nil,
   }, function(changes, err)

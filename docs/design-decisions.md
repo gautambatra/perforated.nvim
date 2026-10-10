@@ -31,6 +31,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - **Hybrid**: Magit-style foldable status buffer as the core; drilling into a CL/file opens a diffview-style tab (file panel + side-by-side diff).
 - Opens in a **new tab** by default (configurable: float/split).
 - Sections: Pending CLs (+shelved files), Unresolved/stale, Workspace reconcile (lazy — only queried when expanded; scope configurable), My recent submitted.
+- "Recent submitted" shows the latest `client_view.submitted_limit` (20) of the user's changelists from any client; its last row (`<CR>`, or `gn` anywhere in the section) opens the full list in `:P4 changes` (all clients, paged as you scroll) rather than growing the section *(2026-10-10)*.
 - Pending scope: current client, key toggles to all my clients.
 - On-demand (not default sections): lookup CL by number, submitted CLs of another user.
 - Actions: **direct single keys** + `?` floating help; **always-visible footer** with the most common keys for the item under cursor.
