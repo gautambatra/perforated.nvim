@@ -98,7 +98,7 @@ T['config']['merges vim.g and setup(), reports unknown keys'] = function()
   config.set({ toast = { timeout = 0 } })
   local c = config.get()
   H.eq(c.poll.interval, 60)
-  H.eq(c.poll.focus_throttle, 30)
+  H.eq(c.poll.focus_throttle, 2)
   H.eq(c.toast.timeout, 0)
   H.eq(config.unknown_keys(), { 'polll' })
   vim.g.perforated = nil

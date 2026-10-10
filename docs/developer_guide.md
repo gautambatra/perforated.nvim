@@ -757,8 +757,9 @@ why keys, menus and help never disagree.
 
 1. `poll.probe` runs `p4 changes -m1 -s submitted <opened + loaded files>` — one indexed query
    — and `p4 opened` (the client's opened-file records) on a timer while Neovim is focused
-   (default 30 seconds), on `FocusGained` (throttled) and when entering a Perforce buffer
-   (throttled).
+   (default 30 seconds), on `FocusGained` (throttled to one per `poll.focus_throttle`, 2 s:
+   the timer is paused while unfocused, so every real return must check; the short throttle
+   only absorbs focus flapping) and when entering a Perforce buffer (throttled).
 2. Only when the first reports a newer changelist than last time, or the second differs from
    the last refresh's opened files (`depotFile|action|change`: opened, reverted, moved or
    unshelved elsewhere), does `poll.refresh` run the full `fstat -Ro //client/...` over opened

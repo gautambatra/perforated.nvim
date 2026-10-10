@@ -352,6 +352,8 @@ local function ensure_autocmds()
     group = group,
     callback = function()
       M.focused = true
+      -- The timer skipped every tick while unfocused, so each return must catch up: the
+      -- throttle (2 s by default) only absorbs focus flapping (tmux pane switches).
       local now = vim.uv.now()
       if now - last_focus_probe >= cfg().focus_throttle * 1000 then
         last_focus_probe = now

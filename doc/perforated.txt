@@ -500,7 +500,7 @@ keys):
       picker_mode = "normal",
       poll = {
         bufenter_throttle = 60,
-        focus_throttle = 30,
+        focus_throttle = 2,
         interval = 30
       },
       qf = {
