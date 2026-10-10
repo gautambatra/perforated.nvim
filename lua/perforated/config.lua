@@ -43,6 +43,8 @@ local defaults = {
   },
   client_view = {
     kind = 'tab',
+    --- How many of your latest submitted changelists "Recent submitted" shows (any client);
+    --- `gn` there opens the full list.
     submitted_limit = 20,
     -- Paths the reconcile section scans (relative to the client root, local or depot paths;
     -- or a function(ws) returning them). Empty = the whole client. `p` in the view overrides

@@ -184,8 +184,25 @@ T['client view']['Recent submitted lists my submits from outside this client vie
   local root2 = server.dir .. '/ws2'
   server:client('alice_other', root2)
   server:submit_files('alice_other', root2, { ['elsewhere/x.txt'] = 'x\n' }, 'Outside my view')
+  child.lua([[require('perforated.config').set({ client_view = { submitted_limit = 1 } })]])
   open_view()
   H.eq(has_line('Outside my view'), true)
+  H.eq(has_line('CL 1  20'), false) -- the limit: only the newest submitted row
+  H.eq(has_line('Recent submitted  (1)'), true) -- the "all" row isn't counted
+  -- the full list: <CR> on the last row, all my clients (so the older one too)
+  goto_line('all my submitted changelists')
+  child.type_keys('<CR>')
+  wait([[vim.api.nvim_buf_get_name(0):find('perforated://changes/', 1, true) ~= nil]])
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('initial import', 1, true) ~= nil]]
+  )
+  H.eq(has_line('all clients'), true)
+  H.eq(has_line('Outside my view'), true)
+  -- gn on a submitted row opens it too
+  child.cmd('tabclose')
+  goto_line('Outside my view')
+  child.type_keys('gn')
+  wait([[vim.api.nvim_buf_get_name(0):find('perforated://changes/', 1, true) ~= nil]])
 end
 
 T['client view']['a non-zero opened-file count uses PerforatedCount'] = function()

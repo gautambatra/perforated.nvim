@@ -406,7 +406,15 @@ local function build(view, data)
     }
   end
   local nsub = #sub_children
-  if not data.submitted then
+  if data.submitted then
+    -- The section shows the last `client_view.submitted_limit`; the full list opens in
+    -- :P4 changes (paged as you scroll).
+    sub_children[#sub_children + 1] = {
+      id = 'sub:all',
+      kind = 'submitted_all',
+      text = { { '… all my submitted changelists (gn)', 'PerforatedDim' } },
+    }
+  else
     sub_children = {
       { id = 'sub:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
     }
@@ -754,8 +762,14 @@ end
 ---@return perforated.Action[]
 local function actions(view)
   local ws = view.ws
+  local function all_submitted()
+    require('perforated.views.changes').open(ws, { user = ws:user(), anywhere = true })
+  end
   local tree_node_expand = function(_, ctx)
     local node = ctx.node
+    if node and node.kind == 'submitted_all' then
+      return all_submitted()
+    end
     if node and node.children then
       view.tree:toggle(node)
     else
@@ -1148,6 +1162,16 @@ local function actions(view)
       run = function()
         require('perforated.ops').sync(ws, {}) -- asks for confirmation
       end,
+    },
+    {
+      id = 'all_submitted',
+      desc = 'All my submitted changelists',
+      keys = { 'gn' },
+      kinds = { section = true, submitted = true, submitted_all = true },
+      when = function(_, node)
+        return node.kind ~= 'section' or node.id == 'sec:submitted'
+      end,
+      run = all_submitted,
     },
     {
       id = 'sync_to_change',
