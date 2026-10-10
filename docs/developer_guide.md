@@ -1292,7 +1292,7 @@ them) and status glyphs in Nerd Font or ASCII style (overridable via `icons.glyp
 ### Pickers
 
 #### `picker/init.lua`, `picker/sources.lua`, `picker/list.lua`
-`pick({ title, items, format, preview, multi, on_choice })` over telescope, fzf-lua,
+`pick({ title, items, format, preview, preview_buf, multi, on_choice })` over telescope, fzf-lua,
 snacks.picker, mini.pick, the plugin's own list or `vim.ui.select` (auto-detected, or
 `picker = '…'`). `backend()` picks the first installed picker plugin, else `fallback()`: the
 own list, or `vim.ui.select` with `toast.backend = 'notify'`; a backend that errors (e.g. a
@@ -1300,7 +1300,11 @@ picker plugin that fails to load: LuaJIT then leaves a marker in `package.loaded
 still looks installed) falls back the same way. `once()`
 guarantees `on_choice` runs exactly once, even with backends that report cancel and choice
 in odd orders. `picker_mode` (default `'normal'`) opens telescope (`initial_mode`) and snacks
-(`focus = 'list'`) with the list focused. Sources for `:P4 pick {pending|opened|submitted|users}`, and `revision(ws, rec, title, on_rev)`:
+(`focus = 'list'`) with the list focused. `preview` returns lines; `preview_buf(item, buf)`
+fills the backend's preview buffer itself and may do it later (telescope, snacks, mini.pick
+and the own list call it; snacks after `ctx.preview:reset()`, which may swap the window's
+buffer, so the buffer is read after it). The changelist pickers use
+`change_info.previewer(ws)`. Sources for `:P4 pick {pending|opened|submitted|users}`, and `revision(ws, rec, title, on_rev)`:
 one file's history (`filelog`, have revision marked), used by the client view's "Get revision…"
 and "Diff against revision…".
 
@@ -1389,7 +1393,10 @@ bisection so they never crowd. Windows are created with `nvim_open_win({ split =
 
 #### `views/changes.lua`, `views/change_info.lua`, `views/change_editor.lua`
 `:P4 changes` (submitted changelists, paged); the `K` popup (full description, files,
-shelved files; `C` turns the same float into the description editor, and a save or cancel
+shelved files; `fetch` gets them, `render` builds lines + highlights, `show` opens the float,
+and `previewer(ws)` puts the same content in a picker's preview buffer: a placeholder, then
+the content once fetched, cached per changelist for that picker, and written only while the
+buffer still previews that changelist; `C` turns the same float into the description editor, and a save or cancel
 comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save;
 only the Description field of the spec is replaced, so the file list can't be edited by
 accident; submitted changelists use `change -u`, with an opt-in `-f` retry).

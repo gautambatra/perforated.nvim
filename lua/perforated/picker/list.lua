@@ -78,7 +78,7 @@ function M.open(spec, finish)
 
   -- Layout: list (and filter line above it), preview beside it or below on narrow screens.
   local cols, rows = vim.o.columns, vim.o.lines
-  local has_preview = spec.preview ~= nil
+  local has_preview = spec.preview ~= nil or spec.preview_buf ~= nil
   local longest = 20
   for _, t in ipairs(texts) do
     longest = math.max(longest, vim.fn.strdisplaywidth(t.text) + #MARK + 1)
@@ -202,6 +202,9 @@ function M.open(spec, finish)
       return
     end
     local idx = p.shown[vim.api.nvim_win_get_cursor(list_win)[1]]
+    if spec.preview_buf then
+      return spec.preview_buf(idx and items[idx], prev_buf)
+    end
     local lines = idx and spec.preview(items[idx]) or {}
     vim.bo[prev_buf].modifiable = true
     vim.api.nvim_buf_set_lines(prev_buf, 0, -1, false, lines)
