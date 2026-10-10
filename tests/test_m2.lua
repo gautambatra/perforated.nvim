@@ -1089,6 +1089,34 @@ T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in 
   )
 end
 
+T['client view']['shelf vs workspace lists opened files that are not in the shelf'] = function()
+  open_view()
+  -- The shelf holds a.txt (a2); b.txt and c.txt are opened in the default changelist.
+  H.write(root .. '/a.txt', 'a3\n')
+  goto_line('Shelved (1)')
+  child.type_keys('w')
+  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  local text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  local section = text:find('Not in Shelf (2):', 1, true)
+  H.neq(section, nil)
+  H.eq(text:find('a.txt', 1, true) < section, true) -- diffed
+  H.eq(text:find('b.txt', 1, true) > section, true) -- listed only
+  H.eq(text:find('c.txt', 1, true) > section, true)
+  H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
+  child.type_keys('G') -- the cursor stays on the file list
+  wait('vim.api.nvim_win_get_cursor(0)[1] == 3')
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  -- Every shelved file identical: no tab; the pop-up names the files not in the shelf.
+  H.write(root .. '/a.txt', 'a2\n')
+  goto_line('Shelved (1)')
+  child.type_keys('w')
+  wait(
+    [[vim.tbl_contains(vim.tbl_map(function(t) return table.concat(t.lines, ' '):find('Not in Shelf (2): b.txt, c.txt', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
+  )
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+end
+
 T['client view']['changed files get ● (and unchanged ones are dimmed); saving updates it'] = function()
   open_view()
   local function row(text)
