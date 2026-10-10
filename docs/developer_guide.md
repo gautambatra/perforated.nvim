@@ -1170,7 +1170,10 @@ with the file count, last file and elapsed time; `x` stops a job) and `:P4 cance
 `start(ws, title)` returns run options (`timeout = 0`, `on_spawn`, `on_record`) to pass to
 `ws:run`. With pop-ups (the default) a job reports a pop-up when it starts and one with its
 result, and nothing in between; with `toast.backend = 'notify'` it also shows Neovim 0.12's
-progress messages (with `source`) while running.
+progress messages (with `source`) while running. `start(ws, title, { quiet = true })` (resolve)
+has no progress item at all (`job.prog = false`): the caller shows its own pop-ups, and the
+twice-a-second tick and `finish` skip it. A test keeps a quiet job alive across ticks: the
+resolve tests finish before the first tick, which once let a crash there through.
 
 #### `tools.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
