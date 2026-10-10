@@ -439,9 +439,13 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   row, `:P4 changes`, describe, history), `:P4 sync @12345`, or `:P4 sync @` to pick one.
   Labels and dates work too (`:P4 sync @mylabel`, `@2026/09/01`). Open buffers reload without "file changed"
   prompts, and their signs follow the new revision. Afterwards every opened file is re-checked:
-  files that need attention (can't clobber, and *every* unresolved file in the workspace, not
-  just this sync's) go to quickfix, and if any need resolving you're offered to resolve them
-  now (`sync.resolve_prompt = false` turns the offer off).
+  files that need attention (can't clobber, files named by other errors, and *every*
+  unresolved file in the workspace, not just this sync's) go to quickfix. If anything didn't go
+  as asked — files p4 wouldn't overwrite because they're writable but not opened (they stay at
+  their old revision), or other errors — a **centred pop-up** says so and lists them, so they
+  can't go unnoticed; it also offers to resolve now when files need it
+  (`sync.resolve_prompt = false` turns that offer off). The sync's result message counts each
+  kind: `12 updated · 2 not updated (writable, not opened) · 3 to resolve`.
 - **Watch or stop long operations:** a sync or submit shows a pop-up when it starts and one
   with the result. `:P4 jobs` shows the live progress (files so far, last file, elapsed time)
   in a float that updates live,

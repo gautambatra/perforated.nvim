@@ -1137,8 +1137,11 @@ shelf's own changelist when it's yours, else a picked one; `-f` only after confi
 with a centred busy pop-up; shelve and unshelve move file content, so they have no call timeout;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
 quickfix), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
-reloads unmodified buffers without prompts; afterwards every unresolved file goes to quickfix
-and a menu offers to resolve now), sync to a changelist and its picker, delete (closes the
+reloads unmodified buffers without prompts; afterwards can't-clobber files, files named by
+other errors and every unresolved file go to quickfix, and `after_sync` shows a centred pop-up
+whenever something didn't go as asked (files p4 wouldn't overwrite, other errors; "must
+resolve" and "up-to-date" are expected) or files need resolving, offering to resolve now; the
+job's result message counts each kind), sync to a changelist and its picker, delete (closes the
 buffer), move (renames the buffer and keeps unsaved edits), delete a pending changelist
 (moving or reverting its files and deleting its shelf first). Messages of the form
 `<file> - <reason>` become quickfix items (`file_items`).
