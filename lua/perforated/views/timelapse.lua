@@ -420,6 +420,7 @@ local function actions(view)
     return view.tl.revs[view.n] or {}
   end
   return {
+    require('perforated.lookup').action(ws),
     {
       id = 'prev',
       desc = 'Previous revision',

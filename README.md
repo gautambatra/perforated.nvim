@@ -359,7 +359,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   whatever the file's size or history.
 - **`:P4 blame` (or `blame_line = { enabled = true }`): current-line blame** as virtual text.
   The file is annotated once per revision; moving the cursor makes no p4 calls.
-- **`:P4 lookup` (`g/` / `<C-g>`):** type a changelist number, a path or a user name.
+- **`:P4 lookup` (`g/` / `<C-g>`):** type a changelist number, a path or a user name. The keys
+  work in every Perforce window: the client view, describe, history, annotate, time-lapse,
+  `:P4 changes`, diff views (both sides and the file panel), the `K` changelist pop-up,
+  revision buffers and the plugin's quickfix lists.
 - **Swarm:** `gX` copies a changelist's review URL. The URL comes from
   `swarm.url` or the server's `P4.Swarm.URL` property.
 

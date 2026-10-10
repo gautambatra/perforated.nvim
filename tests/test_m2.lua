@@ -1330,6 +1330,84 @@ T['client view']['diffs: no gutter signs; sides in line (first change / your pos
   H.eq({ s[1][4], s[2][4] }, { 'no', 'no' })
 end
 
+T['client view']['Ctrl+G / g/ open the lookup in every Perforce window'] = function()
+  child.lua(
+    [[_G.lookups = 0
+    require('perforated.ui.prompt').input = function(opts) if opts.prompt:find('Go to', 1, true) then _G.lookups = _G.lookups + 1 end end]]
+  )
+  local n = 0
+  local function check(where, key)
+    child.type_keys(key or '<C-g>')
+    n = n + 1
+    H.eq({ where, child.lua_get('_G.lookups') }, { where, n })
+  end
+  local function wait_win(expr)
+    wait(expr)
+    vim.uv.sleep(100)
+  end
+  open_view()
+  check('client view')
+  check('client view (g/)', 'g/')
+  goto_line('CL 2  Fix parser')
+  child.type_keys('K') -- the changelist pop-up
+  wait_win(FLOAT_LINES .. ' ~= nil')
+  check('changelist pop-up')
+  child.type_keys('q')
+  child.cmd('P4 describe 2')
+  wait_win(
+    [[vim.bo.filetype == 'perforated' and vim.api.nvim_buf_get_name(0):find('describe', 1, true) ~= nil]]
+  )
+  check('describe')
+  child.cmd('tabonly | edit ' .. root .. '/a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.cmd('P4 filelog')
+  wait_win(FLOAT_LINES .. ' ~= nil')
+  check('history')
+  child.type_keys('q')
+  child.cmd('P4 annotate')
+  wait_win(
+    [[next(require('perforated.views.annotate')._views) ~= nil and vim.bo.buftype == 'nofile']]
+  )
+  check('annotate')
+  child.cmd('tabonly | only | edit ' .. root .. '/a.txt')
+  child.cmd('P4 timelapse')
+  wait_win(
+    [[require('perforated.views.timelapse')._last ~= nil and require('perforated.views.timelapse')._last.tl ~= nil]]
+  )
+  check('time-lapse')
+  child.cmd('tabonly | only | edit ' .. root .. '/a.txt')
+  child.cmd('P4 diff')
+  wait_win([[#vim.api.nvim_list_tabpages() == 2]])
+  check('diff (your file)')
+  child.cmd('wincmd h')
+  check('diff (revision)')
+  child.cmd('tabonly | P4 diff -a')
+  wait_win(
+    [[#vim.api.nvim_list_tabpages() == 2 and vim.api.nvim_buf_get_name(0):find('perforated://files', 1, true) ~= nil]]
+  )
+  check('diff tab panel')
+  child.cmd('wincmd l')
+  check('diff tab side')
+  child.cmd('tabonly | only | edit perforated:////depot/b.txt\\#1')
+  wait_win([[vim.b.perforated_loaded == true]])
+  check('revision buffer')
+  check('revision buffer (g/)', 'g/')
+  child.cmd('P4 opened')
+  wait([[#vim.fn.getqflist() > 0]])
+  child.cmd('copen')
+  wait_win([[vim.bo.buftype == 'quickfix']])
+  check('quickfix list')
+  -- outside the diff tab your own file keeps Vim's Ctrl+G
+  child.cmd('cclose | edit ' .. root .. '/a.txt')
+  H.eq(child.lua_get([[vim.fn.maparg('<C-g>', 'n', false, true).buffer or 0]]), 0)
+  -- keys.p4v = false: only g/
+  child.lua([[require('perforated.config').set({ keys = { p4v = false } })]])
+  child.cmd('P4 describe 2')
+  wait_win([[vim.api.nvim_buf_get_name(0):find('describe', 1, true) ~= nil]])
+  H.eq(child.fn.maparg('<C-g>', 'n'), '')
+  check('describe, p4v off (g/)', 'g/')
+end
+
 T['client view']['diff views: Ctrl+1 / Ctrl+2 go to the previous / next change'] = function()
   local text = {}
   for n = 1, 60 do

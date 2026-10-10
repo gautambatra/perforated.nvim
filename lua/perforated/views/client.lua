@@ -1189,16 +1189,7 @@ local function actions(view)
         require('perforated.history').swarm(ws, items[1].change)
       end,
     },
-    {
-      id = 'lookup',
-      desc = 'Go to changelist / path / user',
-      keys = { 'g/' },
-      p4v = { '<C-g>' },
-      nomenu = true,
-      run = function()
-        require('perforated.lookup').run(ws)
-      end,
-    },
+    require('perforated.lookup').action(ws),
     {
       id = 'history',
       desc = 'File history',

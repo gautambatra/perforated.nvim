@@ -1169,7 +1169,12 @@ progress messages (with `source`) while running.
 #### `tools.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
 tools with their environment (terminal tab or detached GUI). `lookup` (`g/`) routes a number to describe, a path to history, a bare word to a
-user's changelists.
+user's changelists. `lookup.action(ws)` is the one registry action for it (`g/`, P4V `<C-g>`)
+that every view's key list includes (`base.nav` for describe and history; client, changes,
+annotate, time-lapse directly); `lookup.map(buf, ws, map?)` maps the same keys (user overrides
+and `keys.p4v` applied) in windows outside the registry: diff sides (scoped to the diff tab
+through `view.lookup_keys`), the diff tab's panel, the `K` pop-up, revision buffers (mapped in
+`uri.read`, however the buffer was opened) and perforated quickfix lists.
 
 ### UI toolkit
 

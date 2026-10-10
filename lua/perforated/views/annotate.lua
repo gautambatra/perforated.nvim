@@ -353,6 +353,7 @@ local function actions(view)
   local ws = view.ws
   local LINE = { annotate_line = true }
   return {
+    require('perforated.lookup').action(ws),
     {
       id = 'describe',
       desc = 'Describe changelist',
