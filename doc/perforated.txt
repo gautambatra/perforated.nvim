@@ -232,6 +232,7 @@ Client view (:P4)                                     *perforated-client-view*
 
 Describe buffer (:P4 describe)                           *perforated-describe*
 
+  g/ <C-g>        Go to changelist / path / user
   l <Tab>         Expand / toggle
   h <S-Tab>       Collapse
   gr <F5>         Refresh
@@ -261,6 +262,7 @@ Describe buffer (:P4 describe)                           *perforated-describe*
 
 File history (:P4 filelog)                                *perforated-history*
 
+  g/ <C-g>             Go to changelist / path / user
   l <Tab>              Expand / toggle
   h <S-Tab>            Collapse
   gr <F5>              Refresh
@@ -280,6 +282,7 @@ File history (:P4 filelog)                                *perforated-history*
 
 Annotate (:P4 annotate)                                  *perforated-annotate*
 
+  g/ <C-g>        Go to changelist / path / user
   <CR> gd         Describe changelist
   K               View changelist
   ~               Annotate the revision before this change
@@ -296,6 +299,7 @@ Annotate (:P4 annotate)                                  *perforated-annotate*
 
 Time-lapse (:P4 timelapse)                              *perforated-timelapse*
 
+  g/ <C-g>        Go to changelist / path / user
   [r h            Previous revision
   ]r l            Next revision
   [R              First revision

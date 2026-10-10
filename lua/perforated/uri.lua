@@ -67,6 +67,14 @@ function M.read(buf, opts)
   if not spec then
     return
   end
+  -- The lookup (`g/`, `Ctrl+G`) in every revision buffer, however it was opened.
+  if not vim.b[buf].perforated_lookup then
+    vim.b[buf].perforated_lookup = true
+    require('perforated.lookup').map(buf, function()
+      local wsmod = require('perforated.core.workspace')
+      return wsmod.get(vim.b[buf].perforated_ws) or wsmod.connection()
+    end)
+  end
   local keep = opts and opts.keep and vim.b[buf].perforated_loaded
   -- Reads can overlap (a re-read while the first is in flight): only the newest one fills.
   local gen = (vim.b[buf].perforated_read_gen or 0) + 1

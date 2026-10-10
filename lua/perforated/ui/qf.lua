@@ -192,6 +192,7 @@ on_qf_buf = function(buf)
   map('gr', function()
     refresher()()
   end, 'perforated: refresh list')
+  require('perforated.lookup').map(buf, nil)
   -- Opened-file lists: ● changed files stand out, unchanged ones (·) are dimmed.
   vim.api.nvim_buf_call(buf, function()
     local g = require('perforated.ui.icons').glyph('modified')

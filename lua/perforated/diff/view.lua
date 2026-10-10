@@ -232,6 +232,16 @@ function M.change_keys(tab, buf)
   end, 'Next change')
 end
 
+--- The lookup (`g/`, `Ctrl+G`) in a diff side, scoped to the diff tab like `q`.
+---@param tab integer
+---@param buf integer
+---@param ws perforated.Workspace
+function M.lookup_keys(tab, buf, ws)
+  require('perforated.lookup').map(buf, ws, function(lhs, fn, desc)
+    M.tab_key(tab, buf, lhs, fn, desc)
+  end)
+end
+
 --- A diff side shows no sign column: the diff colours already mark every change, and gutter
 --- signs (the plugin's hunk signs, diagnostics) would only repeat them and take width.
 ---@param win integer
@@ -481,6 +491,7 @@ function M.pair(ws, left, right, info)
   for _, b in ipairs({ lbuf, rbuf }) do
     M.tab_key(tab, b, 'q', close, 'Close diff tab')
     M.change_keys(tab, b)
+    M.lookup_keys(tab, b, ws)
   end
   -- Closing either side (or the tab) closes the whole diff: diff mode is turned off on the
   -- user's file and PerforatedDiffClose fires exactly once.

@@ -73,6 +73,9 @@ end
 function M.nav(view, title, opts)
   opts = opts or {}
   return {
+    require('perforated.lookup').action(function()
+      return view.ws
+    end),
     {
       id = 'expand',
       desc = 'Expand / toggle',
