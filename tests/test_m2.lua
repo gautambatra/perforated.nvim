@@ -389,6 +389,32 @@ T['client view']['x reverts the file under the cursor; view refreshes'] = functi
   H.eq(opened()['//depot/b.txt'], nil)
 end
 
+T['client view']['V selects rows for multi-file actions (a CL and its files count once)'] = function()
+  open_view()
+  child.lua([[_G.asked = nil
+    require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 2 end]])
+  -- the default CL's two files, selected with V
+  goto_line('b.txt')
+  child.type_keys('V', 'j', 'x')
+  wait('_G.asked ~= nil')
+  H.eq(child.lua_get('_G.asked'), 'Revert 2 files? Local changes will be lost.')
+  H.eq(child.fn.mode(), 'n') -- visual mode left
+  -- the CL row and both its files selected: still 2 files
+  child.lua('_G.asked = nil')
+  goto_line('default')
+  child.type_keys('V', 'j', 'j', 'x')
+  wait('_G.asked ~= nil')
+  H.eq(child.lua_get('_G.asked'), 'Revert 2 files? Local changes will be lost.')
+  -- and it really reverts them
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
+  goto_line('b.txt')
+  child.type_keys('V', 'j', 'x')
+  wait(
+    [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true)]]
+  )
+  H.eq(has_line('c.txt'), false)
+end
+
 T['client view']['M moves marked files to another changelist'] = function()
   open_view()
   child.lua([[vim.ui.select = function(items, _, cb)

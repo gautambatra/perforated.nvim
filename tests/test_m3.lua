@@ -182,9 +182,19 @@ T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = functi
   wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#3' })
   child.cmd('tabclose')
-  -- the marks were cleared: D with nothing marked does nothing
+  -- the marks were cleared: D with nothing marked says what to do
+  local said =
+    [[require('perforated.ui.toast').history()[#require('perforated.ui.toast').history()].lines[1] ]]
   child.type_keys('D')
   H.eq(#child.api.nvim_list_tabpages(), 1)
+  H.neq(child.lua_get(said):find('mark two revisions', 1, true), nil)
+  goto_line('#3')
+  child.type_keys('m', 'D')
+  H.neq(child.lua_get(said):find('1 revision marked', 1, true), nil)
+  child.type_keys('m', 'm', 'D') -- #2 and #1 too: three
+  H.neq(child.lua_get(said):find('3 revisions marked', 1, true), nil)
+  H.eq(#child.api.nvim_list_tabpages(), 1)
+  child.type_keys('u')
   -- select #3 … #2 with V, D
   goto_line('#3')
   child.type_keys('V', 'j', 'D')

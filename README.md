@@ -249,7 +249,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     changelist number.
   - `?` lists every key, and a footer always shows the keys that apply to the current line.
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
-  - `m` marks files for multi-file actions (revert, move, …) and `u` clears the marks.
+  - `m` marks files for multi-file actions (revert, move, shelve, …) and `u` clears the marks;
+    or select rows with `V` and press the action's key. A changelist selected with its files
+    counts once. This works in every list view (describe and history too).
   - `A` toggles between this client and **all your clients**.
   - `W` **switches to another of your clients**: pick one from a list of your clients (with
     their root, host and stream) and the view shows it in the same window. If Perforce refuses
@@ -351,7 +353,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   the files a branch came from. `<CR>` opens the action menu: `d` diff against the previous
   revision, `w` against your workspace file, `gd` describe, `K` view changelist, `o` open the
   revision read-only, `b` annotate it. **Two revisions:** mark them with `m` (`u` clears) or
-  select them with `V`, then `D` diffs them (older on the left); `gD` "Diff against
+  select them with `V`, then `D` diffs them (older on the left; with another number marked, `D`
+  says what's needed; a selection diffs its first and last rows); `gD` "Diff against
   revision…" picks the other one from the file's history. Pages load as you reach the end (or
   `gn`). `Q` moves
   the list to the location list. Set `history.presenter` to `'picker'` or `'quickfix'` to
