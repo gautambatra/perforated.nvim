@@ -730,6 +730,32 @@ T['modes']['keymap preset is buffer-local to Perforce buffers'] = function()
   H.eq(child.fn.maparg(']h', 'n'), '')
 end
 
+T['modes']['the client view alone (no Perforce file open) still catches changes made elsewhere'] = function()
+  setup()
+  -- A shelf of b.txt, made from another terminal and reverted there: nothing is opened.
+  local out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tshelf\n' }
+  ).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4({ 'edit', '-c', cl, root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-c', cl }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'revert', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  child.cmd('cd ' .. root)
+  child.cmd('P4')
+  local view =
+    [[require('perforated.views.client')._get(require('perforated.core.workspace').list()[1].key)]]
+  wait(('(%s or {}).data ~= nil and not (%s).loading'):format(view, view))
+  local text = ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n")'):format(
+    view
+  )
+  wait([[require('perforated.core.workspace').list()[1].opened ~= nil]]) -- the baseline
+  child.cmd('doautocmd FocusLost')
+  server:p4({ 'unshelve', '-s', cl }, { client = 'alice_ws', cwd = root })
+  child.cmd('doautocmd FocusGained')
+  wait(text .. ':find("b.txt", 1, true) ~= nil')
+end
+
 T['stale'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

@@ -507,8 +507,9 @@ Neovim's progress messages. The only prompt that always stays on the command lin
 
 #### Stale-file detection
 
-- **A cheap background check** runs every 30 seconds, only while Neovim has focus. It also runs
-  when focus returns and when you enter a Perforce buffer. It asks three small questions: was a
+- **A cheap background check** runs every 30 seconds, only while Neovim has focus, once a
+  Perforce file or the client view is open. It also runs when focus returns and when you enter
+  a Perforce buffer. It asks three small questions: was a
   newer revision of your files submitted, did your opened files change elsewhere (opened,
   reverted, moved or unshelved from another terminal or P4V), and did your pending changelists
   change (created, deleted, described or shelved elsewhere)? Only then does the full status
