@@ -64,10 +64,15 @@ local open_tab
 
 --- Open the diff tab, unless every file is identical (then just say so). Only files that
 --- differ get a diff; identical ones are listed under "Identical:" at the end of the panel.
+--- `opts.extra` adds listed-only sections below it (shelf vs workspace: "Not in Shelf").
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
-function M.open(ws, title, entries)
+---@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]? }?
+function M.open(ws, title, entries, opts)
+  local extra = vim.tbl_filter(function(sec)
+    return #sec.entries > 0
+  end, (opts and opts.extra) or {})
   start_busy()
   if #entries == 0 then
     return notify(title .. ': no files')
@@ -81,10 +86,27 @@ function M.open(ws, title, entries)
     end
     if n == #entries then
       finish_busy()
-      return require('perforated.ui.toast').show('Perforce: identical, nothing to diff', {
+      local lines = {
         #entries == 1 and (title .. ': the file is identical')
           or ('%s: all %d files are identical'):format(title, #entries),
-      }, vim.log.levels.INFO)
+      }
+      for _, sec in ipairs(extra) do
+        lines[#lines + 1] = ('%s (%d): %s'):format(
+          sec.title,
+          #sec.entries,
+          table.concat(
+            vim.tbl_map(function(e)
+              return e.label
+            end, sec.entries),
+            ', '
+          )
+        )
+      end
+      return require('perforated.ui.toast').show(
+        'Perforce: identical, nothing to diff',
+        lines,
+        vim.log.levels.INFO
+      )
     end
     local differ, identical = {}, {}
     for i, e in ipairs(entries) do
@@ -94,15 +116,20 @@ function M.open(ws, title, entries)
         differ[#differ + 1] = e
       end
     end
-    open_tab(ws, title, differ, identical)
+    open_tab(
+      ws,
+      title,
+      differ,
+      vim.list_extend({ { title = 'Identical', entries = identical } }, extra)
+    )
   end)
 end
 
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
----@param identical perforated.DiffEntry[]  listed, not diffed
-open_tab = function(ws, title, entries, identical)
+---@param listed { title: string, entries: perforated.DiffEntry[] }[]  sections listed, not diffed
+open_tab = function(ws, title, entries, listed)
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
   local panel_buf = vim.api.nvim_get_current_buf()
@@ -135,25 +162,27 @@ open_tab = function(ws, title, entries, identical)
       { end_col = 10, hl_group = 'PerforatedAction' }
     )
   end
-  if #identical > 0 then
-    local first = #lines
-    lines[#lines + 1] = ''
-    lines[#lines + 1] = (' Identical (%d):'):format(#identical)
-    for _, e in ipairs(identical) do
-      lines[#lines + 1] = (' %-9s %s'):format(e.action or '', e.label)
-    end
-    vim.bo[panel_buf].modifiable = true
-    vim.api.nvim_buf_set_lines(panel_buf, first, -1, false, vim.list_slice(lines, first + 1))
-    vim.bo[panel_buf].modifiable = false
-    vim.api.nvim_buf_set_extmark(
-      panel_buf,
-      ns,
-      first + 1,
-      0,
-      { line_hl_group = 'PerforatedSection' }
-    )
-    for row = first + 2, #lines - 1 do
-      vim.api.nvim_buf_set_extmark(panel_buf, ns, row, 0, { line_hl_group = 'PerforatedDim' })
+  for _, sec in ipairs(listed) do
+    if #sec.entries > 0 then
+      local first = #lines
+      lines[#lines + 1] = ''
+      lines[#lines + 1] = (' %s (%d):'):format(sec.title, #sec.entries)
+      for _, e in ipairs(sec.entries) do
+        lines[#lines + 1] = (' %-9s %s'):format(e.action or '', e.label)
+      end
+      vim.bo[panel_buf].modifiable = true
+      vim.api.nvim_buf_set_lines(panel_buf, first, -1, false, vim.list_slice(lines, first + 1))
+      vim.bo[panel_buf].modifiable = false
+      vim.api.nvim_buf_set_extmark(
+        panel_buf,
+        ns,
+        first + 1,
+        0,
+        { line_hl_group = 'PerforatedSection' }
+      )
+      for row = first + 2, #lines - 1 do
+        vim.api.nvim_buf_set_extmark(panel_buf, ns, row, 0, { line_hl_group = 'PerforatedDim' })
+      end
     end
   end
 
@@ -441,7 +470,8 @@ function M.open_change(ws, item)
 end
 
 --- A shelf against the workspace: every shelved file (left) next to its workspace file (right).
---- Files that aren't in the workspace (unmapped or not synced) show an empty side.
+--- Files that aren't in the workspace (unmapped or not synced) show an empty side. Opened
+--- files (any changelist) that aren't in the shelf are listed under "Not in Shelf".
 ---@param ws perforated.Workspace
 ---@param change string
 ---@param shelved table[]?  the shelf's files (fetched when nil)
@@ -455,16 +485,37 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
   local depot = vim.tbl_map(function(f)
     return f.depotFile
   end, shelved)
-  require('perforated.revs').where(ws, depot, function(map)
+  -- Two queries at once: where the shelved files are, and what is opened.
+  local map, opened
+  local function relative(path)
+    if ws.root and path:sub(1, #ws.root + 1) == ws.root .. '/' then
+      return path:sub(#ws.root + 2)
+    end
+    return path
+  end
+  local function done()
+    if not map or not opened then
+      return
+    end
+    local in_shelf = {}
+    for _, d in ipairs(depot) do
+      in_shelf[d] = true
+    end
+    local not_in_shelf = {}
+    for _, r in ipairs(opened) do
+      if r.depotFile and not in_shelf[r.depotFile] then
+        not_in_shelf[#not_in_shelf + 1] =
+          { label = relative(r.clientFile or r.depotFile), action = r.action }
+      end
+    end
+    table.sort(not_in_shelf, function(a, b)
+      return a.label < b.label
+    end)
     local entries = {}
     for _, f in ipairs(shelved) do
       local path = map[f.depotFile]
-      local label = path or f.depotFile
-      if path and ws.root and label:sub(1, #ws.root + 1) == ws.root .. '/' then
-        label = label:sub(#ws.root + 2)
-      end
       entries[#entries + 1] = {
-        label = label,
+        label = path and relative(path) or f.depotFile,
         action = f.action,
         left = (f.action == 'delete' or f.action == 'move/delete') and { empty = 'deleted' }
           or { spec = f.depotFile .. '@=' .. change },
@@ -475,7 +526,20 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
     table.sort(entries, function(a, b)
       return a.label < b.label
     end)
-    M.open(ws, ('CL %s (shelved vs workspace)'):format(change), entries)
+    M.open(
+      ws,
+      ('CL %s (shelved vs workspace)'):format(change),
+      entries,
+      { extra = { { title = 'Not in Shelf', entries = not_in_shelf } } }
+    )
+  end
+  require('perforated.revs').where(ws, depot, function(m)
+    map = m
+    done()
+  end)
+  p4.fstat_opened(ws, {}, function(recs)
+    opened = recs or {}
+    done()
   end)
 end
 

@@ -309,7 +309,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   annotate) first checks whether the two sides are identical and just says so if they are. For
   a set of files (`D` on a changelist, a shelf, `:P4 diff -a`), identical files are listed
   under "Identical" at the end of the file panel and only the rest are diffed; if every file
-  is identical, the diff tab doesn't open. The check is cheap: digests for depot revisions and
+  is identical, the diff tab doesn't open. A shelf diffed against the workspace (`w` on a shelf)
+  also lists, under "Not in Shelf" below that, every file you have opened (in any changelist)
+  that the shelf doesn't hold; when every shelved file is identical, the pop-up names them
+  instead. The check is cheap: digests for depot revisions and
   `p4 diff -sr` for opened files (one call each), contents only for unsaved buffers and
   revision-vs-workspace diffs.
 

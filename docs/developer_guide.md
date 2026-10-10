@@ -1073,7 +1073,10 @@ file rows (3 … #entries + 2); `q` (any window) and `:q` (any of the three wind
 whole tab. Shelf-vs-workspace puts the shelf left, the workspace file
 right. Before opening, every pair is checked
 with `same.check`: identical files go to an "Identical (N):" section; if all are identical,
-the tab doesn't open. Sources: `open_change` (pending, shelved, submitted), `open_opened`
+the tab doesn't open. `M.open`'s `opts.extra` adds more listed-only sections below it:
+`open_shelf_vs_workspace` runs `p4 where` on the shelved files and `fstat -Ro` (opened files)
+in parallel and passes every opened file the shelf doesn't hold as "Not in Shelf (N):" (named
+in the pop-up instead when every shelved file is identical). Sources: `open_change` (pending, shelved, submitted), `open_opened`
 (`:P4 diff -a`), `open_shelf_vs_workspace`.
 
 #### `diff/look.lua`
