@@ -211,6 +211,27 @@ function M.header(win, ws, side)
   )
 end
 
+local function p4v_keys()
+  return (require('perforated.config').get().keys or {}).p4v ~= false
+end
+
+--- Ctrl+1 / Ctrl+2: previous / next change (Vim's `[c` / `]c`, which keep working), in the
+--- diff sides of one tab only (P4V-style keys: not with `keys.p4v = false`). Needs a terminal
+--- that reports Ctrl+digit (CSI-u).
+---@param tab integer
+---@param buf integer
+function M.change_keys(tab, buf)
+  if not p4v_keys() then
+    return
+  end
+  M.tab_key(tab, buf, '<C-1>', function()
+    vim.cmd('normal! ' .. vim.v.count1 .. '[c')
+  end, 'Previous change')
+  M.tab_key(tab, buf, '<C-2>', function()
+    vim.cmd('normal! ' .. vim.v.count1 .. ']c')
+  end, 'Next change')
+end
+
 --- A diff side shows no sign column: the diff colours already mark every change, and gutter
 --- signs (the plugin's hunk signs, diagnostics) would only repeat them and take width.
 ---@param win integer
@@ -459,6 +480,7 @@ function M.pair(ws, left, right, info)
   -- `q` in both sides, the user's file included, but only inside this tab.
   for _, b in ipairs({ lbuf, rbuf }) do
     M.tab_key(tab, b, 'q', close, 'Close diff tab')
+    M.change_keys(tab, b)
   end
   -- Closing either side (or the tab) closes the whole diff: diff mode is turned off on the
   -- user's file and PerforatedDiffClose fires exactly once.

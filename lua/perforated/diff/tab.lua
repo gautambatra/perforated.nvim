@@ -225,6 +225,7 @@ open_tab = function(ws, title, entries, identical)
         if not keyed[b] then
           keyed[b] = true
           dv.tab_key(tab, b, 'q', close_tab, 'Close diff tab')
+          dv.change_keys(tab, b)
           dv.tab_key(tab, b, '<Tab>', function()
             M._step(state, 1)
           end, 'Next file')

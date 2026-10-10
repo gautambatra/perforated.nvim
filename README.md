@@ -278,7 +278,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   changelist it moves **all** its opened files, and the list leaves that changelist out.
 - **`D`: diff a whole changelist in a diff tab.** A file panel on the left and a side-by-side
   diff on the right ("Opening diff view…" shows until it's ready); moving through the panel switches files, as do `<Tab>`/`<S-Tab>` from any
-  window. In the panel the cursor stays on the file list, and `j`/`k`/arrows wrap around at
+  window. `Ctrl+1` / `Ctrl+2` jump to the previous / next change in a diff (as `[c` / `]c`;
+  needs a terminal that reports Ctrl+digit). In the panel the cursor stays on the file list, and `j`/`k`/arrows wrap around at
   both ends. Each file opens at its first change, both sides scrolled in line. It works for pending changelists, shelves and submitted changelists. Each file loads
   when you select it, and the next one is fetched ahead of time. `:P4 diff -a` opens the same
   view for every opened file.
@@ -406,7 +407,10 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 
 - **Shelve (`s`), unshelve (`S`), delete shelved files (`<Del>` on a shelf or shelved file,
   `g<Del>` on a changelist)** on a changelist or on marked files in the client view;
-  `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL [-c target]`. Re-shelving asks before replacing the shelf. Unshelving goes back into the
+  `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d`, `:P4 unshelve CL [-c target]`. Re-shelving asks before replacing the shelf: `r` replaces the shelved
+  copies of the files you're shelving; when the shelf also holds files no longer opened in the
+  changelist, `a` "replace all" (`p4 shelve -r`) makes the shelf exactly the opened files,
+  removing those (the prompt lists them). Unshelving goes back into the
   shelf's own changelist when it's yours, otherwise you pick one; files that need a resolve are
   listed in quickfix.
 - **Submit (`P` / `<C-s>`, `:P4 submit [CL]`):** a confirmation float shows the description and

@@ -43,6 +43,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - `:P4 diff` default: **side-by-side in a new tab**, native `:diffthis`, `q` closes.
   - Every diff split (single file or changelist tab) has a winbar header naming the file and the side: `#4 (have)`, `@=123 (shelved)`, `(workspace)`. *(added 2026-10-02)*
   - `q` closes the whole diff tab from any of its windows, including the user's own file. There the mapping only acts inside that tab, and `q` keeps its normal meaning everywhere else. `:q` in any diff window also closes the whole tab.
+  - `Ctrl+1` / `Ctrl+2`: previous / next change in diff windows (Vim's `[c` / `]c` keep working), scoped to the diff tab like `q`; P4V-style keys, so not with `keys.p4v = false` *(2026-10-10)*. (`Ctrl+W` to close was considered and dropped.)
   - The workspace file is always on the **right**: shelf vs workspace shows the shelf on the left.
   - Diff windows have **no sign column** *(2026-10-07)*: the diff colours already mark every change; hunk signs and diagnostics would repeat them. The setting is window-local and dropped before the window closes, so the user's file keeps its signs elsewhere.
   - **Both sides stay in line** *(2026-10-07)*: in the multi-file tab each file opens at its first change; `:P4 diff` keeps the user's place in their file and the revision follows it. Scroll-bound windows only follow one that scrolls, so the plugin aligns them itself: when the diff opens, after the first redraw (diff folds can scroll a window), and when a revision arrives from p4 (it was empty until then).
@@ -63,7 +64,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - Submitted lists: **last 50, scoped to client view, paginated** (`@<oldest`).
 
 ## Operations in scope
-edit, add, revert (+ revert unchanged), reopen (move to CL), change specs in `acwrite` buffers, submit, sync, delete, move/rename, shelve/unshelve (file + CL level), resolve, **integrate (cherry-pick a submitted CL into the client)**.
+edit, add, revert (+ revert unchanged), reopen (move to CL), change specs in `acwrite` buffers, submit, sync, delete, move/rename, shelve/unshelve (file + CL level) — re-shelving a whole CL whose shelf holds files no longer opened in it offers "replace all" (`p4 shelve -r`) besides replace (`-f`, keeps them) and cancel *(2026-10-10)*, resolve, **integrate (cherry-pick a submitted CL into the client)**.
 
 ## Editing CL descriptions
 One action, **`C` "edit description"**, available anywhere a CL appears:
