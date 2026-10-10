@@ -1923,6 +1923,9 @@ function M.open(ws, opts)
     return view
   end
 
+  -- Background checks normally start with the first Perforce file buffer; the view alone
+  -- (`:P4` in a fresh Neovim) must catch changes made elsewhere too.
+  require('perforated.poll').start(ws)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'hide'

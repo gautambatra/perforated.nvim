@@ -759,7 +759,10 @@ why keys, menus and help never disagree.
    — and `p4 opened` (the client's opened-file records) on a timer while Neovim is focused
    (default 30 seconds), on `FocusGained` (throttled to one per `poll.focus_throttle`, 2 s:
    the timer is paused while unfocused, so every real return must check; the short throttle
-   only absorbs focus flapping) and when entering a Perforce buffer (throttled).
+   only absorbs focus flapping) and when entering a Perforce buffer (throttled). `poll.start(ws)`
+   runs when the first Perforce file buffer of a workspace attaches, and when its client view
+   opens: `:P4` in a fresh Neovim, with no Perforce file loaded, must still notice changes made
+   elsewhere.
 2. Only when the first reports a newer changelist than last time, or the second differs from
    the last refresh's opened files (`depotFile|action|change`: opened, reverted, moved or
    unshelved elsewhere), does `poll.refresh` run the full `fstat -Ro //client/...` over opened
