@@ -1115,6 +1115,27 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
     [[vim.tbl_contains(vim.tbl_map(function(t) return table.concat(t.lines, ' '):find('Not in Shelf (2): b.txt, c.txt', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
   )
   H.eq(#child.api.nvim_list_tabpages(), 2)
+  -- Every opened file in the shelf: no section, and no pop-up line for it.
+  server:p4({ 'revert', root .. '/b.txt', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/a.txt', 'a3\n')
+  goto_line('Shelved (1)')
+  child.type_keys('w')
+  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  H.neq(text:find('a.txt', 1, true), nil)
+  H.eq(text:find('Not in Shelf', 1, true), nil)
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  local before = child.lua_get([[#require('perforated.ui.toast').history()]])
+  H.write(root .. '/a.txt', 'a2\n')
+  goto_line('Shelved (1)')
+  child.type_keys('w')
+  wait(([[#require('perforated.ui.toast').history() > %d]]):format(before))
+  local last = child.lua_get(
+    [[table.concat(require('perforated.ui.toast').history()[#require('perforated.ui.toast').history()].lines, ' ')]]
+  )
+  H.neq(last:find('identical', 1, true), nil)
+  H.eq(last:find('Not in Shelf', 1, true), nil)
 end
 
 T['client view']['changed files get ● (and unchanged ones are dimmed); saving updates it'] = function()
