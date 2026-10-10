@@ -83,6 +83,11 @@ local function goto_line(s)
   error('line not found: ' .. s .. '\n' .. text())
 end
 
+-- The diff tab is open: two windows in diff mode. (Not "two windows in the tab": a view's
+-- footer float counts too, so that is true before the diff opens.)
+local DIFF_OPEN =
+  [[#vim.tbl_filter(function(w) return vim.wo[w].diff end, vim.api.nvim_tabpage_list_wins(0)) == 2]]
+
 local WIN_NAMES =
   [[(function() local t = vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0)); table.sort(t); return t end)()]]
 
@@ -127,7 +132,7 @@ T['m3']['describe a submitted CL: header, description, inline diff, d'] = functi
   H.neq(t:find('-a3', 1, true), nil)
   H.neq(t:find('@@', 1, true), nil)
   child.type_keys('d')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#2', 'perforated:////depot/a.txt#3' })
 end
 
@@ -143,7 +148,7 @@ T['m3']['describe a pending CL: workspace diff and shelved files (vs base, vs he
   local row = goto_line('Shelved (1)') + 1
   child.api.nvim_win_set_cursor(0, { row, 0 })
   child.type_keys('d')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(
     child.lua_get(WIN_NAMES),
     { 'perforated:////depot/b.txt#1', 'perforated:////depot/b.txt@=4' }
@@ -152,7 +157,7 @@ T['m3']['describe a pending CL: workspace diff and shelved files (vs base, vs he
   wait([[vim.bo.filetype == 'perforated']])
   child.api.nvim_win_set_cursor(0, { row, 0 })
   child.type_keys('gh')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(
     child.lua_get(WIN_NAMES),
     { 'perforated:////depot/b.txt#head', 'perforated:////depot/b.txt@=4' }
@@ -179,7 +184,7 @@ T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = functi
   child.type_keys('m')
   goto_line('#1 ')
   child.type_keys('m', 'D')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#3' })
   child.cmd('tabclose')
   -- the marks were cleared: D with nothing marked says what to do
@@ -198,7 +203,7 @@ T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = functi
   -- select #3 … #2 with V, D
   goto_line('#3')
   child.type_keys('V', 'j', 'D')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#2', 'perforated:////depot/a.txt#3' })
   child.cmd('tabclose')
   -- gD on #2: pick another revision (#1) from the file's history
@@ -210,7 +215,7 @@ T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = functi
   end]])
   goto_line('#2')
   child.type_keys('gD')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#2' })
   local picked = table.concat(child.lua_get('_G.picked'), '\n')
   H.neq(picked:find('(this one)', 1, true), nil) -- #2 is marked as the one you started from
@@ -229,7 +234,7 @@ T['m3']['history: float, d diffs vs previous, gd describes, paging, Q loclist'] 
   wait_text('initial import')
   goto_line('#2')
   child.type_keys('d')
-  wait([[#vim.api.nvim_tabpage_list_wins(0) == 2]])
+  wait(DIFF_OPEN)
   H.eq(child.lua_get(WIN_NAMES), { 'perforated:////depot/a.txt#1', 'perforated:////depot/a.txt#2' })
   child.cmd('tabclose')
   child.type_keys('q') -- the history float stays open in its tab
