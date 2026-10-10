@@ -13,6 +13,23 @@ T['messages'] = MiniTest.new_set({
   },
 })
 
+T['messages']['a quiet job (resolve) survives the jobs timer: no progress item, no error'] = function()
+  child = H.child()
+  -- A quiet job running across several 500 ms ticks of the jobs timer (`:P4 jobs` refresh).
+  local errs = child.lua([[
+    local errs = {}
+    local orig = vim.api.nvim_err_writeln
+    vim.api.nvim_err_writeln = function(msg) errs[#errs + 1] = msg; orig(msg) end
+    local jobs = require('perforated.jobs')
+    local job = jobs.start({}, 'resolve workspace', { quiet = true })
+    vim.wait(1300, function() return false end, 50)
+    jobs.finish(job, 'done')
+    return { errs = errs, errmsg = vim.v.errmsg }
+  ]])
+  H.eq(errs.errs, {})
+  H.eq(errs.errmsg, '')
+end
+
 T['messages']['are toasts titled by level; long lines wrap; errors get an error border'] = function()
   child = H.child({})
   child.o.columns = 80

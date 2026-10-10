@@ -62,7 +62,9 @@ end
 
 local function tick()
   for _, j in ipairs(jobs) do
-    progress.update(j.prog, describe(j))
+    if j.prog then -- quiet jobs (resolve) have no progress item: their caller shows its own
+      progress.update(j.prog, describe(j))
+    end
   end
   render_float()
   if #jobs == 0 and not float and timer then
