@@ -318,7 +318,9 @@ function M.prune_resolved()
             end
           end
           local title = cur.title
-          if left == 0 and not title:find(' · all resolved$') then
+          -- "all resolved" only when nothing else in the list needs attention either (a sync
+          -- list also holds files it couldn't update).
+          if left == 0 and entries == 0 and not title:find(' · all resolved$') then
             title = title .. ' · all resolved'
           end
           vim.fn.setqflist({}, 'r', { id = l.id, items = keep, title = title })

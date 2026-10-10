@@ -824,7 +824,20 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
       end
     end
     local attention = clobber_items(texts)
-    vim.list_extend(attention, file_items(ws, texts, 'must resolve', 'unresolved'))
+    local to_resolve = file_items(ws, texts, 'must resolve', 'unresolved')
+    vim.list_extend(attention, to_resolve)
+    -- What didn't go as asked: files p4 wouldn't overwrite, and any other error (expected
+    -- ones — "must resolve", "up-to-date" — aside).
+    local problems = { clobbered = clobbered(texts), errors = {} }
+    for _, e in ipairs(res.errors) do
+      if
+        not e:match("^[Cc]an't clobber writable file")
+        and not e:find('must resolve', 1, true)
+        and not e:find('up%-to%-date')
+      then
+        problems.errors[#problems.errors + 1] = vim.trim(e)
+      end
+    end
     local parts = {}
     for action, n in pairs(counts) do
       parts[#parts + 1] = ('%d %s'):format(n, action)
@@ -838,9 +851,19 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
     if res.cancelled then
       summary = ('stopped after %d file(s)'):format(#changed_paths)
     end
+    local notes = {}
+    if #problems.clobbered > 0 then
+      notes[#notes + 1] = ('%d not updated (writable, not opened)'):format(#problems.clobbered)
+    end
+    if #to_resolve > 0 then
+      notes[#notes + 1] = ('%d to resolve'):format(#to_resolve)
+    end
+    if #problems.errors > 0 and not failed then
+      notes[#notes + 1] = ('%d error(s)'):format(#problems.errors)
+    end
     jobs.finish(
       job,
-      summary .. (#attention > 0 and (' · %d need attention'):format(#attention) or ''),
+      summary .. (#notes > 0 and (' · ' .. table.concat(notes, ' · ')) or ''),
       failed or res.cancelled
     )
     M.reload(ws, changed_paths)
@@ -849,20 +872,25 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
     -- Fresh state of every opened file: the list covers *all* unresolved files, not just the
     -- ones this sync reported.
     require('perforated.poll').refresh(ws, {}, function()
-      M.after_sync(ws, texts, attention)
+      M.after_sync(ws, texts, attention, problems)
       cb(not failed and not res.cancelled)
     end)
   end)
 end
 
---- After a sync: quickfix of files that need attention (can't clobber + every unresolved file
---- in the workspace), and an offer to resolve now (`sync.resolve_prompt`).
+--- After a sync: quickfix of files that need attention (can't clobber, files named by other
+--- errors, every unresolved file in the workspace), and — whenever something didn't go as
+--- asked, or files need resolving — a centred pop-up saying what, which also offers to
+--- resolve now (`sync.resolve_prompt`).
 ---@param ws perforated.Workspace
 ---@param texts string[]  the sync's messages
 ---@param reported table[]  quickfix items from those messages
-function M.after_sync(ws, texts, reported)
+---@param problems { clobbered: string[], errors: string[] }?
+function M.after_sync(ws, texts, reported, problems)
+  problems = problems or { clobbered = clobbered(texts), errors = {} }
   local qf = require('perforated.ui.qf')
   local items = clobber_items(texts)
+  vim.list_extend(items, file_items(ws, problems.errors, nil, 'sync_attention'))
   local unresolved = {}
   if ws.opened then
     for _, r in pairs(ws.opened) do
@@ -883,25 +911,76 @@ function M.after_sync(ws, texts, reported)
   else
     items = reported -- no fresh state: what the sync itself reported
   end
-  if #items == 0 then
+  if #items > 0 then
+    qf.set({
+      title = ('P4 sync · %d file(s) need attention (R resolves)'):format(#items),
+      kind = 'sync_attention',
+      items = items,
+    })
+  end
+  local offer = #unresolved > 0 and require('perforated.config').get().sync.resolve_prompt ~= false
+  local unexpected = #problems.clobbered > 0 or #problems.errors > 0
+  if not offer and not unexpected then
     return
   end
-  qf.set({
-    title = ('P4 sync · %d file(s) need attention (R resolves)'):format(#items),
-    kind = 'sync_attention',
-    items = items,
-  })
-  if #unresolved == 0 or require('perforated.config').get().sync.resolve_prompt == false then
-    return
+  -- The pop-up: what happened, then the choices.
+  local function rel(path)
+    if ws.root and path:sub(1, #ws.root + 1) == ws.root .. '/' then
+      return path:sub(#ws.root + 2)
+    end
+    return path
+  end
+  local function some(list, fmt)
+    local out = {}
+    for i = 1, math.min(#list, 6) do
+      out[#out + 1] = (fmt or '  %s'):format(list[i])
+    end
+    if #list > 6 then
+      out[#out + 1] = ('  … and %d more'):format(#list - 6)
+    end
+    return out
+  end
+  local header = {}
+  if #problems.clobbered > 0 then
+    header[#header + 1] = ("%d file(s) were NOT updated: writable but not opened, so p4 won't overwrite them:"):format(
+      #problems.clobbered
+    )
+    vim.list_extend(header, some(vim.tbl_map(rel, problems.clobbered)))
+  end
+  if #problems.errors > 0 then
+    if #header > 0 then
+      header[#header + 1] = ''
+    end
+    header[#header + 1] = ('p4 reported %d error(s):'):format(#problems.errors)
+    vim.list_extend(header, some(problems.errors))
+  end
+  if #unresolved > 0 then
+    if #header > 0 then
+      header[#header + 1] = ''
+    end
+    header[#header + 1] = ('%d file(s) need resolving.'):format(#unresolved)
+  end
+  if #items > 0 then
+    header[#header + 1] = ''
+    header[#header + 1] = 'All of them are in the quickfix list.'
+  end
+  local choices = {}
+  if offer then
+    choices[#choices + 1] =
+      { key = 'r', label = 'Resolve now (auto-merge, then your merge tool)', value = 'resolve' }
+    choices[#choices + 1] = { key = 'l', label = 'Later (R in the quickfix list)', value = 'later' }
+  else
+    choices[#choices + 1] = { key = '<CR>', label = 'OK', value = 'ok', aliases = { 'o' } }
+  end
+  if #items > 0 then
+    choices[#choices + 1] = { key = 'c', label = 'Open the quickfix list', value = 'list' }
   end
   local float = require('perforated.ui.float')
   local choice, replay = float.menu({
-    title = 'Sync',
-    header = { ('%d file(s) need resolving'):format(#unresolved) },
-    items = {
-      { key = 'r', label = 'Resolve now (auto-merge, then your merge tool)', value = 'resolve' },
-      { key = 'l', label = 'Later (R in the quickfix list)', value = 'later' },
-    },
+    title = unexpected and 'Sync: not everything went through' or 'Sync',
+    header = header,
+    header_hl = false,
+    items = choices,
     relative = 'editor',
     grace = require('perforated.config').get().checkout.prompt_grace,
   })
@@ -915,6 +994,8 @@ function M.after_sync(ws, texts, reported)
         return r.clientFile
       end, unresolved)
     )
+  elseif choice and choice.value == 'list' then
+    vim.cmd('copen')
   end
 end
 

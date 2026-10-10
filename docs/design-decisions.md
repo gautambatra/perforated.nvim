@@ -166,7 +166,7 @@ Where it's used:
 | Hunks of current file (`:P4 hunks %`) | loclist | one per hunk |
 | Resolve: files left unresolved after `-am` / merge tool cancelled | qf | unresolved files; `R` on entry resumes resolve |
 | Submit failures (out-of-date, unresolved, locked) | qf | offending files, text = p4 reason; linked actions sync/resolve |
-| Sync results needing attention (can't clobber, must resolve, deleted-while-open) | qf | affected files |
+| Sync results needing attention (can't clobber, must resolve, deleted-while-open, other errors) | qf | affected files — plus a centred pop-up listing anything that didn't go as asked (files not updated, errors) *(2026-10-10)* |
 | Integrate preview (`-n`) and post-integrate "must resolve" | qf | files + planned action |
 | Workspace reconcile / `p4 status` | qf | files to add/edit/delete (streamed) |
 | Describe CL (`Q` in describe buffer) | qf | CL files; workspace path when mapped, else `perforated://…@CL` |

@@ -599,15 +599,51 @@ T['m4']['delete wipes the buffer; move renames the buffer and keeps it attached'
   H.eq(opened()['//depot/main/b.txt'].action, 'delete')
 end
 
-T['m4']["sync: a writable file p4 can't clobber goes to quickfix, not the synced count"] = function()
+T['m4']["sync: a writable file p4 can't clobber: quickfix, a centred pop-up, the result says so"] = function()
   setup()
   bob_submits('main/b.txt', 'bob b\n')
   vim.uv.fs_chmod(root .. '/main/b.txt', tonumber('644', 8))
+  -- the pop-up waits for a key: record what it shows and answer OK
+  child.lua(
+    [[_G.menu = nil
+    require('perforated.ui.float').menu = function(opts) _G.menu = opts; return opts.items[1], '' end]]
+  )
+  H.record_busy(child)
   child.lua(
     [[_G.r = nil
     require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
   )
   wait('_G.r ~= nil')
+  local menu =
+    child.lua_get([[{ title = _G.menu.title, relative = _G.menu.relative, header = _G.menu.header,
+    keys = vim.tbl_map(function(i) return i.key end, _G.menu.items) }]])
+  H.eq(menu.title, 'Sync: not everything went through')
+  H.eq(menu.relative, 'editor') -- centred
+  local header = table.concat(menu.header, '\n')
+  H.neq(header:find('1 file(s) were NOT updated', 1, true), nil)
+  H.neq(header:find('main/b.txt', 1, true), nil)
+  H.eq(menu.keys, { '<CR>', 'c' }) -- nothing to resolve: OK, or open the list
+  -- the result message names it too
+  local said = table.concat(
+    child.lua_get(
+      [[vim.tbl_map(function(t) return t.title .. ' ' .. table.concat(t.lines, ' ') end, require('perforated.ui.toast').history())]]
+    ),
+    '\n'
+  )
+  H.neq(said:find('1 not updated (writable, not opened)', 1, true), nil)
+  -- once the files to resolve are done, the list doesn't claim "all resolved" while it still
+  -- holds a file the sync couldn't update
+  child.lua(([[local qf = require('perforated.ui.qf')
+    qf.set({ title = 'P4 sync · 2 file(s) need attention', kind = 'sync_attention', items = {
+      qf.item(%q, "can't clobber writable file (not opened)", { kind = 'sync_attention' }),
+      qf.item(%q, 'must resolve', { kind = 'unresolved' }),
+    } })
+    qf.prune_resolved()]]):format(root .. '/main/b.txt', root .. '/main/a.txt'))
+  wait([[#vim.fn.getqflist() == 1]]) -- a.txt isn't unresolved: dropped
+  H.eq(
+    child.lua_get([[vim.fn.getqflist({ title = 1 }).title]]),
+    'P4 sync · 2 file(s) need attention'
+  )
   local qf = child.lua_get(
     [[vim.tbl_map(function(e) return vim.api.nvim_buf_get_name(e.bufnr) .. ' ' .. e.text end, vim.fn.getqflist())]]
   )
