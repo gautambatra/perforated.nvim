@@ -188,6 +188,55 @@ local function changes_pending()
   return p4({ 'changes', '-s', 'pending' })
 end
 
+T['m4']['shelve over a shelf with files no longer opened: replace all (shelve -r)'] = function()
+  setup()
+  local cl = new_change('shelf r')
+  p4({ 'edit', '-c', cl, root .. '/main/a.txt', root .. '/main/b.txt' })
+  p4({ 'shelve', '-c', cl })
+  p4({ 'reopen', '-c', 'default', root .. '/main/b.txt' }) -- b stays shelved, no longer in the CL
+  local shelved = function()
+    return p4({ '-ztag', 'describe', '-S', '-s', cl }):gsub('%.%.%. depotFile%d+ (%S+)', '%1')
+  end
+  child.lua(
+    [[_G.asked = nil
+    require('perforated.ui.prompt').confirm = function(msg, choices) _G.asked = { msg, choices }; return 1 end]]
+  )
+  -- "Replace" (1): -f, b stays in the shelf
+  child.lua(
+    ([[_G.r = nil; require('perforated.ops').shelve(require('perforated').workspace(), %q, nil, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r == true')
+  local asked = child.lua_get('_G.asked')
+  H.eq(asked[2], '&Replace\nReplace &all\n&Cancel')
+  H.neq(asked[1]:find('//depot/main/b.txt', 1, true), nil) -- names what "all" would remove
+  H.neq(shelved():find('//depot/main/b.txt', 1, true), nil)
+  -- "Replace all" (2): -r, the shelf becomes exactly the opened files
+  child.lua(
+    [[require('perforated.ui.prompt').confirm = function(msg, choices) _G.asked = { msg, choices }; return 2 end]]
+  )
+  child.lua(
+    ([[_G.r = nil; require('perforated.ops').shelve(require('perforated').workspace(), %q, nil, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r == true')
+  H.eq(shelved():find('//depot/main/b.txt', 1, true), nil)
+  H.neq(shelved():find('//depot/main/a.txt', 1, true), nil)
+  -- nothing extra in the shelf now: the usual two choices (1 = Replace)
+  child.lua(
+    [[require('perforated.ui.prompt').confirm = function(msg, choices) _G.asked = { msg, choices }; return 1 end]]
+  )
+  child.lua(
+    ([[_G.r = nil; require('perforated.ops').shelve(require('perforated').workspace(), %q, nil, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r == true')
+  H.eq(child.lua_get('_G.asked[2]'), '&Replace\n&Cancel')
+end
+
 T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = function()
   setup()
   local cl = new_change('doomed')

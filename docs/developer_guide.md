@@ -1042,7 +1042,8 @@ side closes the whole tab; fires `User PerforatedDiffOpen/Close`). Every diff wi
 winbar header from `side_label` (a side's optional `label`, else derived: `@=N (shelved)`,
 `(workspace)`); `clear_header` drops it before the window shows another buffer or closes,
 because Neovim remembers window-local options per buffer and the user's file would keep it.
-`side_win(win)` hides a diff side's sign column (window-local; `clear_header` restores it
+`change_keys(tab, buf)` maps `Ctrl+1` / `Ctrl+2` (`[c` / `]c`) in a diff side through
+`tab_key`, unless `keys.p4v = false`. `side_win(win)` hides a diff side's sign column (window-local; `clear_header` restores it
 with the winbar, before the window shows another buffer or closes). `align(ref, other,
 first_change)` lines up the two sides: scroll-bound windows only follow a window that
 scrolls, so a side shown at a remembered position, or filled later, would stay out of line
@@ -1129,7 +1130,9 @@ one pass), `anchor`, `step`.
 ### Operations
 
 #### `ops.lua`
-Shelve (`shelve -f`, confirmation before replacing), delete shelved files, unshelve (into the
+Shelve (`shelve -f`, confirmation before replacing; when a whole changelist is re-shelved and
+one `opened -c` shows the shelf holding files no longer opened in it, a third choice "replace
+all" runs `shelve -r` and the prompt lists those files), delete shelved files, unshelve (into the
 shelf's own changelist when it's yours, else a picked one; `-f` only after confirming) — each
 with a centred busy pop-up; shelve and unshelve move file content, so they have no call timeout;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to

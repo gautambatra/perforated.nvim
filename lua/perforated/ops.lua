@@ -107,7 +107,9 @@ end
 -- ---------------------------------------------------------------------------------------------
 
 --- Shelve a changelist's opened files (or some of them), replacing shelved versions after a
---- confirmation.
+--- confirmation. Shelving a whole changelist whose shelf also holds files no longer opened in
+--- it offers a third choice, "replace all" (`shelve -r`): the shelf becomes exactly the opened
+--- files, those others removed (`-f` alone would keep them).
 ---@param ws perforated.Workspace
 ---@param change string
 ---@param paths string[]?  nil = every file opened in the changelist
@@ -121,24 +123,9 @@ function M.shelve(ws, change, paths, cb)
     )
     return cb(false)
   end
-  cls.shelved_files(ws, { change }, function(sh)
-    local existing = sh[change] or {}
-    if #existing > 0 then
-      local what = paths and (#paths .. ' file(s)') or 'the shelf'
-      if
-        not confirm(
-          ('CL %s already has %d shelved file(s). Replace %s with your workspace versions?'):format(
-            change,
-            #existing,
-            what
-          ),
-          '&Replace\n&Cancel'
-        )
-      then
-        return cb(false)
-      end
-    end
-    local args = { 'shelve', '-f', '-c', change }
+  local function run(replace_all)
+    local args = replace_all and { 'shelve', '-r', '-c', change }
+      or { 'shelve', '-f', '-c', change }
     -- No call timeout: shelving uploads every file's content.
     local opts = { timeout = 0 }
     if paths then
@@ -153,6 +140,63 @@ function M.shelve(ws, change, paths, cb)
       co.report('shelve', res, #res.records)
       co.changed(ws)
       cb(#res.errors == 0 and #res.records > 0)
+    end)
+  end
+
+  --- Ask before replacing an existing shelf. `extra`: shelved files no longer opened in the
+  --- changelist (whole-changelist shelves only).
+  local function ask(existing, extra)
+    local what = paths and (#paths .. ' file(s)') or 'the shelf'
+    local msg = ('CL %s already has %d shelved file(s). Replace %s with your workspace versions?'):format(
+      change,
+      #existing,
+      what
+    )
+    if not extra or #extra == 0 then
+      if not confirm(msg, '&Replace\n&Cancel') then
+        return cb(false)
+      end
+      return run(false)
+    end
+    local names = vim.tbl_map(function(f)
+      return '  ' .. f
+    end, vim.list_slice(extra, 1, 8))
+    if #extra > 8 then
+      names[#names + 1] = ('  … and %d more'):format(#extra - 8)
+    end
+    msg = msg
+      .. ('\n\n%d shelved file(s) are no longer opened in CL %s:\n'):format(#extra, change)
+      .. table.concat(names, '\n')
+      .. '\n\nReplace keeps them in the shelf; Replace all removes them.'
+    local choice =
+      require('perforated.ui.prompt').confirm(msg, '&Replace\nReplace &all\n&Cancel', 3)
+    if choice == 1 or choice == 2 then
+      return run(choice == 2)
+    end
+    cb(false)
+  end
+
+  cls.shelved_files(ws, { change }, function(sh)
+    local existing = sh[change] or {}
+    if #existing == 0 then
+      return run(false)
+    end
+    if paths then
+      return ask(existing, nil) -- `-r` acts on the whole shelf: not offered for some files
+    end
+    ws:run({ 'opened', '-c', change }, {}, function(res)
+      local open = {}
+      for _, r in ipairs(res.records) do
+        open[r.depotFile or ''] = true
+      end
+      local extra = {}
+      for _, f in ipairs(existing) do
+        if f.depotFile and not open[f.depotFile] then
+          extra[#extra + 1] = f.depotFile
+        end
+      end
+      table.sort(extra)
+      ask(existing, extra)
     end)
   end)
 end

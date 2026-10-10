@@ -1326,6 +1326,49 @@ T['client view']['diffs: no gutter signs; sides in line (first change / your pos
   H.eq({ s[1][4], s[2][4] }, { 'no', 'no' })
 end
 
+T['client view']['diff views: Ctrl+1 / Ctrl+2 go to the previous / next change'] = function()
+  local text = {}
+  for n = 1, 60 do
+    text[n] = 'n line ' .. n
+  end
+  H.write(root .. '/n.txt', table.concat(text, '\n') .. '\n')
+  local out = server:p4({ 'change', '-i' }, {
+    client = 'alice_ws',
+    cwd = root,
+    stdin = 'Change: new\nDescription:\n\tadd n\n',
+  }).stdout
+  local cl = out:match('Change (%d+) created')
+  server:p4({ 'add', '-c', cl, root .. '/n.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'submit', '-c', cl }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'edit', root .. '/n.txt' }, { client = 'alice_ws', cwd = root })
+  text[10], text[40] = 'n CHANGED 10', 'n CHANGED 40'
+  H.write(root .. '/n.txt', table.concat(text, '\n') .. '\n')
+  child.cmd('edit ' .. root .. '/n.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.cmd('P4 diff')
+  wait([[#vim.api.nvim_list_tabpages() == 2]])
+  wait([[vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(vim.fn.win_getid(1))) == 60]])
+  local function row()
+    return child.api.nvim_win_get_cursor(0)[1]
+  end
+  H.eq(row(), 1)
+  child.type_keys('<C-2>')
+  H.eq(row(), 10)
+  child.type_keys('<C-2>')
+  H.eq(row(), 40)
+  child.type_keys('<C-1>')
+  H.eq(row(), 10)
+  -- outside the diff tab, the user's own file doesn't have them
+  child.type_keys('q')
+  H.eq(child.fn.maparg('<C-2>', 'n'), '')
+  -- P4V-style keys: none with keys.p4v = false
+  child.lua([[require('perforated.config').set({ keys = { p4v = false } })]])
+  child.cmd('P4 diff')
+  wait([[#vim.api.nvim_list_tabpages() == 2]])
+  H.eq(child.fn.maparg('<C-2>', 'n'), '')
+  H.neq(child.fn.maparg('q', 'n'), '')
+end
+
 T['client view']['diff tab panel: the cursor stays on the files; j/k/arrows wrap around'] = function()
   open_view()
   H.write(root .. '/b.txt', 'b2\n')
