@@ -1197,7 +1197,10 @@ dispatch to the first that applies to the node under the cursor (so `x` reverts 
 stops a reconcile scan). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
 clicked line (`cursor_to_mouse`), since the mapping replaces Vim's own cursor move; a click
 outside the view does nothing. `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
-footer). `menu_items` builds the `.` menu: valid actions in definition order, unless the view
+footer). Keys of actions that take several items (`multi`) are also mapped in visual mode:
+`selection(view)` turns the selected rows into nodes and `dispatch(a, view, selected)` runs
+the action on those that apply (instead of the marks), dropping a node whose ancestor is also
+in the list, so a changelist selected with its files counts once. `menu_items` builds the `.` menu: valid actions in definition order, unless the view
 has a `menu_layout` for the node's kind (the client view's `M.MENU_LAYOUT.change` and
 `.opened_file`). A layout
 lists action ids, `'-'` separators and `{ id, label }` renames; it's authoritative (actions it

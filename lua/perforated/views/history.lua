@@ -477,6 +477,26 @@ function M.open(ws, path, opts)
         view.tree:clear_marks()
       end,
     },
+    {
+      -- D with any other number marked: say what's needed (not in the menu).
+      id = 'diff_marked_help',
+      desc = 'Diff the two marked revisions',
+      keys = { 'D' },
+      nomenu = true,
+      run = function()
+        local n = #view.tree:marked()
+        if n == 0 then
+          notify('mark two revisions (m) or select them (V), then D', vim.log.levels.WARN)
+        elseif n == 1 then
+          notify('1 revision marked: mark one more (m), then D', vim.log.levels.WARN)
+        else
+          notify(
+            ('%d revisions marked: mark exactly two to diff them (u clears)'):format(n),
+            vim.log.levels.WARN
+          )
+        end
+      end,
+    },
   })
   vim.list_extend(view.actions, {
     {

@@ -64,19 +64,38 @@ end
 ---@field nodes perforated.TreeNode[]
 ---@field view table
 
---- Run an action on the marked nodes (if the action takes several and marks exist), else on
---- the cursor's node.
+--- Run an action on the selected nodes (visual mode), else the marked ones (if the action
+--- takes several and marks exist), else the cursor's node.
 ---@param a perforated.Action
 ---@param view table { tree = perforated.Tree }
-function M.dispatch(a, view)
+---@param selected perforated.TreeNode[]?  rows selected in visual mode
+function M.dispatch(a, view, selected)
   local tree = view.tree
   local node = tree:node_at()
   local nodes = {}
   if a.multi then
-    for _, n in ipairs(tree:marked()) do
+    for _, n in ipairs(selected or tree:marked()) do
       if M.applies(a, n) then
         nodes[#nodes + 1] = n
       end
+    end
+    if selected then
+      -- A selected changelist and its selected files: the changelist once (files_of would
+      -- count its files twice).
+      local set = {}
+      for _, n in ipairs(nodes) do
+        set[n] = true
+      end
+      nodes = vim.tbl_filter(function(n)
+        local p = n.parent
+        while p do
+          if set[p] then
+            return false
+          end
+          p = p.parent
+        end
+        return true
+      end, nodes)
     end
   end
   if #nodes == 0 then
@@ -108,6 +127,22 @@ function M.cursor_to_mouse(buf)
   return true
 end
 
+--- The rows selected in visual mode (leaving it), as nodes.
+---@param view table { tree = perforated.Tree }
+---@return perforated.TreeNode[]
+function M.selection(view)
+  local a, b = vim.fn.line('v'), vim.fn.line('.')
+  if a > b then
+    a, b = b, a
+  end
+  vim.cmd('normal! ' .. vim.keycode('<Esc>'))
+  local out = {}
+  for row = a, b do
+    out[#out + 1] = view.tree:node_at(row)
+  end
+  return out
+end
+
 --- Install buffer-local keymaps for a view's actions.
 ---@param buf integer
 ---@param actions perforated.Action[]
@@ -123,6 +158,33 @@ function M.attach(buf, actions, view)
         order[#order + 1] = lhs
       end
       table.insert(by_key[lhs], a)
+    end
+  end
+  -- Visual mode: keys of actions that take several items act on the selected rows (like marks).
+  for _, lhs in ipairs(order) do
+    local multi = vim.tbl_filter(function(a)
+      return a.multi
+    end, by_key[lhs])
+    if #multi > 0 and not lhs:find('Mouse', 1, true) then
+      vim.api.nvim_buf_set_keymap(buf, 'x', lhs, '', {
+        noremap = true,
+        nowait = true,
+        desc = 'perforated: ' .. multi[1].desc .. ' (selection)',
+        callback = function()
+          local sel = M.selection(view)
+          for _, a in ipairs(multi) do
+            for _, n in ipairs(sel) do
+              if M.applies(a, n) then
+                return M.dispatch(a, view, sel)
+              end
+            end
+          end
+          require('perforated.ui.toast').notify(
+            ('[perforated] %s (%s) does not apply to the selection'):format(multi[1].desc, lhs),
+            vim.log.levels.INFO
+          )
+        end,
+      })
     end
   end
   for _, lhs in ipairs(order) do
