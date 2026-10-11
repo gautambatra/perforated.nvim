@@ -498,6 +498,10 @@ countdown (`toast.timeout`, 3 s; 0 keeps them until `:P4 dismiss`) starts only o
 a key. The check-out prompt is
 the exception to the placement: it opens at the cursor, where you were typing.
 Errors have a red border. `:P4 messages` (`<leader>pm`) shows the recent ones and `:P4 dismiss` closes them.
+When one pop-up opens over another (the lookup over a file history, an action menu over the
+`K` pop-up), the one in use gets a border in your theme's accent colour
+(`PerforatedFloatBorderActive`, linked to `FloatTitle`) and the ones under it are dimmed, text
+and border. With the cursor back in a normal window, open pop-ups look as usual.
 Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
 chooses, `<CR>` takes the default, `<Esc>` cancels) and text prompts (submit description,
 `g/`, integrate, time-lapse revision, reconcile paths) a one-line input float. Long jobs pop up
@@ -910,6 +914,7 @@ Budgets are enforced by `make bench` in CI:
 | Annotate: parse / render 20k lines | ≤ 20 / ≤ 25 ms | ~1.3 / ~10 ms |
 | Time-lapse step, 20k lines × 200 revisions | ≤ 5 ms | ~2 ms |
 | Diff colours: build the highlight namespaces, ~1300 groups | ≤ 10 ms | ~3 ms |
+| Stacked pop-ups: build the dimmed colours, ~1300 groups (once per colorscheme) | ≤ 10 ms | ~1.5 ms |
 | Picker: open 500 items / typing a filter, 5000 items (worst case) | ≤ 16 / 25 ms | ~2 / ~13 ms |
 
 A memory soak test (1000 workspace files opened and closed) checks that nothing in the plugin

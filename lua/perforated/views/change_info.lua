@@ -213,6 +213,7 @@ function M.show(ws, item, d, shelved)
     footer_pos = 'right',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   vim.wo[win][0].wrap = true
   vim.wo[win][0].cursorline = true
   local function close()

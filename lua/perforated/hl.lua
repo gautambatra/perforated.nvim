@@ -14,6 +14,7 @@ local LINKS = {
   PerforatedChangelist = 'Identifier',
   PerforatedFloat = 'NormalFloat',
   PerforatedFloatBorder = 'FloatBorder',
+  PerforatedFloatBorderActive = 'FloatTitle', -- the pop-up in use, over others (ui/stack.lua)
   PerforatedMenuSel = 'PmenuSel', -- the highlighted item of an action menu (and the picker's)
   PerforatedPickerMatch = 'Special', -- characters matching the picker's filter
   PerforatedToast = 'NormalFloat',

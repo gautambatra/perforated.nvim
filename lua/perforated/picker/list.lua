@@ -105,6 +105,7 @@ function M.open(spec, finish)
   end
   local filter_buf, list_buf = scratch('filter'), scratch('list')
   local prev_buf = has_preview and scratch('preview') or nil
+  local group = {} -- the filter, list and preview are one pop-up for stacking (ui/stack.lua)
   local function float(buf, opts, enter)
     opts = vim.tbl_extend('force', {
       relative = 'editor',
@@ -115,6 +116,7 @@ function M.open(spec, finish)
     local w = vim.api.nvim_open_win(buf, enter, opts)
     vim.wo[w][0].winhighlight =
       'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder,CursorLine:PerforatedMenuSel'
+    require('perforated.ui.stack').register(w, { group = group })
     return w
   end
   local count_title = function(n)

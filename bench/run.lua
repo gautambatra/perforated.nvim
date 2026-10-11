@@ -444,6 +444,28 @@ do
   record(('diff look: build (%d groups)'):format(ms[2]), ms[1], 'ms', 10)
 end
 
+-- 9b. Stacked pop-ups: building the dim namespace (every group dimmed), done the first time a
+--     pop-up opens over another and after :colorscheme. Same ~1300 groups as above.
+do
+  local c = H.child()
+  local ms = c.lua([[
+    for i = 1, 900 do
+      vim.api.nvim_set_hl(0, ('BenchGroup%d'):format(i), { fg = '#123456' })
+    end
+    local stack = require('perforated.ui.stack')
+    stack.build()
+    local best = math.huge
+    for _ = 1, 5 do
+      local t = vim.uv.hrtime()
+      stack.build()
+      best = math.min(best, (vim.uv.hrtime() - t) / 1e6)
+    end
+    return { best, vim.tbl_count(vim.api.nvim_get_hl(0, {})) }
+  ]])
+  c.stop()
+  record(('stacked pop-ups: dim build (%d groups)'):format(ms[2]), ms[1], 'ms', 10)
+end
+
 -- 10. The plugin's own picker: opening a 500-item list (with preview) — below one frame — and
 --     the slowest keystroke while typing a filter into 5000 items that all match the first
 --     word (the worst case: nothing narrows until the second). Neovim's matcher (C) alone takes

@@ -1799,7 +1799,7 @@ local function show(buf, kind)
   if kind == 'float' then
     local w = math.floor(vim.o.columns * 0.8)
     local h = math.floor(vim.o.lines * 0.8)
-    return vim.api.nvim_open_win(buf, true, {
+    local win = vim.api.nvim_open_win(buf, true, {
       relative = 'editor',
       row = math.floor((vim.o.lines - h) / 2) - 1,
       col = math.floor((vim.o.columns - w) / 2),
@@ -1809,6 +1809,8 @@ local function show(buf, kind)
       title = ' Perforce ',
       title_pos = 'center',
     })
+    require('perforated.ui.stack').register(win)
+    return win
   elseif kind == 'split' then
     vim.cmd('topleft vsplit')
     vim.api.nvim_win_set_width(0, math.max(60, math.floor(vim.o.columns * 0.35)))

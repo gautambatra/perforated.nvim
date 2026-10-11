@@ -61,6 +61,7 @@ function M.float(name, title, size)
     title_pos = 'left',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   win_opts(win)
   return buf, win
 end

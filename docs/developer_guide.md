@@ -287,7 +287,10 @@ global). Behaviour checked in a real terminal for `diff/look.lua`:
 - an empty definition (`{}`) means **no colour** (plain text), *not* "use the global one" —
   so a namespace entry can't be removed; start a new namespace instead;
 - `'winhighlight'` (per-window remapping, `Normal:MyNormal`) is older and remaps only the
-  groups listed; a window namespace takes precedence over it.
+  groups listed. A window namespace replaces it entirely: while a window has one, its
+  `'winhighlight'` is ignored, even for groups the namespace doesn't define (verified in a
+  real terminal). `nvim_win_set_hl_ns(win, 0)` goes back to `'winhighlight'`, and
+  `nvim_get_hl_ns({ winid })` then reports `'winhighlight'`'s internal namespace, not 0.
 
 **Inspecting.** `:Inspect` (cursor) lists every highlight at a position — syntax, treesitter,
 semantic tokens, extmarks. `:hi Name` shows a group, `vim.api.nvim_get_hl(0, { name = 'X',
@@ -551,6 +554,7 @@ lua/perforated/
     keys.lua                 action registry: keymaps, . menu, ? help, footer
     footer.lua               key footer float anchored to a window
     float.lua                single-key modal menu
+    stack.lua                pop-ups over pop-ups: accent border on the one in use, the rest dimmed
     qf.lua                   quickfix/location-list sink and qf-window keys
     toast.lua                pop-up notifications (placed by kind; activity- and focus-gated)
     prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
@@ -591,7 +595,7 @@ Makefile                     deps, test, bench, lint, fmt, doc, dev-workspace
 │ Entry points      plugin/perforated.lua · commands.lua · keymaps.lua · lsp.lua │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Views             views/* (client, describe, history, annotate, time-lapse…)   │
-│ UI toolkit        ui/tree · ui/keys · ui/footer · ui/float · ui/qf · ui/toast  │
+│ UI toolkit        ui/tree · keys · footer · float · stack · qf · toast         │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Features          buffer · signs · status · checkout · poll · ops · resolve ·  │
 │                   integrate · history · timelapse · blame · modified · same ·  │
@@ -1232,6 +1236,20 @@ column.
 A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor
 moves (per-window statuslines are hidden with `laststatus=3`, so a float is used instead).
 
+#### `ui/stack.lua`
+Pop-ups over pop-ups. `register(win, { modal, group })` after a float sets its
+`'winhighlight'`; `update()` (on `WinEnter`, a registered window closing, and each
+(un)registration) gives every registered window one state: **active** (the newest open modal
+float, i.e. an action menu, which reads keys without taking focus; else the current window's
+pop-up) swaps its border for `PerforatedFloatBorderActive`; **dim** (another pop-up is
+active) gets the dim namespace; **plain** (no pop-up in use) restores its own
+`'winhighlight'`. `group` makes several windows one pop-up (the picker's filter, list and
+preview; a footer and its view). The dim namespace sets *every* group defined at build time to
+the text colour blended 55 % towards the float background, without a background (selection
+and cursor line vanish), plus the float's own background and a fainter border: a window
+namespace replaces `'winhighlight'`, so it must carry those too. Built on first use and after
+`:colorscheme` (~1.5 ms for ~1300 groups). Toasts and the hunk preview don't register.
+
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep
 processing). A `<LeftMouse>` chooses the item under it (hit-tested against the menu's screen
@@ -1654,6 +1672,7 @@ fstat cache — the first time it ran.
 | Annotate: parse / render 20k lines | 20 / 25 ms |
 | Time-lapse step, 20k lines × 200 revisions | 5 ms |
 | Diff look: build the highlight namespaces, ~1300 groups | 10 ms |
+| Stacked pop-ups: build the dim namespace, ~1300 groups | 10 ms |
 | Picker: open 500 items (with preview) | 16 ms |
 | Picker: slowest keystroke typing a filter into 5000 items that all match (worst case; the C matcher alone takes 7–10 ms) | 25 ms |
 

@@ -179,6 +179,7 @@ function M.show()
     footer_pos = 'right',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   vim.wo[win][0].cursorline = true
   float = { buf = buf, win = win }
   local function close()

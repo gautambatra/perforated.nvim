@@ -135,6 +135,7 @@ function M.menu(opts)
   end
   local win = vim.api.nvim_open_win(buf, false, win_opts)
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win, { modal = true }) -- reads keys, never focused
 
   M.active = opts.title -- observable while waiting (tests, statusline)
   local by_key = {}
@@ -288,6 +289,7 @@ function M.menu(opts)
   poll:close()
   vim.o.mousemoveevent = mme
   pcall(vim.api.nvim_win_close, win, true)
+  require('perforated.ui.stack').unregister(win) -- the pop-up under it is active again
   vim.cmd.redraw()
   return choice, table.concat(replay)
 end
