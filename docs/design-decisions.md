@@ -54,6 +54,7 @@ Converged with the author on 2026-09-23 via interview. This is the source of tru
 - Option to open diffs in the user's external tool from **$P4DIFF** (`:P4 diff!` or `diff.tool = 'external'`). The plugin launches it itself as `$P4DIFF <depot copy> <workspace file>`, with the user's environment, because `p4 diff` skips identical files and `p4 diff2` ignores P4DIFF.
 - Shelved file default diff: **shelved vs its base rev**; menu offers vs workspace / vs head.
 - Hunk ops: preview hunk (float), reset hunk to #have, current-line blame virtual text. Hunk navigation `]h`/`[h`.
+- Gutter signs are **`+` / `~` / `-`** by default *(2026-10-11)*, not vertical bars: readable without relying on colour, and the classic diff markers. `signs.text` still sets each one.
 - Sign diffs use `myers` + indent heuristic (configurable via `signs.algorithm`). Histogram is about 5x slower on large files, and linematch doubles the cost for no benefit in the gutter.
 
 ## History / annotate / time-lapse

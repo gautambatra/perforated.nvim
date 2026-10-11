@@ -530,9 +530,9 @@ keys):
         max_lines = 2000,
         priority = 6,
         text = {
-          add = "▎",
-          change = "▎",
-          delete = "▁",
+          add = "+",
+          change = "~",
+          delete = "-",
           stale = "↓"
         }
       },

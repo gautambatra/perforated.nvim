@@ -23,7 +23,7 @@ local defaults = {
     algorithm = 'myers', -- 'myers' | 'patience' | 'histogram' | 'minimal'
     max_lines = 2000, -- above this, diff on a worker thread (main thread only reads the lines)
     hard_max = 500000, -- above this, no signs
-    text = { add = '▎', change = '▎', delete = '▁', stale = '↓' },
+    text = { add = '+', change = '~', delete = '-', stale = '↓' },
   },
   blame_line = {
     enabled = false,
