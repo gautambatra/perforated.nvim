@@ -1236,6 +1236,9 @@ column.
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor
 moves (per-window statuslines are hidden with `laststatus=3`, so a float is used instead).
+Only for normal windows: it sits at zindex 40, under any float (default 50), so a view shown
+in a float puts the same keys in the float's border footer instead (`base.finish`, and the
+client view's `attach_footer`, since one client view can move between float, tab and split).
 
 #### `ui/stack.lua`
 Pop-ups over pop-ups. `register(win, { modal, group })` after a float sets its
@@ -1245,7 +1248,7 @@ float, i.e. an action menu, which reads keys without taking focus; else the curr
 pop-up) swaps its border for `PerforatedFloatBorderActive`; **dim** (another pop-up is
 active) gets the dim namespace; **plain** (no pop-up in use) restores its own
 `'winhighlight'`. `group` makes several windows one pop-up (the picker's filter, list and
-preview; a footer and its view). The dim namespace sets *every* group defined at build time to
+preview). The dim namespace sets *every* group defined at build time to
 the text colour blended 55 % towards the float background, without a background (selection
 and cursor line vanish), plus the float's own background and a fainter border: a window
 namespace replaces `'winhighlight'`, so it must carry those too. Built on first use and after

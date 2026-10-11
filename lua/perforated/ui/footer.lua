@@ -68,10 +68,6 @@ function Footer:place()
   else
     self.fwin = vim.api.nvim_open_win(self.fbuf, false, cfg)
     vim.wo[self.fwin][0].winhighlight = 'NormalFloat:PerforatedFooter'
-    local stack = require('perforated.ui.stack')
-    if stack.state(self.win) then -- the footer of a pop-up (the client view as a float)
-      stack.register(self.fwin, { group = self.win })
-    end
   end
 end
 
