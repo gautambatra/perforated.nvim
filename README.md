@@ -501,10 +501,12 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   is the changelist's common directory. You give the target as a path (`//depot/rel/...`) or a
   branch spec (`-b name`), remembered for the session; in a stream workspace your stream
   (`//stream2/...`) is offered. Relative paths line up: a change under `//stream1/app/src`
-  integrated into `//stream2/...` lands in `//stream2/app/src`. Then pick the changelist to open
+  integrated into `//stream2/...` lands in `//stream2/app/src`, and any two streams work, not
+  just parent and child (`-F`). Then pick the changelist to open
   the files in: default, a pending one, a new one, or a new one with the original
   description pre-filled for you to edit (a new changelist is deleted again if you cancel). A
-  preview goes to quickfix, and after you confirm the integrate runs and resolves (clean merges
+  preview goes to quickfix, and after you confirm the integrate runs (a "Merging CL N…"
+  pop-up while it does) and resolves (clean merges
   accepted, conflicts to the merge tool). `:P4 integrate` with no number asks for a source path
   and lets you pick one of its changelists.
 

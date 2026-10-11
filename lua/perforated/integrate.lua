@@ -37,7 +37,10 @@ function M.common_dir(files)
   return dir
 end
 
---- Arguments for the integrate itself (target changelist and `-n` added by the caller).
+--- Arguments for the integrate itself (target changelist and `-n` added by the caller). A
+--- path target gets `-F`: in a stream client p4 otherwise insists on a stream view ("Must use
+--- a stream view to merge into //s2") for any integrate between streams; `-F` allows the
+--- view given, and is ignored outside streams.
 ---@param src string  source directory
 ---@param change string
 ---@param target string  a path, or '-b <branch>'
@@ -48,7 +51,7 @@ local function integ_args(src, change, target)
     return { '-b', branch, '-s', src .. '/...@=' .. change }
   end
   local tgt = target:gsub('/%.%.%.$', ''):gsub('/$', '')
-  return { M.source_root(src, tgt) .. '/...@=' .. change, tgt .. '/...' }
+  return { '-F', M.source_root(src, tgt) .. '/...@=' .. change, tgt .. '/...' }
 end
 
 --- The source directory matching a target path: the source cut to the target's depth, so
@@ -113,10 +116,11 @@ local function go(ws, change, src, target, into, cb)
       end
     end
     if #items == 0 then
-      notify(
-        'nothing to integrate: ' .. (res.errors[1] or res.warnings[1] or 'no files'),
-        vim.log.levels.WARN
-      )
+      if res.errors[1] then
+        notify('integrate failed: ' .. res.errors[1], vim.log.levels.ERROR)
+      else
+        notify('nothing to integrate: ' .. (res.warnings[1] or 'no files'), vim.log.levels.WARN)
+      end
       return cb(false)
     end
     qf.set({
@@ -128,7 +132,7 @@ local function go(ws, change, src, target, into, cb)
       ('Integrate CL %s (%d file(s)) from %s into %s?'):format(
         change,
         #items,
-        target:match('^%-b') and (src .. '/...') or (args[1]:gsub('@=.*$', '')),
+        target:match('^%-b') and (src .. '/...') or (args[2]:gsub('@=.*$', '')),
         target
       ),
       '&Integrate\n&Cancel',
@@ -137,7 +141,9 @@ local function go(ws, change, src, target, into, cb)
     if not ok then
       return cb(false)
     end
+    local unbusy = require('perforated.ui.toast').busy(('Merging CL %s…'):format(change))
     ws:run(vim.list_extend(vim.list_extend({ 'integrate' }, cl_args), args), {}, function(done)
+      unbusy()
       local targets = {}
       for _, r in ipairs(done.records) do
         if r.clientFile then
