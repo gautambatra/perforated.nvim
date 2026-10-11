@@ -83,6 +83,8 @@ function H.child(opts)
     P4TICKETS = home .. '/.p4tickets',
     P4TRUST = home .. '/.p4trust',
     NVIM_APPNAME = 'perforated-test',
+    -- Tests run fake tools as GUI tools; CI runners have no display (tools.no_display).
+    DISPLAY = vim.env.DISPLAY or ':0',
   }
   if opts.fake then
     child.fake = { rules = home .. '/rules.lua', log = home .. '/calls.jsonl' }
