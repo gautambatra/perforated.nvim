@@ -66,6 +66,7 @@ local ERROR_WORDS = {
   'could not',
   'cannot',
   "can't",
+  "couldn't", -- Tk: "couldn't connect to display"
   'unable',
   'error',
   'failed',
@@ -78,10 +79,11 @@ local ERROR_WORDS = {
 --- The line of a failed tool's output that says what went wrong (a reason for a pop-up): the
 --- first one with an error word, else the last. Qt's display failure, for one, prints
 --- "could not connect to display" first and ends with a list of plugins and the shell's
---- "Aborted (core dumped)".
+--- "Aborted (core dumped)". `strict`: only a line with an error word (nil otherwise).
 ---@param text string?
+---@param strict boolean?
 ---@return string?
-function M.error_line(text)
+function M.error_line(text, strict)
   local lines = {}
   for l in vim.gsplit(text or '', '\n', { plain = true }) do
     l = vim.trim(l)
@@ -93,7 +95,7 @@ function M.error_line(text)
   if #lines == 0 then
     return nil
   end
-  local pick = lines[#lines]
+  local pick
   for _, l in ipairs(lines) do
     local low = l:lower()
     for _, w in ipairs(ERROR_WORDS) do
@@ -102,9 +104,15 @@ function M.error_line(text)
         break
       end
     end
-    if pick == l then
+    if pick then
       break
     end
+  end
+  if not pick then
+    if strict then
+      return nil
+    end
+    pick = lines[#lines]
   end
   if vim.fn.strchars(pick) > 100 then
     pick = vim.fn.strcharpart(pick, 0, 99) .. '…'

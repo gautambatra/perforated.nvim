@@ -343,7 +343,10 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   closes the whole tab (in your own file `q` only acts inside the diff tab).
 - Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
 - `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
-  environment. GUI tools run detached; terminal tools open in a terminal tab.
+  environment. GUI tools run detached; terminal tools open in a terminal tab. When a GUI tool
+  fails you get an error with the line that says why. Exit code 1 means "files differ" for
+  diff tools, so it only counts as a failure when the tool printed an error (tkdiff without a
+  display: "couldn't connect to display").
 - **Events for customising the diff tab.** `User PerforatedDiffOpen` fires when the diff tab is
   ready, and `User PerforatedDiffClose` fires once it closes, whether by `q`, `:q` or
   `:tabclose`. `ev.data` holds `{ tab, wins = { left, right }, bufs = { left, right }, spec,
