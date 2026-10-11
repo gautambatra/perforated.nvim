@@ -189,7 +189,6 @@ Client view (:P4)                                     *perforated-client-view*
   A               Toggle scope: this client / all my clients
   W               Switch client (pick one of your clients)
   d <C-d>         Diff against have revision
-  d <C-d>         Diff against the previous revision
   gD              Diff against revision…
   d <C-d>         Diff shelved vs base revision
   s               Shelve
@@ -205,9 +204,9 @@ Client view (:P4)                                     *perforated-client-view*
   gS <C-S-g>      Sync workspace
   gn              All my submitted changelists
   g@              Sync workspace to this CL
-  I               Integrate (cherry-pick) into this workspace
+  I               Integrate into this workspace
   gd              Describe changelist
-  gX              Copy Swarm review URL
+  gX              Copy Swarm URL
   g/ <C-g>        Go to changelist / path / user
   gh <C-t>        File history
   t <C-S-t>       Time-lapse
@@ -231,6 +230,9 @@ Client view (:P4)                                     *perforated-client-view*
   p               Reconcile: set the paths to scan
   Q               Send to quickfix
   gQ              Send to location list
+  o               Open
+  d <CR> <C-d>    Diff against previous revision
+  gD              Diff against revision…
 
 Describe buffer (:P4 describe)                           *perforated-describe*
 
@@ -259,9 +261,9 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   P <C-s>         Submit
   <Del>           Delete changelist
   g@              Sync workspace to this CL
-  I               Integrate (cherry-pick) into this workspace
+  I               Integrate into this workspace
   Q               Files to quickfix
-  gX              Copy Swarm review URL
+  gX              Copy Swarm URL
 
 File history (:P4 filelog)                                *perforated-history*
 
@@ -282,7 +284,7 @@ File history (:P4 filelog)                                *perforated-history*
   b                    Annotate this revision
   g@                   Sync workspace to this CL
   y                    Copy CL number
-  gX                   Copy Swarm review URL
+  gX                   Copy Swarm URL
 
 Annotate (:P4 annotate)                                  *perforated-annotate*
 
@@ -296,7 +298,7 @@ Annotate (:P4 annotate)                                  *perforated-annotate*
   gL <C-t>        File history
   Q               Lines from this changelist to the location list
   y               Copy CL number
-  gX              Copy Swarm review URL
+  gX              Copy Swarm URL
   q               Close
   ?               Help
   . <RightMouse>  Action menu
@@ -332,15 +334,14 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
 
   l <Tab>         Expand / collapse (files)
   h <S-Tab>       Collapse
-  d <CR> <C-d>    Diff against the previous revision
   gh <C-t>        File history
   t <C-S-t>       Time-lapse
   D <CR> <C-d>    Diff all files
   i               Edit description
   g@              Sync workspace to this CL
-  I               Integrate (cherry-pick) into this workspace
+  I               Integrate into this workspace
   gd              Describe changelist
-  gX              Copy Swarm review URL
+  gX              Copy Swarm URL
   g/ <C-g>        Go to changelist / path / user
   K               View changelist
   y               Copy CL number
@@ -349,6 +350,9 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu
+  o               Open
+  d <CR> <C-d>    Diff against previous revision
+  gD              Diff against revision…
 
 Diff tab (D, :P4 diff -a)                               *perforated-diff-tab*
 

@@ -598,7 +598,7 @@ local function actions(view)
     },
     {
       id = 'integrate',
-      desc = 'Integrate (cherry-pick) into this workspace',
+      desc = 'Integrate into this workspace',
       keys = { 'I' },
       when = function()
         return view.item.status == 'submitted' and ws.mode ~= 'connection'
@@ -617,7 +617,7 @@ local function actions(view)
     },
     {
       id = 'swarm_copy',
-      desc = 'Copy Swarm review URL',
+      desc = 'Copy Swarm URL',
       keys = { 'gX' },
       when = function()
         return view.item.change ~= 'default'

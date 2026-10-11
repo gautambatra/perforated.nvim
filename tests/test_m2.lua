@@ -928,6 +928,67 @@ T['client view']['gr reverts an unchanged file; gh opens its history'] = functio
   wait([[vim.api.nvim_buf_get_name(0):find('perforated://history/', 1, true) ~= nil]])
 end
 
+T['client view']['submitted changelist and file menus; o, K and gD on a file'] = function()
+  open_view()
+  H.eq(menu_labels('▶ CL 1'), {
+    'View changelist',
+    'Copy CL number',
+    '-',
+    'Diff all files',
+    'Integrate into this workspace',
+    'Edit description',
+    'Sync workspace to this CL',
+    'Copy Swarm URL',
+    '-',
+    'All my submitted changelists',
+    'Sync entire workspace',
+    'Switch client',
+  })
+  goto_line('▶ CL 1')
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/d.txt#1', 1, true) ~= nil]]
+  )
+  H.eq(menu_labels('//depot/d.txt#1'), {
+    'Open',
+    '-',
+    'File history',
+    'Time-lapse view',
+    'Diff against previous revision',
+    'Diff against revision…',
+    '-',
+    'View changelist',
+  })
+  -- o: that revision, read-only, in a tab
+  goto_line('//depot/d.txt#1')
+  child.type_keys('o')
+  wait([[vim.api.nvim_buf_get_name(0) == 'perforated:////depot/d.txt#1']])
+  child.cmd('tabclose')
+  wait([[vim.bo.filetype == 'perforated']])
+  -- K: the file's changelist
+  goto_line('//depot/d.txt#1')
+  child.type_keys('K')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  H.neq(
+    table.concat(child.api.nvim_buf_get_lines(0, 0, 1, false)):find('CL 1 · submitted', 1, true),
+    nil
+  )
+  child.type_keys('q')
+  -- gD: pick a revision from the file's history, then diff. d.txt has only #1, marked
+  -- "(this one)"; diffing it with itself says so instead of opening a tab.
+  child.lua([[vim.ui.select = function(items, opts, cb)
+      _G.offered = vim.tbl_map(opts.format_item, items)
+      cb(items[1])
+    end
+    require('perforated.config').set({ picker = 'select' })]])
+  wait([[vim.bo.filetype == 'perforated']])
+  goto_line('//depot/d.txt#1')
+  child.type_keys('gD')
+  wait([[_G.offered ~= nil]])
+  H.neq(child.lua_get('_G.offered[1]'):find('(this one)', 1, true), nil)
+  H.eq(H.wait_message(child, 'identical'), true)
+end
+
 T['client view']['file menu: fixed order, groups, only what applies'] = function()
   open_view()
   local tail = {

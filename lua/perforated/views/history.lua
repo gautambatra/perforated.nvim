@@ -203,7 +203,7 @@ function M.rev_actions(ctx)
     },
     {
       id = 'swarm_copy',
-      desc = 'Copy Swarm review URL',
+      desc = 'Copy Swarm URL',
       keys = { 'gX' },
       kinds = K,
       run = function(items)

@@ -489,7 +489,7 @@ local function actions(view)
     },
     {
       id = 'swarm_copy',
-      desc = 'Copy Swarm review URL',
+      desc = 'Copy Swarm URL',
       keys = { 'gX' },
       kinds = LINE,
       run = function(items)

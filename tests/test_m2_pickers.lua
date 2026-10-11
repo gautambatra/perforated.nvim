@@ -363,6 +363,20 @@ T['changes']["a user's submitted CL expands into its files; d diffs one against 
   table.sort(names)
   H.eq(names, { 'perforated:////depot/b.txt#1', 'perforated:////depot/b.txt#2' })
   child.cmd('tabclose')
+  -- gD: diff against a picked revision; the older one goes left.
+  child.lua([[vim.ui.select = function(items, _, cb)
+      for _, r in ipairs(items) do if tostring(r.rev) == '1' then return cb(r) end end
+    end
+    require('perforated.config').set({ picker = 'select' })]])
+  goto_text('//depot/b.txt')
+  child.type_keys('gD')
+  vim.uv.sleep(200)
+  H.eq(H.wait(child, [[#vim.api.nvim_list_tabpages() == 3]]), true)
+  local wins = child.lua_get(
+    [[vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0))]]
+  )
+  H.eq({ wins[1], wins[#wins] }, { 'perforated:////depot/b.txt#1', 'perforated:////depot/b.txt#2' })
+  child.cmd('tabclose')
   -- Same keys as the client view: i edits a description, <F5> refreshes (gr and C are gone).
   local function map(lhs)
     return child.lua_get(('vim.fn.maparg(%q, "n", false, true).desc or ""'):format(lhs))

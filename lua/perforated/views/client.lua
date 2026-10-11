@@ -777,7 +777,7 @@ local function actions(view)
       keys.menu(view.actions, view)
     end
   end
-  return {
+  local list = {
     -- Navigation (not in the action menu)
     {
       id = 'expand',
@@ -924,17 +924,6 @@ local function actions(view)
       footer = 10,
       run = function(items)
         diff_file(items[1])
-      end,
-    },
-    {
-      id = 'diff_submitted',
-      desc = 'Diff against the previous revision',
-      keys = { 'd' },
-      p4v = { '<C-d>' },
-      kinds = { submitted_file = true },
-      footer = 10,
-      run = function(items)
-        require('perforated.views.changes').diff_file(ws, items[1])
       end,
     },
     {
@@ -1195,7 +1184,7 @@ local function actions(view)
     },
     {
       id = 'integrate',
-      desc = 'Integrate (cherry-pick) into this workspace',
+      desc = 'Integrate into this workspace',
       keys = { 'I' },
       kinds = { submitted = true },
       run = function(items)
@@ -1214,7 +1203,7 @@ local function actions(view)
     },
     {
       id = 'swarm_copy',
-      desc = 'Copy Swarm review URL',
+      desc = 'Copy Swarm URL',
       keys = { 'gX' },
       kinds = { change = true, submitted = true, shelf = true, have_cl = true },
       when = function(item)
@@ -1300,7 +1289,13 @@ local function actions(view)
       id = 'view_change',
       desc = 'View changelist',
       keys = { 'K' },
-      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
+      kinds = {
+        change = true,
+        submitted = true,
+        shelf = true,
+        have_cl = true,
+        submitted_file = true,
+      },
       footer = 12,
       run = function(items)
         require('perforated.views.change_info').open(ws, items[1])
@@ -1625,6 +1620,8 @@ local function actions(view)
       end,
     },
   }
+  -- Files of the recent submitted changelists (as in :P4 changes).
+  return vim.list_extend(list, require('perforated.views.changes').file_actions(ws))
 end
 
 --- The `.` menus of a changelist and of an opened file, in this order (`'-'` separates
@@ -1681,6 +1678,9 @@ M.MENU_LAYOUT.opened_file = {
   { 'sync', 'Sync entire workspace' },
   { 'switch_client', 'Switch client' },
 }
+-- Recent submitted changelists and their files: the same menus as in :P4 changes.
+M.MENU_LAYOUT.submitted = require('perforated.views.changes').MENU_LAYOUT.submitted
+M.MENU_LAYOUT.submitted_file = require('perforated.views.changes').MENU_LAYOUT.submitted_file
 -- A shelved file: its operations first, then the client's (like an opened file).
 M.MENU_LAYOUT.shelved_file = {
   'diff_shelved',

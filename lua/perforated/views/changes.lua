@@ -80,6 +80,97 @@ function M.diff_file(ws, f)
   require('perforated.revs').diff(ws, left, right)
 end
 
+--- The `.` menu on a submitted changelist and on one of its files (here and in the client
+--- view's "Recent submitted"). Actions not listed keep their keys (`gd` describe).
+M.MENU_LAYOUT = {
+  submitted = {
+    'view_change',
+    'yank',
+    '-',
+    'diff_all',
+    'integrate',
+    'edit_description', -- your own changelists
+    'sync_to_change',
+    'swarm_copy',
+    '-', -- the client view's "Recent submitted" only:
+    'all_submitted',
+    { 'sync', 'Sync entire workspace' },
+    { 'switch_client', 'Switch client' },
+  },
+  submitted_file = {
+    'open_revision',
+    '-',
+    'history',
+    { 'timelapse', 'Time-lapse view' },
+    'diff_file',
+    'diff_file_revision',
+    '-',
+    'view_change',
+  },
+}
+
+--- Actions on a file of a submitted changelist, shared with the client view: open that
+--- revision, diff it against the previous one or against another revision.
+---@param ws perforated.Workspace
+---@return perforated.Action[]
+function M.file_actions(ws)
+  local deleted = require('perforated.history').deleted
+  return {
+    {
+      id = 'open_revision',
+      desc = 'Open',
+      keys = { 'o' },
+      kinds = { submitted_file = true },
+      when = function(item)
+        return not deleted(item.action)
+      end,
+      run = function(items)
+        local f = items[1]
+        require('perforated.revs').open(ws, { spec = f.depotFile .. '#' .. f.rev })
+      end,
+    },
+    {
+      id = 'diff_file',
+      desc = 'Diff against previous revision',
+      keys = { 'd', '<CR>' },
+      p4v = { '<C-d>' },
+      kinds = { submitted_file = true },
+      footer = 10,
+      run = function(items)
+        M.diff_file(ws, items[1])
+      end,
+    },
+    {
+      id = 'diff_file_revision',
+      desc = 'Diff against revision…',
+      keys = { 'gD' },
+      kinds = { submitted_file = true },
+      when = function(item)
+        return not deleted(item.action)
+      end,
+      run = function(items)
+        local f = items[1]
+        require('perforated.picker.sources').revision(
+          ws,
+          { depotFile = f.depotFile },
+          'Diff ' .. vim.fn.fnamemodify(f.depotFile, ':t') .. '#' .. f.rev .. ' against',
+          function(r)
+            local a, b = tonumber(r.rev), tonumber(f.rev)
+            local this = { spec = f.depotFile .. '#' .. f.rev }
+            local other = { spec = f.depotFile .. '#' .. r.rev }
+            if a < b then -- older on the left
+              require('perforated.revs').diff(ws, other, this)
+            else
+              require('perforated.revs').diff(ws, this, other)
+            end
+          end,
+          f.rev
+        )
+      end,
+    },
+  }
+end
+
 local function node_for(view, c)
   local t = tonumber(c.time)
   local node = {
@@ -161,7 +252,7 @@ end
 
 local function actions(view)
   local ws = view.ws
-  return {
+  local list = {
     {
       id = 'expand',
       desc = 'Expand / collapse (files)',
@@ -180,17 +271,6 @@ local function actions(view)
       nomenu = true,
       run = function()
         view.tree:collapse_at_cursor()
-      end,
-    },
-    {
-      id = 'diff_file',
-      desc = 'Diff against the previous revision',
-      keys = { 'd', '<CR>' },
-      p4v = { '<C-d>' },
-      kinds = { submitted_file = true },
-      footer = 10,
-      run = function(items)
-        M.diff_file(ws, items[1])
       end,
     },
     {
@@ -262,7 +342,7 @@ local function actions(view)
     },
     {
       id = 'integrate',
-      desc = 'Integrate (cherry-pick) into this workspace',
+      desc = 'Integrate into this workspace',
       keys = { 'I' },
       kinds = { submitted = true },
       when = function()
@@ -277,13 +357,14 @@ local function actions(view)
       desc = 'Describe changelist',
       keys = { 'gd' },
       kinds = { submitted = true },
+      nomenu = true, -- `K` covers it in the menu
       run = function(items)
         require('perforated.views.describe').open(ws, items[1].change)
       end,
     },
     {
       id = 'swarm_copy',
-      desc = 'Copy Swarm review URL',
+      desc = 'Copy Swarm URL',
       keys = { 'gX' },
       kinds = { submitted = true },
       when = function(item)
@@ -298,7 +379,7 @@ local function actions(view)
       id = 'view_change',
       desc = 'View changelist',
       keys = { 'K' },
-      kinds = { submitted = true },
+      kinds = { submitted = true, submitted_file = true }, -- on a file: its changelist
       footer = 12,
       run = function(items)
         require('perforated.views.change_info').open(ws, items[1])
@@ -362,6 +443,7 @@ local function actions(view)
       end,
     },
   }
+  return vim.list_extend(list, M.file_actions(ws))
 end
 
 ---@param ws perforated.Workspace
@@ -372,7 +454,15 @@ function M.open(ws, opts)
     base.tab(('perforated://changes/%s'):format(opts.user or opts.path or ws:client() or ''))
   require('perforated.hl').setup()
   vim.b[buf].perforated_ws = ws.key
-  local view = { ws = ws, buf = buf, win = win, opts = opts, changes = {}, more = true }
+  local view = {
+    ws = ws,
+    buf = buf,
+    win = win,
+    opts = opts,
+    changes = {},
+    more = true,
+    menu_layout = M.MENU_LAYOUT,
+  }
   view.tree = require('perforated.ui.tree').new(buf)
   view.actions = actions(view)
   keys.attach(buf, view.actions, view)

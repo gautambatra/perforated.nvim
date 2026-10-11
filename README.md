@@ -246,6 +246,12 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     - **On a shelved file:** diff against its base, diff against the workspace file; unshelve
       it, delete it from the shelf; history, time-lapse; mark; new changelist, sync, switch
       client.
+    - **On a submitted changelist** (Recent submitted, and `:P4 changes`): view, copy the
+      number; diff all files, integrate into this workspace, edit the description (yours),
+      sync the workspace to it, copy the Swarm URL; all my submitted changelists, sync, switch
+      client (client view only).
+    - **On a file of a submitted changelist:** open that revision; history, time-lapse, diff
+      against the previous revision, **diff against revision…** (`gD`); view its changelist.
   - The main keys: `r` revert, `gr` revert if unchanged (on a changelist: its unchanged
     files), `R` resolve, `gs` sync to the latest revision (a file, a changelist's files,
     "Needs attention"), `gS` sync the whole workspace, `gh` history, `t` time-lapse, `i` edit
@@ -302,7 +308,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   your client view unless you pass a path; `-u` shows another user's work. Pages load as you
   reach the end (or with `gn`), so no query is unbounded. `l` expands a changelist into its
   files (`h` collapses); on a file, `d` (or `<CR>`) diffs that revision against the previous
-  one, `gh` opens its history and `t` its time-lapse. `D` diffs every file in a tab. The
+  one, `gD` against a revision you pick, `o` opens that revision, `gh` its history, `t` its
+  time-lapse and `K` its changelist. `D` diffs every file in a tab. The
   client view's "Recent submitted" rows expand the same way. Keys match the client view:
   `i` edits a description (your own changelists), `<F5>` refreshes.
 
