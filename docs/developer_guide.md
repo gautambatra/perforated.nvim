@@ -1351,6 +1351,11 @@ list. Filtering is fuzzy and built to stay within a frame:
 - `TextChangedI` + a 15 ms debounce filter once per burst; `<CR>` reads the filter line
   itself, since typed-ahead keys run before `TextChangedI` fires.
 - It calls `hl.setup()`: `:P4 pick` can open outside any workspace.
+- The selected row is an extmark (`line_hl_group = PerforatedMenuSel`, under the match
+  highlights) moved with the cursor, not `'cursorline'`: configs often turn `'cursorline'` off
+  in windows that aren't current, which hid the selection while typing a filter.
+- Opened from insert mode (the check-out prompt fires on the first keystroke), it
+  `stopinsert`s unless `picker_mode = 'insert'`; otherwise `j`/`k` would type into the list.
 
 Verified in a real terminal (filtering, wrap-around, double-click, clicking outside); tests
 drive it headless with keys.

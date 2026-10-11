@@ -636,7 +636,8 @@ Set `picker = 'telescope'` (etc.) to choose one explicitly, `picker = 'perforate
 plugin's own list even with a picker installed, or `picker = 'select'` for `vim.ui.select`
 (e.g. with dressing.nvim). With `toast.backend = 'notify'` the fallback is `vim.ui.select`.
 `:checkhealth perforated` shows which one is used. Pickers open in **normal mode** (move with
-`j`/`k`, `i` to type a filter); `picker_mode = 'insert'` starts in the filter line instead.
+`j`/`k`, `i` to type a filter), even when opened from insert mode (the check-out prompt's
+changelist chooser); `picker_mode = 'insert'` starts in the filter line instead.
 That applies to the plugin's list, telescope and snacks.picker: fzf-lua and mini.pick have no
 normal mode.
 

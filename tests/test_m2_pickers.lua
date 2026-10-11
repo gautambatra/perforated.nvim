@@ -198,6 +198,48 @@ T['picker']['perforated list: typing filters (fuzzy); <CR> right after typing us
   wait_choice(second)
 end
 
+T['picker']['perforated list: opened from insert mode, it starts in normal mode'] = function()
+  -- The checkout prompt opens the changelist chooser on the first keystroke in a read-only file.
+  child.lua([[_G.start_list = function()
+    require('perforated.config').set({ picker = 'perforated' })
+    _G.choice = 'pending'
+    require('perforated.picker').pick({ title = 'T', items = { 'alpha', 'bravo', 'charlie' },
+      format = function(s) return s end,
+      on_choice = function(c) _G.choice = c and c[1] or vim.NIL end })
+  end
+  vim.keymap.set('i', '<F2>', '<Cmd>lua _G.start_list()<CR>')]])
+  child.type_keys('i', '<F2>')
+  vim.uv.sleep(50)
+  H.eq(child.api.nvim_get_mode().mode, 'n')
+  child.type_keys('j')
+  H.eq(list_row(), 2)
+  H.eq(child.lua_get('vim.v.errmsg'), '')
+  child.type_keys('<CR>')
+  wait_choice('bravo')
+end
+
+T['picker']['perforated list: the selected row is highlighted, also while typing a filter'] = function()
+  start_list()
+  local function sel_row()
+    return child.lua_get(([[(function()
+      local ns = vim.api.nvim_get_namespaces()['perforated.picker.list.sel']
+      local m = vim.api.nvim_buf_get_extmarks(%s.list_buf, ns, 0, -1, { details = true })
+      return #m == 1 and m[1][4].line_hl_group == 'PerforatedMenuSel' and m[1][2] + 1 or #m
+    end)()]]):format(LIST))
+  end
+  H.eq(sel_row(), 1)
+  child.type_keys('j', 'j')
+  H.eq(sel_row(), 3)
+  -- Not 'cursorline': configs often turn it off in windows that aren't current.
+  child.type_keys('i', 'a') -- the filter line has the cursor now
+  vim.uv.sleep(100)
+  H.eq(sel_row(), 1)
+  child.type_keys('<Down>')
+  H.eq(sel_row(), 2)
+  child.type_keys('<C-c>')
+  wait_choice(vim.NIL)
+end
+
 T['picker']['a picker plugin that fails falls back to the plugin list, not vim.ui.select'] = function()
   child.lua([[require('perforated.config').set({ picker = 'telescope' })]]) -- not installed
   child.lua([[vim.ui.select = function() _G.used_select = true end]])
