@@ -26,6 +26,17 @@ vim.api.nvim_create_autocmd({ 'BufReadPost', 'BufNewFile' }, {
   callback = on_buf,
 })
 
+-- File explorers (oil, netrw, …) in a workspace: the keymap preset's workspace keys
+-- (`<leader>pp`, …). Nothing is loaded unless the preset is on.
+vim.api.nvim_create_autocmd('FileType', {
+  group = group,
+  pattern = { 'oil', 'netrw', 'minifiles', 'NvimTree', 'neo-tree' },
+  desc = 'perforated: workspace keys in file explorers',
+  callback = function(ev)
+    require('perforated.keymaps').attach_explorer(ev.buf)
+  end,
+})
+
 -- Lazy-loaded after startup (plugin managers): pick up buffers that are already open.
 if vim.v.vim_did_enter == 1 then
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do

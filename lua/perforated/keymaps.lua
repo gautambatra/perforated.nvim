@@ -1,7 +1,8 @@
 --- `<Plug>` actions (defined cheaply in plugin/) and the opt-in buffer-local preset.
 ---
 --- The preset (`keymaps = 'default'`) is installed only in buffers of Perforce workspaces,
---- so other buffers never see perforated mappings.
+--- so other buffers never see perforated mappings. File explorers (oil, netrw, …) showing a
+--- directory inside a workspace get the part that needs no current file (`EXPLORER`).
 
 local M = {}
 
@@ -94,16 +95,30 @@ function M.run(name)
   end
 end
 
+--- Preset actions that need no current file: the ones a file explorer buffer gets.
+M.EXPLORER = {
+  view = true,
+  opened = true,
+  status = true,
+  info = true,
+  log = true,
+  messages = true,
+  hunks = true, -- all opened files
+  lookup = true,
+  sync = true, -- the whole workspace
+}
+
 --- Install the preset in a Perforce buffer (when enabled). User buffer-local maps win.
 ---@param buf integer
-function M.attach(buf)
+---@param only table<string, true>?  action names to map (default: the whole preset)
+function M.attach(buf, only)
   if require('perforated.config').get().keymaps ~= 'default' then
     return
   end
   -- maparg() looks at the current buffer, and buffers are also attached in the background.
   local function install()
     for lhs, name in pairs(M.PRESET) do
-      if vim.fn.maparg(lhs, 'n', false, true).buffer ~= 1 then
+      if (not only or only[name]) and vim.fn.maparg(lhs, 'n', false, true).buffer ~= 1 then
         vim.keymap.set('n', lhs, '<Plug>(perforated-' .. name .. ')', {
           buffer = buf,
           remap = true,
@@ -117,6 +132,22 @@ function M.attach(buf)
   else
     vim.api.nvim_buf_call(buf, install)
   end
+end
+
+--- A file explorer buffer (FileType oil, netrw, minifiles, NvimTree, neo-tree; plugin/): the
+--- `EXPLORER` keys when the directory it shows (oil, netrw; a tree
+--- explorer: the cwd) is inside a workspace.
+---@param buf integer
+function M.attach_explorer(buf)
+  if require('perforated.config').get().keymaps ~= 'default' then
+    return
+  end
+  local dir = require('perforated.core.workspace').buf_dir(buf)
+  require('perforated.core.activation').resolve(dir, function(ws)
+    if ws and vim.api.nvim_buf_is_valid(buf) then
+      M.attach(buf, M.EXPLORER)
+    end
+  end)
 end
 
 return M

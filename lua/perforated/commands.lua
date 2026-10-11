@@ -787,14 +787,7 @@ function M.resolve(scope, cb)
   if ws then
     return cb(ws)
   end
-  local name = vim.api.nvim_buf_get_name(0)
-  local dir
-  if vim.bo.buftype == '' and name ~= '' and not name:find('^%a[%w+.-]*://') then
-    dir = vim.fs.dirname(name)
-  else
-    dir = workspace.normalize(vim.uv.cwd() or '.')
-  end
-  require('perforated.core.activation').resolve(dir, function(found)
+  require('perforated.core.activation').resolve(workspace.buf_dir(), function(found)
     if found then
       return cb(found)
     end

@@ -836,6 +836,11 @@ becomes the command's entry in `:h perforated`.
 `M.actions` maps `<Plug>` names to functions (mostly `:P4` subcommands). `M.PRESET` is the
 opt-in `<leader>p…` preset; `M.attach(buf)` installs it in Perforce buffers when
 `keymaps = 'default'`, never overriding the user's own buffer-local mappings.
+`M.attach(buf, only)` limits it to some actions: `attach_explorer(buf)` (a `FileType` autocmd
+in plugin/ for oil, netrw, minifiles, NvimTree, neo-tree) maps `M.EXPLORER`, the actions that
+need no current file, when `workspace.buf_dir(buf)` is inside a workspace. `buf_dir` is the
+directory a buffer stands for: a file's directory, oil's `oil:///path/`, netrw's directory
+buffer, else the cwd; `:P4` commands use it to find the workspace when the buffer has none.
 
 #### `health.lua`
 `:checkhealth perforated`: Neovim version, `p4` binary and version, `P4CONFIG`/`P4ENVIRO`,

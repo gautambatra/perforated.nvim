@@ -224,6 +224,33 @@ T['commands']['workspace-only scope is refused outside a workspace'] = function(
   H.eq(H.wait_message(child, 'not in a Perforce workspace'), true)
 end
 
+T['commands']['a file explorer buffer (oil, netrw) resolves the directory it shows'] = function()
+  local root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  H.write(root .. '/sub/a.c', 'x')
+  child = H.child({ fake = { rules = info_rules(root) }, env = { P4CONFIG = '.p4config' } })
+  child.cmd('cd ' .. H.tmp()) -- cwd outside the workspace
+  local function resolved()
+    child.lua([[_G.got = nil
+      require('perforated.commands').resolve('workspace', function(ws) _G.got = ws.key end)]])
+    H.wait(child, '_G.got ~= nil')
+    return child.lua_get('_G.got')
+  end
+  -- oil: `oil:///path/`, buftype acwrite
+  child.lua(([[local b = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(b, 'oil://%s/sub/')
+    vim.bo[b].buftype = 'acwrite'
+    vim.bo[b].filetype = 'oil'
+    vim.api.nvim_set_current_buf(b)]]):format(root))
+  H.eq(resolved(), root)
+  -- netrw: a normal buffer named after the directory (the workspace root itself, whose
+  -- parent is outside it)
+  child.lua(([[local b = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(b, %q)
+    vim.api.nvim_set_current_buf(b)]]):format(root))
+  H.eq(resolved(), root)
+end
+
 T['commands']['plugin/ subcommand list matches the command table'] = function()
   child = H.child()
   local src = table.concat(vim.fn.readfile(H.root .. '/plugin/perforated.lua'), '\n')

@@ -784,6 +784,30 @@ T['modes']['<leader>pp opens the client view from a Perforce buffer'] = function
   )
 end
 
+T['modes']['a file explorer (oil) in a workspace gets the workspace keys: <leader>pp works'] = function()
+  setup({ keymaps = 'default' })
+  child.cmd('cd ' .. H.tmp()) -- cwd outside the workspace
+  local function explorer(dir)
+    child.lua(([[local b = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(b, 'oil://%s/')
+      vim.bo[b].buftype = 'acwrite'
+      vim.api.nvim_set_current_buf(b)
+      vim.bo[b].filetype = 'oil']]):format(dir))
+  end
+  explorer(H.tmp()) -- outside any workspace: nothing
+  vim.uv.sleep(100)
+  H.eq(child.fn.maparg('<leader>pp', 'n'), '')
+  explorer(root)
+  wait([[vim.fn.maparg('<leader>pp', 'n', false, true).buffer == 1]])
+  H.eq(child.fn.maparg('<leader>po', 'n', false, true).rhs, '<Plug>(perforated-opened)')
+  H.eq(child.fn.maparg('<leader>pd', 'n'), '') -- file keys: no current file here
+  H.eq(child.fn.maparg(']h', 'n'), '')
+  child.type_keys('\\', 'pp')
+  wait(
+    [[vim.bo.filetype == 'perforated' and vim.api.nvim_buf_get_name(0):find('perforated://client/', 1, true) ~= nil]]
+  )
+end
+
 T['modes']['the client view alone (no Perforce file open) still catches changes made elsewhere'] = function()
   setup()
   -- A shelf of b.txt, made from another terminal and reverted there: nothing is opened.
