@@ -986,7 +986,8 @@ blame and the LSP code-action server attach here.
 #### `signs.lua`
 `render(buf, hunks)` — one extmark per hunk with `end_row` spreading the sign over the
 range. `render_stale` puts a "stale" marker on line 1. `nav` (`]h`/`[h`), `preview` (a float
-with the hunk's unified diff) and `reset` (replace the hunk with the base lines).
+with the hunk's unified diff; closed by moving, insert mode, or `<Esc>` — a temporary mapping
+in the file's buffer that gives back a buffer-local `<Esc>` the user had) and `reset` (replace the hunk with the base lines).
 
 #### `status.lua`
 Statusline data only — never calls p4. `update(buf)` fills `vim.b.perforated_status_dict`
@@ -1353,7 +1354,9 @@ drive it headless with keys.
 Shared scaffolding: `tab(name)` / `float(name, title)` create the window and scratch buffer;
 `nav(view, title)` returns the standard navigation actions (fold, refresh, close, help, menu);
 `finish(view)` attaches keys, the footer (or a float's own footer line) and sets the filetype
-after the first paint; `date`, `first_line`; `base_line(hunks, lnum)` maps a buffer line to
+after the first paint; `esc_closes(buf, win, close)` maps `<Esc>` to close while the view is in
+a float and removes it otherwise (the client view calls it each time it is shown, since one
+view moves between float, tab and split); `date`, `first_line`; `base_line(hunks, lnum)` maps a buffer line to
 its base line through hunks (used by annotate and blame), and `base_map(hunks, n)` maps every
 line in one pass (annotate's render). `code_win(win)` gives a window that shows code (time-lapse,
 diff sides, files opened from views) the user's global `number` / `relativenumber`: new tabs

@@ -1138,6 +1138,28 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
   H.eq(last:find('Not in Shelf', 1, true), nil)
 end
 
+T['client view']['as a float it closes on <Esc> and q; in a tab <Esc> does nothing'] = function()
+  child.lua([[require('perforated.config').set({ client_view = { kind = 'float' } })]])
+  open_view()
+  local win = child.api.nvim_get_current_win()
+  H.eq(child.api.nvim_win_get_config(win).relative, 'editor')
+  child.type_keys('<Esc>')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  -- q too (it used to leave an empty float behind when only one editing window was open).
+  open_view()
+  win = child.api.nvim_get_current_win()
+  child.type_keys('q')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  -- The same view in a tab: <Esc> keeps its usual meaning.
+  child.lua([[require('perforated.config').set({ client_view = { kind = 'tab' } })]])
+  open_view()
+  win = child.api.nvim_get_current_win()
+  H.eq(child.api.nvim_win_get_config(win).relative, '')
+  child.type_keys('<Esc>')
+  H.eq(child.api.nvim_win_is_valid(win), true)
+  H.eq(child.bo.filetype, 'perforated')
+end
+
 T['client view']['changed files get ● (and unchanged ones are dimmed); saving updates it'] = function()
   open_view()
   local function row(text)

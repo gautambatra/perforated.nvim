@@ -1751,6 +1751,9 @@ end
 
 --- (Re)attach the key footer to the view's window.
 local function attach_footer(view, win)
+  require('perforated.views.base').esc_closes(view.buf, win, function()
+    M.close(view)
+  end)
   if view.footer then
     if view.footer.win == win and view.footer:alive() then
       return
@@ -1785,7 +1788,13 @@ function M.close(view)
   if view.kind == 'tab' and win and #vim.api.nvim_list_tabpages() > 1 then
     local tab = vim.api.nvim_win_get_tabpage(win)
     pcall(vim.cmd, 'tabclose ' .. vim.api.nvim_tabpage_get_number(tab))
-  elseif win and require('perforated.views.base').normal_wins() > 1 then
+  elseif
+    win
+    and (
+      vim.api.nvim_win_get_config(win).relative ~= '' -- a float can always go
+      or require('perforated.views.base').normal_wins() > 1
+    )
+  then
     pcall(vim.api.nvim_win_close, win, true)
   else
     vim.cmd('enew')

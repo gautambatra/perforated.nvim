@@ -157,13 +157,44 @@ function M.preview()
     title = (' hunk %s '):format(h.type),
     focusable = true,
   })
+  -- `<Esc>` closes it too (it doesn't move the cursor): a temporary mapping in the file's
+  -- buffer, giving back a buffer-local `<Esc>` the user had. `q`/`<Esc>` in the preview itself.
+  local saved = vim.fn.maparg('<Esc>', 'n', false, true)
+  saved = saved.buffer == 1 and saved or nil
+  local closed = false
+  local function close()
+    if closed then
+      return
+    end
+    closed = true
+    pcall(vim.api.nvim_win_close, win, true)
+    if vim.api.nvim_buf_is_valid(buf) then
+      pcall(vim.keymap.del, 'n', '<Esc>', { buffer = buf })
+      if saved then
+        vim.api.nvim_buf_call(buf, function()
+          vim.fn.mapset('n', false, saved)
+        end)
+      end
+    end
+  end
+  vim.keymap.set(
+    'n',
+    '<Esc>',
+    close,
+    { buffer = buf, nowait = true, desc = 'perforated: close preview' }
+  )
+  for _, lhs in ipairs({ 'q', '<Esc>' }) do
+    vim.keymap.set('n', lhs, close, { buffer = pbuf, nowait = true })
+  end
   vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI', 'InsertEnter', 'BufLeave' }, {
     buffer = buf,
     once = true,
-    callback = function()
-      pcall(vim.api.nvim_win_close, win, true)
-    end,
+    callback = close,
   })
+  vim.api.nvim_create_autocmd(
+    'WinClosed',
+    { pattern = tostring(win), once = true, callback = close }
+  )
   return win
 end
 

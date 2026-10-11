@@ -176,6 +176,20 @@ function M.close(view)
   vim.api.nvim_win_close(view.win, true)
 end
 
+--- Pop-ups close on `<Esc>` too, not only `q`: map it while the view is in a float, and
+--- remove it when the same buffer is shown in a tab or split (where `<Esc>` keeps its usual
+--- meaning). Outside the action registry, so `?` and the menu don't list it twice.
+---@param buf integer
+---@param win integer
+---@param close fun()
+function M.esc_closes(buf, win, close)
+  if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_config(win).relative ~= '' then
+    vim.keymap.set('n', '<Esc>', close, { buffer = buf, nowait = true, desc = 'perforated: Close' })
+  else
+    pcall(vim.keymap.del, 'n', '<Esc>', { buffer = buf })
+  end
+end
+
 --- Install keys and the footer (a float footer uses the window's own border footer).
 ---@param view table  { buf, win, tree, actions }
 function M.finish(view)
@@ -183,6 +197,9 @@ function M.finish(view)
   keys.attach(view.buf, view.actions, view)
   local float = vim.api.nvim_win_get_config(view.win).relative ~= ''
   local footer = not float and require('perforated.ui.footer').attach(view.win) or nil
+  M.esc_closes(view.buf, view.win, function()
+    M.close(view)
+  end)
   local function update()
     local chunks = keys.footer(view.actions, view.tree:node_at())
     if footer then

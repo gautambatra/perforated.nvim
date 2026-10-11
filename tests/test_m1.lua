@@ -378,6 +378,18 @@ T['ops']['hunk navigation, preview and reset'] = function()
   wait([[#require('perforated.buffer').get().hunks == 2]])
 end
 
+T['ops']['the hunk preview closes on <Esc>, and the buffer gets its own <Esc> back'] = function()
+  child.lua([[vim.keymap.set('n', '<Esc>', function() _G.mine = true end, { buffer = 0 })]])
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  local win = child.lua([[return require('perforated.signs').preview()]])
+  H.eq(child.api.nvim_win_is_valid(win), true)
+  child.type_keys('<Esc>')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  H.eq(child.lua_get('_G.mine'), vim.NIL) -- that <Esc> closed the preview, nothing else
+  child.type_keys('<Esc>')
+  H.eq(child.lua_get('_G.mine'), true) -- the user's mapping is back
+end
+
 T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it'] = function()
   child.cmd('P4 diff')
   wait('#vim.api.nvim_list_tabpages() == 2')
