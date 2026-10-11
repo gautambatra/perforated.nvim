@@ -330,6 +330,51 @@ T['changes'][':P4 changes -u bob shows only bob; D opens the CL diff'] = functio
   H.eq(vim.tbl_contains(names, 'perforated:////depot/b.txt#2'), true)
 end
 
+T['changes']["a user's submitted CL expands into its files; d diffs one against its previous revision"] = function()
+  child.cmd('P4 changes -u bob')
+  local function goto_text(t)
+    H.eq(
+      H.wait(
+        child,
+        ([[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find(%q, 1, true) ~= nil]]):format(
+          t
+        )
+      ),
+      true
+    )
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find(t, 1, true) then
+        child.api.nvim_win_set_cursor(0, { i, 0 })
+        return
+      end
+    end
+  end
+  goto_text('bob work')
+  H.eq(buf_text():find('//depot/b.txt', 1, true), nil) -- collapsed
+  child.type_keys('l')
+  goto_text('//depot/b.txt')
+  H.neq(child.api.nvim_get_current_line():find('edit', 1, true), nil)
+  H.neq(child.api.nvim_get_current_line():find('#2', 1, true), nil)
+  child.type_keys('d')
+  H.eq(H.wait(child, [[#vim.api.nvim_list_tabpages() == 3]]), true)
+  local names = child.lua_get(
+    [[vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0))]]
+  )
+  table.sort(names)
+  H.eq(names, { 'perforated:////depot/b.txt#1', 'perforated:////depot/b.txt#2' })
+  child.cmd('tabclose')
+  -- h on the file collapses its changelist; the files stay loaded for the next l.
+  goto_text('//depot/b.txt')
+  child.type_keys('h')
+  H.eq(
+    H.wait(
+      child,
+      [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/b.txt', 1, true)]]
+    ),
+    true
+  )
+end
+
 T['changes']["K on another user's submitted CL shows its description and files"] = function()
   child.cmd('P4 changes -u bob')
   H.eq(
