@@ -581,8 +581,9 @@ T['m4']["resolve: a GUI merge tool that can't open says why"] = function()
   local log = root .. '/merge.log'
   setup({
     merge = {
-      -- p4merge with an unreachable $DISPLAY: Qt's lines, then a crash.
-      tool = ("FAKE_MERGE_LOG=%s FAKE_MERGE_EXIT=134 FAKE_MERGE_STDERR='%s' %s"):format(
+      -- p4merge with an unreachable $DISPLAY: Qt's lines, then SIGABRT. `exec`, as bash does
+      -- for `sh -c 'tool …'`: Neovim sees the signal itself (code 0, signal 6), no shell's 134.
+      tool = ("FAKE_MERGE_LOG=%s FAKE_MERGE_SIGNAL=ABRT FAKE_MERGE_STDERR='%s' exec %s"):format(
         log,
         table.concat({
           'qt.qpa.xcb: could not connect to display :1',

@@ -112,6 +112,19 @@ function M.error_line(text)
   return pick
 end
 
+--- A `vim.system` result's exit code, counting death by a signal as the shell does (128 +
+--- signal). A tool that crashes (Qt aborting without a display: SIGABRT) reports code 0 and
+--- signal 6 when `sh -c` hands over to it (bash does for a single command), which looked
+--- like a clean exit; the shell running it by hand says 134.
+---@param res vim.SystemCompleted
+---@return integer
+function M.exit_code(res)
+  if res.signal and res.signal ~= 0 then
+    return 128 + res.signal
+  end
+  return res.code
+end
+
 --- Run `tool file…` (through `sh`, so the setting may carry arguments). `on_exit` gets the
 --- exit code and, when it failed, the line of its output that says why (`error_line`; its
 --- stderr, or for a terminal tool its screen) — e.g. "could not connect to display". A GUI
@@ -157,18 +170,19 @@ function M.run(ws, tool, files, on_exit)
       end)
     end
     vim.system(argv, { cwd = cwd, env = { PWD = cwd }, text = true }, function(res)
+      local code = M.exit_code(res)
       vim.schedule(function()
-        if res.code ~= 0 then
+        if code ~= 0 then
           require('perforated.core.debug').log(
             'warn',
             'tools',
             '%s exited with %d: %s',
             tool,
-            res.code,
+            code,
             res.stderr or ''
           )
         end
-        on_exit(res.code, res.code ~= 0 and M.error_line(res.stderr) or nil)
+        on_exit(code, code ~= 0 and M.error_line(res.stderr) or nil)
       end)
     end)
   end

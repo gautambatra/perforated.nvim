@@ -112,7 +112,8 @@ function M.external(ws, path, spec)
           else
             vim.system(argv, { cwd = cwd, env = { PWD = cwd }, detach = true }, function(res)
               cleanup()
-              if res.code ~= 0 and res.code ~= 1 then -- diff tools exit 1 for "files differ"
+              local code = require('perforated.tools').exit_code(res)
+              if code ~= 0 and code ~= 1 then -- diff tools exit 1 for "files differ"
                 vim.schedule(function()
                   notify(
                     'external diff failed: ' .. vim.trim(res.stderr or ''),

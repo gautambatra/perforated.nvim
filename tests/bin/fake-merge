@@ -6,4 +6,6 @@
 [ -n "$FAKE_MERGE_STDERR" ] && printf '%b\n' "$FAKE_MERGE_STDERR" >&2
 [ -n "$FAKE_MERGE_LOG" ] && printf '%s\n' "$@" > "$FAKE_MERGE_LOG"
 [ -n "$FAKE_MERGE_RESULT" ] && cp "$FAKE_MERGE_RESULT" "$4"
+# $FAKE_MERGE_SIGNAL: die by that signal instead (e.g. ABRT, like Qt without a display).
+[ -n "$FAKE_MERGE_SIGNAL" ] && kill -s "$FAKE_MERGE_SIGNAL" $$
 exit "${FAKE_MERGE_EXIT:-0}"
