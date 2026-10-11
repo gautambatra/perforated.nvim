@@ -12,6 +12,7 @@
 local M = {}
 
 local ns = vim.api.nvim_create_namespace('perforated.picker.list')
+local sel_ns = vim.api.nvim_create_namespace('perforated.picker.list.sel')
 local DEBOUNCE = 15 -- ms after a keystroke in the filter line: a burst of typing filters once
 local MARK = '● '
 local NOMARK = '  '
@@ -136,7 +137,9 @@ function M.open(spec, finish)
     width = list_w,
     height = list_h,
   }, true)
-  vim.wo[list_win][0].cursorline = true
+  -- The selected row is an extmark, not 'cursorline': configs commonly turn 'cursorline' off
+  -- in windows that aren't current, and the list isn't while the filter line has the cursor.
+  vim.wo[list_win][0].cursorline = false
   vim.wo[list_win][0].wrap = false
   local prev_win
   if prev_buf then
@@ -199,7 +202,20 @@ function M.open(spec, finish)
   end
   p.close = close
 
+  local function show_selection()
+    vim.api.nvim_buf_clear_namespace(list_buf, sel_ns, 0, -1)
+    if #p.shown == 0 or not vim.api.nvim_win_is_valid(list_win) then
+      return
+    end
+    local row = vim.api.nvim_win_get_cursor(list_win)[1]
+    p.sel_mark = vim.api.nvim_buf_set_extmark(list_buf, sel_ns, row - 1, 0, {
+      line_hl_group = 'PerforatedMenuSel',
+      priority = 100, -- under the fuzzy-match highlights
+    })
+  end
+
   local function update_preview()
+    show_selection()
     if not prev_buf or not vim.api.nvim_win_is_valid(list_win) then
       return
     end
@@ -386,6 +402,7 @@ function M.open(spec, finish)
         render()
         vim.api.nvim_win_set_cursor(list_win, { row, 0 })
         move(1)
+        update_preview()
       end
     end)
   end
@@ -465,6 +482,10 @@ function M.open(spec, finish)
   apply_filter()
   if require('perforated.config').get().picker_mode == 'insert' then
     to_filter()
+  elseif vim.api.nvim_get_mode().mode:find('^i') then
+    -- Opened from insert mode (the checkout prompt, on the first keystroke in a read-only
+    -- file): the list is driven from normal mode.
+    vim.cmd.stopinsert()
   end
   return p
 end
