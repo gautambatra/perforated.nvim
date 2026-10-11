@@ -35,8 +35,10 @@ end
 
 --- Pick a pending changelist (default included), or create a new one (any installed picker).
 ---@param ws perforated.Workspace
----@param cb fun(cl: string?, desc: string?)
----@param opts { title: string?, exclude: table<string, boolean>? }?  exclude: changes not to offer
+---@param cb fun(cl: string?, desc: string?, created: boolean?)  created: a new changelist made here
+---@param opts { title: string?, exclude: table<string, boolean>?, copy_desc: { change: string, desc: string }? }?
+---  exclude: changes not to offer; copy_desc: also offer a new changelist with that changelist's
+---  description, pre-filled in the editor (integrate)
 function M.pick_change(ws, cb, opts)
   opts = opts or {}
   local exclude = opts.exclude or {}
@@ -52,6 +54,9 @@ function M.pick_change(ws, cb, opts)
       end
     end
     items[#items + 1] = { change = 'new', desc = '' }
+    if opts.copy_desc then
+      items[#items + 1] = { change = 'new_copy', desc = opts.copy_desc.desc }
+    end
     require('perforated.picker').pick({
       title = opts.title or 'Changelist',
       items = items,
@@ -60,6 +65,8 @@ function M.pick_change(ws, cb, opts)
           return 'default'
         elseif c.change == 'new' then
           return '+ new changelist…'
+        elseif c.change == 'new_copy' then
+          return ("+ new changelist with CL %s's description…"):format(opts.copy_desc.change)
         end
         return ('%-8s %s'):format(c.change, vim.trim((c.desc or ''):match('[^\n]*') or ''))
       end,
@@ -69,8 +76,16 @@ function M.pick_change(ws, cb, opts)
         if not choice then
           return cb(nil)
         end
+        local function created(cl, desc)
+          cb(cl, desc, cl ~= nil)
+        end
         if choice.change == 'new' then
-          return M.new_change(ws, cb)
+          return M.new_change(ws, created)
+        elseif choice.change == 'new_copy' then
+          return require('perforated.views.change_editor').new(
+            ws,
+            { on_done = created, desc = choice.desc }
+          )
         end
         cb(choice.change, choice.desc)
       end,

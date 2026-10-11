@@ -1184,8 +1184,15 @@ tool runs) and `report` shows the outcome in a centred `float.menu` that waits f
 
 #### `integrate.lua`
 Cherry-pick: the source is the changelist's common directory; the target is a path or
-`-b branch` (remembered per session); preview (`integrate -n`) to quickfix, confirm,
-integrate, then resolve. Without a changelist, pick one from a source path's history.
+`-b branch` (remembered per session; `default_target` offers the client's stream). For a path,
+`source_root(src, tgt)` cuts the source to the target's depth so relative paths line up
+(`//s1/app/src` into `//s2/...` integrates `//s1/...@=CL` → `//s2/...`; `@=CL` keeps it to the
+changelist's files). The changelist comes from `checkout_prompt.pick_change` with
+`copy_desc`, which adds "+ new changelist with CL N's description…" (the editor pre-filled,
+`change_editor.new(ws, { desc })`, in normal mode); `pick_change` reports `created`, and a
+changelist created for an integrate that doesn't happen is deleted (`change -d`). Preview
+(`integrate -n`) to quickfix, confirm, integrate, then resolve. Without a changelist, pick one
+from a source path's history.
 
 #### `jobs.lua`, `ui/progress.lua`
 Long-running operations register as jobs: `:P4 jobs` (a live float that updates twice a second
