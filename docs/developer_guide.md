@@ -1217,8 +1217,12 @@ The action registry ([§17.5](#175-views-tree--registry)). `keys_of(action)` app
 overrides (`keys = { <id> = {...} | false }`, `keys.p4v = false`). `applies(action, node)`
 checks `kinds` and `when`. `attach(buf, actions, view)` creates one raw keymap per key (raw
 `nvim_buf_set_keymap` is faster than `vim.keymap.set`); keys shared by several actions
-dispatch to the first that applies to the node under the cursor (so `x` reverts a file but
-stops a reconcile scan). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
+dispatch to the first that applies to the node under the cursor (so `r` reverts a file but
+rescans on the reconcile section). A doubled key (`dd`) gets no mapping of its own, which would
+make every `d` wait 'timeoutlen': the `d` mapping reads the second key with `getcharstr()`, and
+only on a node where no single-key `d` action applies (a changelist), so a diff on a file
+still starts at once. `nomenu = 'layout'` keeps an action out of the generic menus but lets a
+menu layout list it (`Q`/`gQ` on changelists, `m` in the file menus). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
 clicked line (`cursor_to_mouse`), since the mapping replaces Vim's own cursor move; a click
 outside the view does nothing. `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
 footer). Keys of actions that take several items (`multi`) are also mapped in visual mode:
@@ -1269,7 +1273,7 @@ that lives only while the menu is open follows the pointer and redraws only when
 under it changes. `M.selected` exposes the highlight for tests, which move the pointer by
 stubbing `getmousepos()` (headless Neovim has none).
 An item `{ separator = true }` draws a full-width rule; an item's `hint` goes in a
-right-hand column, aligned across items. Supports multi-key choices (`gY`: a prefix waits for the rest), hidden `aliases`
+right-hand column, aligned across items. Supports multi-key choices (`gS`: a prefix waits for the rest), hidden `aliases`
 per item, and a *grace period* during which keys are captured for replay (for the check-out
 prompt, which can pop up mid-typing).
 

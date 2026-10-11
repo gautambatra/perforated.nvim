@@ -10,6 +10,10 @@
 ---     footer = 10,                         -- show in footer (lower = earlier)
 ---   }
 ---
+--- A doubled key (`dd`) shares its first key with single-key actions without delaying them:
+--- there's no `dd` mapping (which would make `d` wait 'timeoutlen'); `d` itself reads a second
+--- key, and only on a node where no single-key `d` action applies.
+---
 --- Users override keys per action: `keys = { diff = { 'D' } }` or `{ diff = false }`; the
 --- P4V layer (`keys.p4v = false`) can be disabled as a whole.
 
@@ -25,7 +29,8 @@ local M = {}
 ---@field run fun(items: any[], ctx: table)
 ---@field multi boolean?
 ---@field footer integer?
----@field nomenu boolean?       hide from the `.` menu (navigation keys)
+---@field nomenu boolean|'layout'|nil  hide from the `.` menu (navigation keys); 'layout': only
+---  where a menu layout lists it
 
 --- Effective keys of an action after user overrides.
 ---@param a perforated.Action
@@ -151,13 +156,24 @@ function M.attach(buf, actions, view)
   -- One mapping per key; several actions may share a key for different node kinds (e.g. `x`
   -- reverts a file but cancels a running scan), so pick the first that applies.
   local by_key, order = {}, {}
+  local doubles = {} ---@type table<string, perforated.Action[]>  'd' → actions on `dd`
+  local function key(lhs)
+    if not by_key[lhs] then
+      by_key[lhs] = {}
+      order[#order + 1] = lhs
+    end
+  end
   for _, a in ipairs(actions) do
     for _, lhs in ipairs(M.keys_of(a)) do
-      if not by_key[lhs] then
-        by_key[lhs] = {}
-        order[#order + 1] = lhs
+      local c = #lhs == 2 and lhs:sub(1, 1) == lhs:sub(2, 2) and lhs:sub(1, 1) or nil
+      if c and c:match('%a') then
+        doubles[c] = doubles[c] or {}
+        table.insert(doubles[c], a)
+        key(c)
+      else
+        key(lhs)
+        table.insert(by_key[lhs], a)
       end
-      table.insert(by_key[lhs], a)
     end
   end
   -- Visual mode: keys of actions that take several items act on the selected rows (like marks).
@@ -194,7 +210,7 @@ function M.attach(buf, actions, view)
     vim.api.nvim_buf_set_keymap(buf, 'n', lhs, '', {
       noremap = true,
       nowait = true,
-      desc = 'perforated: ' .. list[1].desc,
+      desc = 'perforated: ' .. (list[1] or doubles[lhs][1]).desc,
       callback = function()
         -- A mapped click (right-click → menu) replaces Vim's own cursor move: act on the line
         -- that was clicked, not wherever the cursor was. Clicks outside the view do nothing.
@@ -216,7 +232,21 @@ function M.attach(buf, actions, view)
             return M.dispatch(a, view)
           end
         end
-        M.dispatch(list[1], view) -- reports "does not apply here"
+        for _, a in ipairs(doubles[lhs] or {}) do
+          if M.applies(a, node) then
+            -- `dd`: only here does `d` wait for its second key.
+            local ok, second = pcall(vim.fn.getcharstr)
+            if ok and second == lhs then
+              return M.dispatch(a, view)
+            end
+            return
+          end
+        end
+        if list[1] then
+          M.dispatch(list[1], view) -- reports "does not apply here"
+        elseif doubles[lhs] then
+          M.dispatch(doubles[lhs][1], view)
+        end
       end,
     })
   end
@@ -228,7 +258,7 @@ end
 ---@return perforated.Action[]
 function M.valid(actions, node)
   return vim.tbl_filter(function(a)
-    return not a.nomenu and M.applies(a, node)
+    return not a.nomenu and M.applies(a, node) -- ('layout' ones only through a layout)
   end, actions)
 end
 
@@ -294,7 +324,7 @@ function M.menu_items(actions, node, layouts)
         id, label = e[1], e[2]
       end
       local a = by_id[id]
-      if a and not a.nomenu and M.applies(a, node) then
+      if a and a.nomenu ~= true and M.applies(a, node) then
         if sep then
           items[#items + 1] = { separator = true }
           sep = false

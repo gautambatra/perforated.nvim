@@ -841,8 +841,7 @@ local function actions(view)
     {
       id = 'refresh',
       desc = 'Refresh',
-      keys = { 'gr' },
-      p4v = { '<F5>' }, -- P4V's refresh key
+      keys = { '<F5>' }, -- P4V's refresh key (`gr` is "revert if unchanged" here)
       nomenu = true,
       run = function()
         M.refresh(view)
@@ -880,7 +879,7 @@ local function actions(view)
       id = 'mark',
       desc = 'Mark / unmark',
       keys = { 'm' },
-      nomenu = true,
+      nomenu = 'layout', -- in the file menus
       run = function()
         view.tree:mark()
         vim.cmd('normal! j')
@@ -1029,7 +1028,7 @@ local function actions(view)
       end,
     },
     {
-      -- On a changelist `<Del>` deletes the changelist itself.
+      -- On a changelist `dd` deletes the changelist itself.
       id = 'delete_shelved_change',
       desc = 'Delete shelved files',
       keys = { 'g<Del>' },
@@ -1093,8 +1092,8 @@ local function actions(view)
     },
     {
       id = 'get_latest',
-      desc = 'Get latest revision',
-      keys = { 'gy' },
+      desc = 'Sync to latest revision',
+      keys = { 'gs' },
       kinds = { opened_file = true },
       multi = true,
       footer = 43,
@@ -1125,8 +1124,8 @@ local function actions(view)
     },
     {
       id = 'get_latest_change',
-      desc = 'Get latest file revisions',
-      keys = { 'gy' },
+      desc = 'Sync to latest revision',
+      keys = { 'gs' },
       kinds = { change = true },
       footer = 43,
       when = function(item)
@@ -1138,8 +1137,8 @@ local function actions(view)
     },
     {
       id = 'get_latest_attention',
-      desc = 'Get latest revisions of these files',
-      keys = { 'gy' },
+      desc = 'Sync these files to latest revision',
+      keys = { 'gs' },
       kinds = { section = true },
       footer = 43,
       when = function(_, node)
@@ -1157,7 +1156,7 @@ local function actions(view)
     {
       id = 'sync',
       desc = 'Sync workspace',
-      keys = { 'gY' },
+      keys = { 'gS' },
       p4v = { '<C-S-g>' },
       run = function()
         require('perforated.ops').sync(ws, {}) -- asks for confirmation
@@ -1217,7 +1216,7 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'gL' },
+      keys = { 'gh' },
       p4v = { '<C-t>' },
       kinds = { opened_file = true, shelved_file = true },
       run = function(items)
@@ -1311,7 +1310,7 @@ local function actions(view)
     {
       id = 'revert',
       desc = 'Revert',
-      keys = { 'x' },
+      keys = { 'r' },
       p4v = { '<C-r>' },
       kinds = { opened_file = true, change = true },
       multi = true,
@@ -1339,7 +1338,7 @@ local function actions(view)
     {
       id = 'revert_if_unchanged',
       desc = 'Revert if unchanged',
-      keys = { 'X' },
+      keys = { 'gr' },
       kinds = { opened_file = true },
       multi = true,
       run = function(items)
@@ -1350,7 +1349,7 @@ local function actions(view)
     {
       id = 'revert_unchanged',
       desc = 'Revert unchanged files',
-      keys = { 'X' },
+      keys = { 'gr' },
       kinds = { change = true },
       multi = true,
       run = function(items)
@@ -1465,7 +1464,7 @@ local function actions(view)
     {
       id = 'delete_change',
       desc = 'Delete changelist',
-      keys = { '<Del>' },
+      keys = { 'dd' }, -- `d` waits for the second `d` only on changelists (ui/keys.lua)
       kinds = { change = true },
       when = function(item)
         return item.change ~= 'default'
@@ -1479,7 +1478,7 @@ local function actions(view)
     {
       id = 'edit_description',
       desc = 'Edit description',
-      keys = { 'C' },
+      keys = { 'i' },
       kinds = { change = true, submitted = true, have_cl = true },
       footer = 51,
       when = function(item)
@@ -1588,6 +1587,7 @@ local function actions(view)
       id = 'to_qf',
       desc = 'Send to quickfix',
       keys = { 'Q' },
+      nomenu = 'layout', -- a key everywhere; in the menu on changelists
       multi = true,
       footer = 60,
       run = function(items, ctx)
@@ -1598,6 +1598,7 @@ local function actions(view)
       id = 'to_loclist',
       desc = 'Send to location list',
       keys = { 'gQ' },
+      nomenu = 'layout',
       multi = true,
       run = function(items, ctx)
         M.to_qf(view, items, ctx, true)
@@ -1653,6 +1654,25 @@ M.MENU_LAYOUT.opened_file = {
   'history',
   'annotate',
   { 'timelapse', 'Time-lapse view' },
+  '-',
+  'mark',
+  '-',
+  { 'new_change', 'Create new changelist' },
+  { 'sync', 'Sync entire workspace' },
+  { 'switch_client', 'Switch client' },
+}
+-- A shelved file: its operations first, then the client's (like an opened file).
+M.MENU_LAYOUT.shelved_file = {
+  'diff_shelved',
+  'diff_shelved_workspace',
+  '-',
+  { 'unshelve', 'Unshelve file' },
+  { 'delete_shelved', 'Delete shelved file' },
+  '-',
+  'history',
+  { 'timelapse', 'Time-lapse view' },
+  '-',
+  'mark',
   '-',
   { 'new_change', 'Create new changelist' },
   { 'sync', 'Sync entire workspace' },
