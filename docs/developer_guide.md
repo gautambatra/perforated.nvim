@@ -1187,11 +1187,14 @@ Cherry-pick: the source is the changelist's common directory; the target is a pa
 `-b branch` (remembered per session; `default_target` offers the client's stream). For a path,
 `source_root(src, tgt)` cuts the source to the target's depth so relative paths line up
 (`//s1/app/src` into `//s2/...` integrates `//s1/...@=CL` → `//s2/...`; `@=CL` keeps it to the
-changelist's files). The changelist comes from `checkout_prompt.pick_change` with
+changelist's files), with `-F`: in a stream client p4 otherwise refuses any path integrate
+between streams ("Must use a stream view to merge into //s2"); outside streams it's ignored.
+The changelist comes from `checkout_prompt.pick_change` with
 `copy_desc`, which adds "+ new changelist with CL N's description…" (the editor pre-filled,
 `change_editor.new(ws, { desc })`, in normal mode); `pick_change` reports `created`, and a
 changelist created for an integrate that doesn't happen is deleted (`change -d`). Preview
-(`integrate -n`) to quickfix, confirm, integrate, then resolve. Without a changelist, pick one
+(`integrate -n`; an error there reports "integrate failed") to quickfix, confirm, integrate
+under a busy pop-up ("Merging CL N…"), then resolve. Without a changelist, pick one
 from a source path's history.
 
 #### `jobs.lua`, `ui/progress.lua`
@@ -1789,8 +1792,8 @@ A green `main` matters: the plugin is installed straight from `main` by lazy.nvi
 
 ## 28. Known limitations and ideas
 
-- **Integrate** is tested with path pairs; stream-to-stream integrates and `-b` branch specs
-  need real-world checking.
+- **Integrate** is tested with path pairs and between sibling streams from a stream client;
+  `-b` branch specs need real-world checking.
 - **Time-lapse** refuses files above `timelapse.max_bytes` instead of falling back to printing
   each revision.
 - **Windows** isn't supported (Linux, macOS, WSL are).

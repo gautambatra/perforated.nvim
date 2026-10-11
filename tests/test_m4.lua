@@ -944,6 +944,67 @@ T['m4']['integrate: the target defaults to the client stream; relative paths lin
   )
 end
 
+T['m4']['integrate: between streams, in a stream client (-F)'] = function()
+  setup()
+  -- //sd/main with two development children; a fix on dev goes to its sibling dev2.
+  server:p4(
+    { 'depot', '-i' },
+    { stdin = 'Depot: sd\nType: stream\nStreamDepth: //sd/1\nMap: sd/...\n' }
+  )
+  local function stream(name, typ, parent)
+    local o = { 'stream', '-o', '-t', typ }
+    if parent then
+      vim.list_extend(o, { '-P', parent })
+    end
+    server:p4({ 'stream', '-i' }, { stdin = server:p4(vim.list_extend(o, { name })).stdout })
+  end
+  local function stream_client(name, dir, s)
+    vim.fn.mkdir(dir, 'p')
+    local spec = server:p4({ 'client', '-o', '-S', s, name }).stdout
+    server:p4({ 'client', '-i' }, { stdin = (spec:gsub('\nRoot:[^\n]*', '\nRoot:\t' .. dir)) })
+  end
+  stream('//sd/main', 'mainline')
+  local main = server.dir .. '/smain'
+  stream_client('main_ws', main, '//sd/main')
+  server:submit_files('main_ws', main, { ['app/src/x.txt'] = 'v1\n' }, 'init')
+  stream('//sd/dev', 'development', '//sd/main')
+  stream('//sd/dev2', 'development', '//sd/main')
+  server:p4({ 'populate', '-S', '//sd/dev', '-r', '-d', 'br' }, { client = 'main_ws' })
+  server:p4({ 'populate', '-S', '//sd/dev2', '-r', '-d', 'br' }, { client = 'main_ws' })
+  local dev = server.dir .. '/sdev'
+  stream_client('dev_ws', dev, '//sd/dev')
+  server:p4({ 'sync', '-q' }, { client = 'dev_ws', cwd = dev })
+  server:p4({ 'edit', dev .. '/app/src/x.txt' }, { client = 'dev_ws', cwd = dev })
+  H.write(dev .. '/app/src/x.txt', 'fix\n')
+  server:p4({ 'submit', '-d', 'fix on dev' }, { client = 'dev_ws', cwd = dev })
+  local fix = server:p4({ 'changes', '-m1', '//sd/dev/...' }).stdout:match('Change (%d+)')
+  -- Neovim in a dev2 workspace
+  local dev2 = server.dir .. '/sdev2'
+  stream_client('dev2_ws', dev2, '//sd/dev2')
+  server:p4({ 'sync', '-q' }, { client = 'dev2_ws', cwd = dev2 })
+  server:p4config(dev2, 'dev2_ws')
+  child.cmd('edit ' .. dev2 .. '/app/src/x.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua([[
+    require('perforated.ui.prompt').input = function(o, cb) cb(o.default) end
+    vim.ui.select = function(items, _, cb) cb(items[1]) end -- default changelist
+  ]])
+  H.stub_menu(child) -- resolve's result pop-up
+  H.record_busy(child)
+  child.lua(
+    ([[require('perforated.integrate').run(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      fix
+    )
+  )
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), true)
+  -- a busy pop-up while p4 integrates (resolve's own follow)
+  H.eq(child.lua_get('_G.busy[1]'), { msg = ('Merging CL %s…'):format(fix), open = false })
+  local o = server:p4({ '-ztag', 'opened' }, { client = 'dev2_ws', cwd = dev2 }).stdout
+  H.neq(o:find('depotFile //sd/dev2/app/src/x.txt', 1, true), nil)
+  H.eq(table.concat(vim.fn.readfile(dev2 .. '/app/src/x.txt'), '\n'), 'fix')
+end
+
 T['m4']['integrate: into a new changelist with the original description, edited'] = function()
   setup()
   p4({ 'integrate', '//depot/main/...', '//depot/rel/...' })
