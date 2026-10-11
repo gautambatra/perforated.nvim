@@ -161,6 +161,7 @@ for _, name in ipairs({
   'submit',
   'shelve',
   'timelapse',
+  'view',
 }) do
   vim.api.nvim_set_keymap(
     'n',

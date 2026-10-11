@@ -389,6 +389,7 @@ only (your buffer-local mappings win).
   <Plug>(perforated-sync)
   <Plug>(perforated-sync-file)
   <Plug>(perforated-timelapse)
+  <Plug>(perforated-view)
 
 Preset (keymaps = "default"):
 
@@ -410,6 +411,7 @@ Preset (keymaps = "default"):
   <leader>pl     log
   <leader>pm     messages
   <leader>po     opened
+  <leader>pp     view
   <leader>pq     hunks
   <leader>pr     revert
   <leader>ps     status

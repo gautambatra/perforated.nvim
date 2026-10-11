@@ -742,6 +742,17 @@ T['modes']['keymap preset is buffer-local to Perforce buffers'] = function()
   H.eq(child.fn.maparg(']h', 'n'), '')
 end
 
+T['modes']['<leader>pp opens the client view from a Perforce buffer'] = function()
+  setup({ keymaps = 'default' })
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  H.eq(child.fn.maparg('<leader>pp', 'n', false, true).rhs, '<Plug>(perforated-view)')
+  child.type_keys('\\', 'pp') -- <leader> is the default backslash
+  wait(
+    [[vim.bo.filetype == 'perforated' and vim.api.nvim_buf_get_name(0):find('perforated://client/', 1, true) ~= nil]]
+  )
+end
+
 T['modes']['the client view alone (no Perforce file open) still catches changes made elsewhere'] = function()
   setup()
   -- A shelf of b.txt, made from another terminal and reverted there: nothing is opened.
