@@ -51,10 +51,12 @@ M.actions = {
   submit = cmd('submit'),
   shelve = cmd('shelve'),
   timelapse = cmd('timelapse'),
+  view = cmd('view'), -- the client view (`:P4`)
 }
 
 --- Preset: lhs → action name.
 M.PRESET = {
+  ['<leader>pp'] = 'view',
   [']h'] = 'next-hunk',
   ['[h'] = 'prev-hunk',
   ['<leader>pv'] = 'preview-hunk',

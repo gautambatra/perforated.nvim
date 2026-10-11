@@ -771,12 +771,14 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-sync)           <Plug>(perforated-sync-file)
 <Plug>(perforated-resolve)        <Plug>(perforated-submit)
 <Plug>(perforated-shelve)         <Plug>(perforated-timelapse)
+<Plug>(perforated-view)
 ```
 
 `keymaps = 'default'` installs this preset, in Perforce buffers only:
 
 | Keys | Action |
 |---|---|
+| `<leader>pp` | Client view (`:P4`) |
 | `]h` / `[h` | Next / previous hunk |
 | `<leader>pv` / `<leader>pu` | Preview / reset hunk |
 | `<leader>pe` | Check out (with the menu) |
