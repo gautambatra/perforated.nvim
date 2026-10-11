@@ -1138,6 +1138,26 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
   H.eq(last:find('Not in Shelf', 1, true), nil)
 end
 
+T['client view']['as a float, its keys are in the border footer (not a footer window under it)'] = function()
+  child.lua([[require('perforated.config').set({ client_view = { kind = 'float' } })]])
+  open_view()
+  local footer = [[table.concat(vim.tbl_map(function(c) return c[1] end,
+    vim.api.nvim_win_get_config(0).footer or {}), '')]]
+  wait(footer .. [[:find('. actions', 1, true) ~= nil]])
+  H.eq(child.lua_get([[vim.api.nvim_win_get_config(0).footer_pos]]), 'right')
+  -- No footer float: every float in the tab is the view itself.
+  H.eq(
+    child.lua_get([[#vim.tbl_filter(function(w)
+      return vim.api.nvim_win_get_config(w).relative ~= ''
+    end, vim.api.nvim_tabpage_list_wins(0))]]),
+    1
+  )
+  -- It follows the cursor, like the footer of the tab view.
+  local before = child.lua_get(footer)
+  goto_line('Shelved (1)')
+  wait(footer .. (' ~= %q'):format(before))
+end
+
 T['client view']['as a float it closes on <Esc> and q; in a tab <Esc> does nothing'] = function()
   child.lua([[require('perforated.config').set({ client_view = { kind = 'float' } })]])
   open_view()

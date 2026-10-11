@@ -1741,11 +1741,21 @@ local function view_win(view)
 end
 
 function M.update_footer(view)
-  if view.footer then
+  local border = view.footer_border and vim.api.nvim_win_is_valid(view.footer_border)
+  if view.footer or border then
     -- The view's own cursor: a refresh may finish while another window is current.
     local win = view_win(view)
     local row = win and vim.api.nvim_win_get_cursor(win)[1]
-    view.footer:set(keys.footer(view.actions, row and view.tree:node_at(row)))
+    local chunks = keys.footer(view.actions, row and view.tree:node_at(row))
+    if view.footer then
+      view.footer:set(chunks)
+    else
+      pcall(
+        vim.api.nvim_win_set_config,
+        view.footer_border,
+        { footer = chunks, footer_pos = 'right' }
+      )
+    end
   end
 end
 
@@ -1754,6 +1764,17 @@ local function attach_footer(view, win)
   require('perforated.views.base').esc_closes(view.buf, win, function()
     M.close(view)
   end)
+  -- In a float, the keys go in its border (like other pop-ups): a footer float would sit under
+  -- it (footers are layered for normal windows) and cover the last line.
+  local float = vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_config(win).relative ~= ''
+  view.footer_border = float and win or nil
+  if float then
+    if view.footer then
+      view.footer:detach()
+      view.footer = nil
+    end
+    return
+  end
   if view.footer then
     if view.footer.win == win and view.footer:alive() then
       return
