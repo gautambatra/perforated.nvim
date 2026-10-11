@@ -671,7 +671,29 @@ T['client view']['layout: 4 columns per level; the shelf lines up with the files
   H.eq(line_of('Shelved (1)'):match('^        ▶ ') ~= nil, true)
   child.type_keys('l')
   H.eq(line_of('//depot/a.txt'):match('^            edit') ~= nil, true)
-  H.eq(line_of('CL 1  20'):match('^    CL 1') ~= nil, true)
+  H.eq(line_of('CL 1  20'):match('^    ▶ CL 1') ~= nil, true) -- expands into its files
+end
+
+T['client view']['a recent submitted CL expands into its files; d diffs one; it stays open across a refresh'] = function()
+  open_view()
+  goto_line('▶ CL 1') -- (not the Sync CL line, which shows the same description)
+  H.eq(has_line('//depot/d.txt'), false)
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/d.txt#1', 1, true) ~= nil]]
+  )
+  goto_line('//depot/d.txt#1')
+  H.neq(child.api.nvim_get_current_line():find('add', 1, true), nil)
+  child.type_keys('d') -- an add: the left side is empty
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+  child.cmd('tabclose')
+  wait([[vim.bo.filetype == 'perforated']])
+  -- Still expanded after a refresh.
+  child.type_keys('<F5>')
+  wait(('not (%s).loading'):format(view_expr(root)))
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/d.txt#1', 1, true) ~= nil]]
+  )
 end
 
 T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = function()

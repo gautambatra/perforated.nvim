@@ -302,7 +302,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   your client view unless you pass a path; `-u` shows another user's work. Pages load as you
   reach the end (or with `gn`), so no query is unbounded. `l` expands a changelist into its
   files (`h` collapses); on a file, `d` (or `<CR>`) diffs that revision against the previous
-  one, `gh` opens its history and `t` its time-lapse. `D` diffs every file in a tab.
+  one, `gh` opens its history and `t` its time-lapse. `D` diffs every file in a tab. The
+  client view's "Recent submitted" rows expand the same way. Keys match the client view:
+  `i` edits a description (your own changelists), `<F5>` refreshes.
 
 </details>
 
