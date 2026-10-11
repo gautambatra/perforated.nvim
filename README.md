@@ -300,7 +300,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   view for every opened file.
 - **`:P4 changes [-u user] [-m N] [path]`: submitted changelists,** newest first. Scoped to
   your client view unless you pass a path; `-u` shows another user's work. Pages load as you
-  reach the end (or with `gn`), so no query is unbounded.
+  reach the end (or with `gn`), so no query is unbounded. `l` expands a changelist into its
+  files (`h` collapses); on a file, `d` (or `<CR>`) diffs that revision against the previous
+  one, `gh` opens its history and `t` its time-lapse. `D` diffs every file in a tab.
 
 </details>
 

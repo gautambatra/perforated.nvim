@@ -3,6 +3,8 @@
 --- Scoped to the client view by default (`path` overrides). `gn` / reaching the end loads the
 --- next page (`path@<oldest-1>`), so no query is unbounded. Actions: D diff all files, C edit
 --- description (own CLs), K view changelist, y copy CL number, Q quickfix of the CL's files is left to the diff tab.
+--- `l` expands a changelist into its files (one `describe -s`, on first expand); `d` diffs a
+--- file's revision against the previous one.
 
 local base = require('perforated.views.base')
 local cls = require('perforated.changelists')
@@ -12,12 +14,58 @@ local M = {}
 
 local first_line = base.first_line
 
-local function node_for(c)
-  local t = tonumber(c.time)
+--- A file of a submitted changelist: `#rev` against `#rev-1`.
+local function file_node(change, f)
+  f.status, f.change = 'submitted', change
   return {
+    id = ('subf:%s:%s'):format(change, f.depotFile),
+    kind = 'submitted_file',
+    item = f,
+    text = {
+      { ('%-10s'):format(f.action or ''), 'PerforatedAction' },
+      { f.depotFile, 'PerforatedPath' },
+      { '#' .. (f.rev or '?'), 'PerforatedRev' },
+    },
+  }
+end
+
+--- Fill a changelist node with its files (first expand, and again after a reload).
+local function load_files(view, node)
+  local change = node.item.change
+  node.children =
+    { { id = node.id .. ':loading', kind = 'note', text = { { 'loading…', 'PerforatedDim' } } } }
+  cls.describe(view.ws, { change }, {}, function(by)
+    local d = by[change]
+    local files = {}
+    for _, f in ipairs(d and d.files or {}) do
+      files[#files + 1] = file_node(change, f)
+    end
+    if #files == 0 then
+      files[1] = {
+        id = node.id .. ':none',
+        kind = 'note',
+        text = { { d and 'no files' or 'could not describe CL ' .. change, 'PerforatedDim' } },
+      }
+    end
+    node.children = files
+    if vim.api.nvim_buf_is_valid(view.buf) then
+      view.tree:render()
+    end
+  end)
+end
+
+local function node_for(view, c)
+  local t = tonumber(c.time)
+  local node
+  node = {
     id = 'sub:' .. c.change,
     kind = 'submitted',
     item = c,
+    open = false,
+    children = {},
+    on_open = function(n)
+      load_files(view, n)
+    end,
     text = {
       { 'CL ' .. c.change, 'PerforatedChangelist' },
       { '  ' .. (t and os.date('%Y-%m-%d', t) or ''), 'PerforatedDim' },
@@ -25,6 +73,11 @@ local function node_for(c)
       { '  ' .. first_line(c.desc), 'PerforatedPath' },
     },
   }
+  if view.tree.folds[node.id] then -- expanded before a reload: fetch its files again
+    node.loaded = true
+    load_files(view, node)
+  end
+  return node
 end
 
 local function render(view)
@@ -36,7 +89,7 @@ local function render(view)
   )
   roots[1] = { id = 'hdr', kind = 'header', text = { { title, 'PerforatedTitle' } } }
   for _, c in ipairs(view.changes) do
-    roots[#roots + 1] = node_for(c)
+    roots[#roots + 1] = node_for(view, c)
   end
   if view.more then
     roots[#roots + 1] = {
@@ -93,6 +146,62 @@ end
 local function actions(view)
   local ws = view.ws
   return {
+    {
+      id = 'expand',
+      desc = 'Expand / collapse (files)',
+      keys = { 'l', '<Tab>' },
+      nomenu = true,
+      run = function(_, ctx)
+        if ctx.node and ctx.node.children then
+          view.tree:toggle(ctx.node)
+        end
+      end,
+    },
+    {
+      id = 'collapse',
+      desc = 'Collapse',
+      keys = { 'h', '<S-Tab>' },
+      nomenu = true,
+      run = function()
+        view.tree:collapse_at_cursor()
+      end,
+    },
+    {
+      id = 'diff_file',
+      desc = 'Diff against the previous revision',
+      keys = { 'd', '<CR>' },
+      p4v = { '<C-d>' },
+      kinds = { submitted_file = true },
+      footer = 10,
+      run = function(items)
+        local left, right = require('perforated.views.describe')._sides(items[1])
+        require('perforated.revs').diff(ws, left, right)
+      end,
+    },
+    {
+      id = 'history',
+      desc = 'File history',
+      keys = { 'gh' },
+      p4v = { '<C-t>' },
+      kinds = { submitted_file = true },
+      run = function(items)
+        require('perforated.views.history').open(ws, items[1].depotFile)
+      end,
+    },
+    {
+      id = 'timelapse',
+      desc = 'Time-lapse',
+      keys = { 't' },
+      p4v = { '<C-S-t>' },
+      kinds = { submitted_file = true },
+      when = function(item)
+        return not require('perforated.history').deleted(item.action)
+      end,
+      run = function(items)
+        local f = items[1]
+        require('perforated.views.timelapse').open(ws, f.depotFile, { rev = tonumber(f.rev) })
+      end,
+    },
     {
       id = 'diff_all',
       desc = 'Diff all files',

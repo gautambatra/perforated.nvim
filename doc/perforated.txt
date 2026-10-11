@@ -329,6 +329,11 @@ Time-lapse (:P4 timelapse)                              *perforated-timelapse*
 
 Submitted changelists (:P4 changes)                       *perforated-changes*
 
+  l <Tab>         Expand / collapse (files)
+  h <S-Tab>       Collapse
+  d <CR> <C-d>    Diff against the previous revision
+  gh <C-t>        File history
+  t <C-S-t>       Time-lapse
   D <CR> <C-d>    Diff all files
   C               Edit description
   g@              Sync workspace to this CL
