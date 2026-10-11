@@ -97,4 +97,17 @@ T['stack']["the plugin's picker: filter, list and preview are one pop-up"] = fun
   H.eq(child.lua_get('_G.st(_G.hist)'), 'dim')
 end
 
+T['stack']['plain text in a pop-up has the pop-up background, not the editor one'] = function()
+  -- Normal and NormalFloat with different backgrounds (as in most themes).
+  child.lua([[
+    vim.api.nvim_set_hl(0, 'Normal', { fg = '#cccccc', bg = '#111111' })
+    require('perforated.hl').setup()
+  ]])
+  -- CL descriptions and paths (client view, history) use PerforatedPath: no colours of its own,
+  -- so a float's text sits on NormalFloat's background, not a band of Normal's.
+  local path = child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedPath', link = false })]])
+  H.eq({ path.fg, path.bg }, { nil, nil })
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedPath' }).link]]), vim.NIL)
+end
+
 return T

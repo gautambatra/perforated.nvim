@@ -583,7 +583,7 @@ can override them:
   PerforatedMenuSel            PmenuSel
   PerforatedModified           Changed
   PerforatedOffline            DiagnosticError
-  PerforatedPath               Normal
+  PerforatedPath               plain text (the window's own colours)
   PerforatedPickerMatch        Special
   PerforatedPreviewAdd         DiffAdd
   PerforatedPreviewDelete      DiffDelete

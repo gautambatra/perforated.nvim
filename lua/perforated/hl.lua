@@ -24,7 +24,6 @@ local LINKS = {
   PerforatedPreviewAdd = 'DiffAdd',
   PerforatedSection = 'Title',
   PerforatedHeader = 'Comment',
-  PerforatedPath = 'Normal',
   PerforatedCount = 'PerforatedModified', -- a changelist's opened-file count, when non-zero
   PerforatedAction = 'Statement',
   PerforatedRev = 'Comment',
@@ -73,6 +72,9 @@ end
 
 --- Fixed colours, for meanings no standard group carries reliably.
 M.COLORS = {
+  -- Paths and descriptions: plain text in the window's own colours. Not a link to Normal, whose
+  -- background would show as a band in floats (their background is NormalFloat's).
+  PerforatedPath = {},
   -- Orange: needs action, but isn't an error (and stays apart from stale's warning colour).
   PerforatedUnresolved = { fg = '#ff8700', ctermfg = 208 },
 }

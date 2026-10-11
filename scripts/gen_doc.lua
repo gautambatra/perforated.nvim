@@ -231,6 +231,7 @@ table.sort(groups)
 for _, g in ipairs(groups) do
   local target = links[g]
     or (g == 'PerforatedUnchanged' and 'between Normal and Comment')
+    or (g == 'PerforatedPath' and "plain text (the window's own colours)")
     or (require('perforated.hl').COLORS[g] and require('perforated.hl').COLORS[g].fg)
     or 'annotate age gradient (annotate.gradient)'
   add(('  %-28s %s'):format(g, target))
