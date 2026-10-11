@@ -274,7 +274,7 @@ T['client view']['stale / unresolved files: their ● and path take the badge co
   H.eq(g['● '], 'PerforatedStale')
   -- syncing the opened file schedules a resolve: unresolved outranks stale
   server:p4({ 'sync', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
-  child.type_keys('gr')
+  child.type_keys('<F5>')
   wait(
     ([[vim.iter((%s).data.opened or {}):any(function(f) return f.unresolved ~= nil end)]]):format(
       view_expr(root)
@@ -359,10 +359,10 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
     end
   end)()]])
   H.expect.no_equality(footer:find('d diff', 1, true), nil)
-  H.expect.no_equality(footer:find('x revert', 1, true), nil)
+  H.expect.no_equality(footer:find('r revert', 1, true), nil)
 end
 
-T['client view']['<F5> refreshes the view (like gr)'] = function()
+T['client view']['<F5> refreshes the view'] = function()
   open_view()
   H.eq(has_line('b.txt'), true)
   -- Reverted outside the plugin: nothing tells the view, until <F5>.
@@ -382,7 +382,7 @@ T['client view']['h/l fold, and folds survive refresh'] = function()
   goto_line('CL 2  Fix parser')
   child.type_keys('h')
   H.eq(has_line('a.txt'), false)
-  child.type_keys('gr')
+  child.type_keys('<F5>')
   wait(('not (%s).loading'):format(view_expr(root)))
   vim.uv.sleep(200)
   H.eq(has_line('a.txt'), false)
@@ -391,11 +391,11 @@ T['client view']['h/l fold, and folds survive refresh'] = function()
   H.eq(has_line('a.txt'), true)
 end
 
-T['client view']['x reverts the file under the cursor; view refreshes'] = function()
+T['client view']['r reverts the file under the cursor; view refreshes'] = function()
   open_view()
   child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   goto_line('b.txt')
-  child.type_keys('x')
+  child.type_keys('r')
   wait(
     ([[not vim.tbl_contains(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), 'b.txt')
     and not table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), '\n'):find('b.txt', 1, true)]]):format(
@@ -412,20 +412,20 @@ T['client view']['V selects rows for multi-file actions (a CL and its files coun
     require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 2 end]])
   -- the default CL's two files, selected with V
   goto_line('b.txt')
-  child.type_keys('V', 'j', 'x')
+  child.type_keys('V', 'j', 'r')
   wait('_G.asked ~= nil')
   H.eq(child.lua_get('_G.asked'), 'Revert 2 files? Local changes will be lost.')
   H.eq(child.fn.mode(), 'n') -- visual mode left
   -- the CL row and both its files selected: still 2 files
   child.lua('_G.asked = nil')
   goto_line('default')
-  child.type_keys('V', 'j', 'j', 'x')
+  child.type_keys('V', 'j', 'j', 'r')
   wait('_G.asked ~= nil')
   H.eq(child.lua_get('_G.asked'), 'Revert 2 files? Local changes will be lost.')
   -- and it really reverts them
   child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   goto_line('b.txt')
-  child.type_keys('V', 'j', 'x')
+  child.type_keys('V', 'j', 'r')
   wait(
     [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true)]]
   )
@@ -590,10 +590,10 @@ T['client view']['c creates a changelist from the description editor'] = functio
   )
 end
 
-T['client view']['C edits a pending description; only the Description field changes'] = function()
+T['client view']['i edits a pending description; only the Description field changes'] = function()
   open_view()
   goto_line('CL 2  Fix parser')
-  child.type_keys('C')
+  child.type_keys('i')
   wait([[vim.bo.filetype == 'perforated-description']])
   H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'Fix parser', 'second line' })
   child.type_keys('ggA', ' (edited)', '<Esc>', ':w<CR>')
@@ -604,10 +604,10 @@ T['client view']['C edits a pending description; only the Description field chan
   H.expect.no_equality(spec:find('//depot/a.txt', 1, true), nil) -- files untouched
 end
 
-T['client view']['C on a submitted CL updates it with -u'] = function()
+T['client view']['i on a submitted CL updates it with -u'] = function()
   open_view()
   goto_line('initial import')
-  child.type_keys('C')
+  child.type_keys('i')
   wait([[vim.bo.filetype == 'perforated-description']])
   child.type_keys('ggA', ' v2', '<Esc>', '<C-s>')
   wait([[vim.bo.filetype ~= 'perforated-description']])
@@ -616,10 +616,10 @@ T['client view']['C on a submitted CL updates it with -u'] = function()
   H.expect.no_equality(out:find('initial import v2', 1, true), nil)
 end
 
-T['client view']['C is not offered on the default changelist'] = function()
+T['client view']['i is not offered on the default changelist'] = function()
   open_view()
   goto_line('default')
-  child.type_keys('C')
+  child.type_keys('i')
   H.eq(child.bo.filetype, 'perforated')
   H.eq(H.wait_message(child, 'does not apply here'), true)
 end
@@ -690,7 +690,7 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   end
   goto_line('b.txt')
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), true)
-  H.eq(vim.tbl_contains(ids(), 'Get latest revision'), false) -- b.txt isn't stale
+  H.eq(vim.tbl_contains(ids(), 'Sync to latest revision'), false) -- b.txt isn't stale
   H.eq(vim.tbl_contains(ids(), 'Revert if unchanged'), true)
   H.eq(vim.tbl_contains(ids(), 'Sync workspace'), true)
   H.eq(vim.tbl_contains(ids(), 'Copy CL number'), false)
@@ -701,9 +701,9 @@ T['client view']['labels, fold triangles, shelved colour and CL-only yank'] = fu
   H.eq(vim.tbl_contains(ids(), 'Diff against have revision'), false)
   goto_line('CL 2  Fix parser')
   H.eq(vim.tbl_contains(ids(), 'Revert unchanged files'), true)
-  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), false) -- a.txt isn't stale
+  H.eq(vim.tbl_contains(ids(), 'Sync to latest revision'), false) -- a.txt isn't stale
   goto_line('default')
-  H.eq(vim.tbl_contains(ids(), 'Get latest file revisions'), true) -- c.txt is
+  H.eq(vim.tbl_contains(ids(), 'Sync to latest revision'), true) -- c.txt is
   goto_line('CL 2  Fix parser')
   child.type_keys('y')
   H.eq(child.fn.getreg('"'), '2')
@@ -774,7 +774,7 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     'View changelist',
     'Diff all files',
     'Send to quickfix',
-    'Get latest file revisions',
+    'Sync to latest revision',
     '-',
     'Revert unchanged files',
     'Revert files',
@@ -827,6 +827,85 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
   )
 end
 
+T['client view']['dd deletes an empty changelist; d still diffs files at once'] = function()
+  local out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tscratch\n' }
+  ).stdout
+  local cl = out:match('Change (%d+) created')
+  open_view()
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
+  -- d then another key on a changelist: nothing happens.
+  goto_line('CL ' .. cl)
+  child.type_keys('d', 'j')
+  vim.uv.sleep(300)
+  H.eq(has_line('scratch'), true)
+  goto_line('CL ' .. cl)
+  child.type_keys('d', 'd')
+  wait(
+    ('not table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("scratch", 1, true)'):format(
+      view_expr(root)
+    )
+  )
+  H.eq(
+    server:p4({ 'changes', '-s', 'pending' }, { cwd = root }).stdout:find('scratch', 1, true),
+    nil
+  )
+  -- On a file a single d diffs, without waiting for a second key.
+  H.write(root .. '/b.txt', 'b2\n')
+  -- (The delete refreshes the view, which redraws the rows: settle on b.txt first.)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  vim.uv.sleep(300)
+  goto_line('b.txt')
+  child.type_keys('d')
+  -- (Let the child take the key before waiting inside it: vim.wait doesn't process typeahead.)
+  vim.uv.sleep(200)
+  wait([[#vim.api.nvim_list_tabpages() == 3]])
+end
+
+T['client view']['Q/gQ are keys everywhere but only on a changelist menu; the shelved-file menu'] = function()
+  open_view()
+  H.eq(vim.tbl_contains(menu_labels('Needs attention'), 'Send to quickfix'), false)
+  H.eq(vim.tbl_contains(menu_labels('b.txt'), 'Send to location list'), false)
+  goto_line('Needs attention')
+  child.type_keys('Q') -- still a shortcut
+  wait([[#vim.fn.getqflist() > 0]])
+  child.cmd('cclose')
+  goto_line('Shelved (1)')
+  child.type_keys('l')
+  H.eq(menu_labels('//depot/a.txt'), {
+    'Diff shelved vs base revision',
+    'Diff shelved vs workspace file',
+    '-',
+    'Unshelve file',
+    'Delete shelved file',
+    '-',
+    'File history',
+    'Time-lapse view',
+    '-',
+    'Mark / unmark',
+    '-',
+    'Create new changelist',
+    'Sync entire workspace',
+    'Switch client',
+  })
+end
+
+T['client view']['gr reverts an unchanged file; gh opens its history'] = function()
+  open_view()
+  goto_line('b.txt') -- opened, unchanged
+  child.type_keys('gr')
+  wait(
+    ('not table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("b.txt", 1, true)'):format(
+      view_expr(root)
+    )
+  )
+  H.eq(opened()['//depot/b.txt'], nil)
+  goto_line('a.txt')
+  child.type_keys('gh')
+  wait([[vim.api.nvim_buf_get_name(0):find('perforated://history/', 1, true) ~= nil]])
+end
+
 T['client view']['file menu: fixed order, groups, only what applies'] = function()
   open_view()
   local tail = {
@@ -837,6 +916,8 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
     'File history',
     'Annotate',
     'Time-lapse view',
+    '-',
+    'Mark / unmark',
     '-',
     'Create new changelist',
     'Sync entire workspace',
@@ -860,7 +941,7 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
   -- c.txt is stale; a.txt (CL 2) can be shelved
   H.eq(
     vim.list_slice(menu_labels('c.txt'), 1, 3),
-    { 'Open file', 'Get latest revision', 'Get revision…' }
+    { 'Open file', 'Sync to latest revision', 'Get revision…' }
   )
   H.eq(vim.tbl_contains(menu_labels('a.txt'), 'Shelve'), true)
 end
@@ -1695,7 +1776,7 @@ T['client view']['reconcile scans on expand; a opens found files'] = function()
   H.eq(opened()['//depot/new.txt'], 'default')
 end
 
-T['client view']['multi-key actions (gY) can be chosen from the action menu'] = function()
+T['client view']['multi-key actions (gS) can be chosen from the action menu'] = function()
   open_view()
   child.lua(
     [[require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 3 end]]
@@ -1703,7 +1784,7 @@ T['client view']['multi-key actions (gY) can be chosen from the action menu'] = 
   goto_line('b.txt')
   child.type_keys('.')
   vim.uv.sleep(300) -- the menu waits for keys (no RPC meanwhile)
-  child.type_keys('g', 'Y')
+  child.type_keys('g', 'S')
   wait([[_G.asked == 'Sync the whole workspace?']])
 end
 

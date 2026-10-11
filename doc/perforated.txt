@@ -180,7 +180,7 @@ Client view (:P4)                                     *perforated-client-view*
   [[              Previous section
   g1 <C-1>        Go to Pending
   g2 <C-2>        Go to Submitted
-  gr <F5>         Refresh
+  <F5>            Refresh
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu
@@ -197,33 +197,33 @@ Client view (:P4)                                     *perforated-client-view*
   g<Del>          Delete shelved files
   P <C-s>         Submit
   R               Resolve
-  gy              Get latest revision
+  gs              Sync to latest revision
   g@              Get revision…
-  gy              Get latest file revisions
-  gy              Get latest revisions of these files
-  gY <C-S-g>      Sync workspace
+  gs              Sync to latest revision
+  gs              Sync these files to latest revision
+  gS <C-S-g>      Sync workspace
   gn              All my submitted changelists
   g@              Sync workspace to this CL
   I               Integrate (cherry-pick) into this workspace
   gd              Describe changelist
   gX              Copy Swarm review URL
   g/ <C-g>        Go to changelist / path / user
-  gL <C-t>        File history
+  gh <C-t>        File history
   t <C-S-t>       Time-lapse
   b               Annotate
   w               Diff shelved vs workspace file
   K               View changelist
   D <C-d>         Diff all files
   o               Open file
-  x <C-r>         Revert
-  X               Revert if unchanged
-  X               Revert unchanged files
+  r <C-r>         Revert
+  gr              Revert if unchanged
+  gr              Revert unchanged files
   gm              Move to changelist
   gm              Move all files to another changelist
   y               Copy CL number
   c <C-n>         New changelist
-  <Del>           Delete changelist
-  C               Edit description
+  dd              Delete changelist
+  i               Edit description
   a               Open for add / edit / delete as found
   x               Cancel scan
   r               Reconcile: scan again
