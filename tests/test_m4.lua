@@ -576,6 +576,51 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   H.eq(menu.keys, { '<CR>', 'c' })
 end
 
+T['m4']["resolve: a GUI merge tool that can't open says why"] = function()
+  -- What the tool printed (here: a GUI tool's display error) is the reason.
+  local log = root .. '/merge.log'
+  setup({
+    merge = {
+      tool = ('FAKE_MERGE_LOG=%s FAKE_MERGE_EXIT=1 FAKE_MERGE_STDERR=%q %s'):format(
+        log,
+        'qt.qpa.xcb: could not connect to display',
+        H.root .. '/tests/bin/fake-merge'
+      ),
+    },
+    diff = { external_terminal = false }, -- run as a GUI tool
+  })
+  child.lua([[vim.env.DISPLAY = ':0']])
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.lua([[vim.bo.readonly = false]])
+  child.api.nvim_buf_set_lines(0, 0, 1, false, { 'mine1' })
+  child.cmd('write')
+  bob_submits('main/a.txt', 'bob1\nl2\nl3\nl4\nl5\n')
+  p4({ 'sync' })
+  H.stub_menu(child)
+  local function resolve()
+    child.lua([[_G.r = nil
+      _G.ws = _G.ws or require('perforated').workspace()
+      require('perforated.resolve').run(_G.ws, nil,
+        function(n, left) _G.r = { n, left } end)]])
+    wait('_G.r ~= nil')
+    H.eq(child.lua_get('_G.r'), { 0, 1 })
+    return child.lua_get('_G.menus[#_G.menus]').header[2]
+  end
+  H.eq(
+    resolve(),
+    '  main/a.txt  (merge tool exited with 1: qt.qpa.xcb: could not connect to display)'
+  )
+  H.eq(vim.fn.filereadable(log), 1)
+  -- No display at all (tmux started outside the desktop): said before launching anything.
+  vim.fn.delete(log)
+  child.lua([[vim.env.DISPLAY = nil; vim.env.WAYLAND_DISPLAY = nil]])
+  if child.lua_get([[vim.fn.has('mac')]]) == 0 then
+    H.neq(resolve():find('no display: $DISPLAY and $WAYLAND_DISPLAY are unset', 1, true), nil)
+    H.eq(vim.fn.filereadable(log), 0) -- the tool never ran
+  end
+end
+
 T['m4'][':P4 reopen moves the current file to another changelist'] = function()
   setup()
   local cl = new_change('target')

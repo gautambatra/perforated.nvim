@@ -97,11 +97,15 @@ local function merge_one(ws, rec, tool, cb)
     vim.fn.writefile(mine, f.merged)
     local before = table.concat(mine, '\n')
     require('perforated.core.debug').log('info', 'resolve', 'merge tool for %s: %s', path, tool)
-    require('perforated.tools').run(ws, tool, { f.base, f.theirs, path, f.merged }, function(code)
+    local tools = require('perforated.tools')
+    tools.run(ws, tool, { f.base, f.theirs, path, f.merged }, function(code, terr)
       local result = vim.fn.readfile(f.merged)
       vim.fn.delete(dir, 'rf')
       if code ~= 0 then
-        return cb(false, ('merge tool exited with %d'):format(code))
+        -- Say why when the tool said (e.g. "could not connect to display").
+        local reason = code == -1 and terr
+          or ('merge tool exited with %d'):format(code) .. (terr and (': ' .. terr) or '')
+        return cb(false, reason)
       end
       if table.concat(result, '\n') == before then
         return cb(false, 'merge result unchanged (merge cancelled?)')

@@ -103,6 +103,12 @@ function M.external(ws, path, spec)
               { term = true, cwd = cwd, env = { PWD = cwd }, on_exit = cleanup }
             )
             vim.cmd('startinsert')
+          elseif require('perforated.tools').no_display() then
+            cleanup()
+            notify(
+              'external diff: ' .. require('perforated.tools').no_display(),
+              vim.log.levels.ERROR
+            )
           else
             vim.system(argv, { cwd = cwd, env = { PWD = cwd }, detach = true }, function(res)
               cleanup()

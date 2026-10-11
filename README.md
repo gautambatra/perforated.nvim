@@ -483,7 +483,11 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
   **centred busy pop-up** says so (it closes while your merge tool runs, so it doesn't cover
   it); at the end a **centred pop-up that waits for a key** says what happened: merged
   automatically, merged with your merge tool, and every file left unresolved with the reason
-  (`c` opens the quickfix list). The editor stays usable throughout. It runs as a job (`:P4 jobs`, `:P4 cancel`)
+  (`c` opens the quickfix list). When the merge tool fails, the reason includes what it
+  printed (e.g. a GUI tool's "could not connect to display"). A GUI tool such as p4merge
+  needs `$DISPLAY` or `$WAYLAND_DISPLAY` on Linux: without either it isn't launched, and the
+  pop-up says so. Inside tmux that usually means the server was started outside your desktop
+  session. The editor stays usable throughout. It runs as a job (`:P4 jobs`, `:P4 cancel`)
   without the usual call timeout, since `resolve -am` merges on your machine and can take a
   while. There's no merge logic in the plugin.
 - **Delete and move:** `:P4 delete [file…]` (after a confirmation; the buffer is closed) and
