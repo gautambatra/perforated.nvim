@@ -1425,8 +1425,11 @@ bisection so they never crowd. Windows are created with `nvim_open_win({ split =
 #### `views/changes.lua`, `views/change_info.lua`, `views/change_editor.lua`
 `:P4 changes` (submitted changelists, paged; a changelist row expands, on first `l`, into its
 files with one `describe -s` (`submitted_file` rows: `d` diffs `#rev-1` ↔ `#rev` through
-`describe._sides`); an expanded row reloads its files after a refresh. `expandable(view, node)`
-and `diff_file(ws, f)` are shared with the client view's "Recent submitted"); the `K` popup (full description, files,
+`describe._sides`); an expanded row reloads its files after a refresh. `expandable(view, node)`,
+`diff_file(ws, f)`, `file_actions(ws)` (open, diff, diff against revision…) and
+`MENU_LAYOUT` (`submitted`, `submitted_file`; entries an action list lacks are skipped, so
+the client view's extra groups vanish in `:P4 changes`) are shared with the client view's
+"Recent submitted"); the `K` popup (full description, files,
 shelved files; `fetch` gets them, `render` builds lines + highlights, `show` opens the float,
 and `previewer(ws)` puts the same content in a picker's preview buffer: a placeholder, then
 the content once fetched, cached per changelist for that picker, and written only while the
