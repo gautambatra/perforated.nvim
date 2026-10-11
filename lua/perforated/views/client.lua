@@ -394,7 +394,8 @@ local function build(view, data)
   -- Recent submitted (mine)
   local sub_children = {}
   for _, c in ipairs(data.submitted or {}) do
-    sub_children[#sub_children + 1] = {
+    -- Expands into its files, as in :P4 changes.
+    sub_children[#sub_children + 1] = require('perforated.views.changes').expandable(view, {
       id = 'sub:' .. c.change,
       kind = 'submitted',
       item = c,
@@ -403,7 +404,7 @@ local function build(view, data)
         { '  ' .. short_date(c.time), 'PerforatedDim' },
         { '  ' .. first_line(c.desc), 'PerforatedPath' },
       },
-    }
+    })
   end
   local nsub = #sub_children
   if data.submitted then
@@ -926,6 +927,17 @@ local function actions(view)
       end,
     },
     {
+      id = 'diff_submitted',
+      desc = 'Diff against the previous revision',
+      keys = { 'd' },
+      p4v = { '<C-d>' },
+      kinds = { submitted_file = true },
+      footer = 10,
+      run = function(items)
+        require('perforated.views.changes').diff_file(ws, items[1])
+      end,
+    },
+    {
       id = 'diff_revision',
       desc = 'Diff against revision…',
       keys = { 'gD' },
@@ -1218,7 +1230,7 @@ local function actions(view)
       desc = 'File history',
       keys = { 'gh' },
       p4v = { '<C-t>' },
-      kinds = { opened_file = true, shelved_file = true },
+      kinds = { opened_file = true, shelved_file = true, submitted_file = true },
       run = function(items)
         local it = items[1]
         require('perforated.views.history').open(
@@ -1233,12 +1245,20 @@ local function actions(view)
       desc = 'Time-lapse',
       keys = { 't' },
       p4v = { '<C-S-t>' },
-      kinds = { opened_file = true, shelved_file = true },
+      kinds = { opened_file = true, shelved_file = true, submitted_file = true },
       when = function(item)
+        if item and item.status == 'submitted' then -- a revision of a submitted changelist
+          return not require('perforated.history').deleted(item.action)
+        end
         return item and item.action ~= 'add' and item.action ~= 'branch'
       end,
       run = function(items)
-        require('perforated.views.timelapse').open(ws, items[1].depotFile or items[1].clientFile)
+        local it = items[1]
+        require('perforated.views.timelapse').open(
+          ws,
+          it.depotFile or it.clientFile,
+          { rev = it.status == 'submitted' and tonumber(it.rev) or nil }
+        )
       end,
     },
     {

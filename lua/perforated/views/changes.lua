@@ -2,7 +2,7 @@
 ---
 --- Scoped to the client view by default (`path` overrides). `gn` / reaching the end loads the
 --- next page (`path@<oldest-1>`), so no query is unbounded. Actions: D diff all files, C edit
---- description (own CLs), K view changelist, y copy CL number, Q quickfix of the CL's files is left to the diff tab.
+--- description (own CLs; `i`), K view changelist, y copy CL number, Q quickfix of the CL's files is left to the diff tab.
 --- `l` expands a changelist into its files (one `describe -s`, on first expand); `d` diffs a
 --- file's revision against the previous one.
 
@@ -54,18 +54,38 @@ local function load_files(view, node)
   end)
 end
 
+--- Make a submitted-changelist node expand into its files (here and in the client view's
+--- "Recent submitted"). `view` needs `ws`, `buf` and `tree`.
+---@param view table
+---@param node perforated.TreeNode
+---@return perforated.TreeNode node
+function M.expandable(view, node)
+  node.open = false
+  node.children = {}
+  node.on_open = function(n)
+    load_files(view, n)
+  end
+  if view.tree.folds[node.id] then -- expanded before a refresh: fetch its files again
+    node.loaded = true
+    load_files(view, node)
+  end
+  return node
+end
+
+--- Diff a submitted file's revision against the previous one.
+---@param ws perforated.Workspace
+---@param f table  a `submitted_file` item
+function M.diff_file(ws, f)
+  local left, right = require('perforated.views.describe')._sides(f)
+  require('perforated.revs').diff(ws, left, right)
+end
+
 local function node_for(view, c)
   local t = tonumber(c.time)
-  local node
-  node = {
+  local node = {
     id = 'sub:' .. c.change,
     kind = 'submitted',
     item = c,
-    open = false,
-    children = {},
-    on_open = function(n)
-      load_files(view, n)
-    end,
     text = {
       { 'CL ' .. c.change, 'PerforatedChangelist' },
       { '  ' .. (t and os.date('%Y-%m-%d', t) or ''), 'PerforatedDim' },
@@ -73,11 +93,7 @@ local function node_for(view, c)
       { '  ' .. first_line(c.desc), 'PerforatedPath' },
     },
   }
-  if view.tree.folds[node.id] then -- expanded before a reload: fetch its files again
-    node.loaded = true
-    load_files(view, node)
-  end
-  return node
+  return M.expandable(view, node)
 end
 
 local function render(view)
@@ -174,8 +190,7 @@ local function actions(view)
       kinds = { submitted_file = true },
       footer = 10,
       run = function(items)
-        local left, right = require('perforated.views.describe')._sides(items[1])
-        require('perforated.revs').diff(ws, left, right)
+        M.diff_file(ws, items[1])
       end,
     },
     {
@@ -216,7 +231,7 @@ local function actions(view)
     {
       id = 'edit_description',
       desc = 'Edit description',
-      keys = { 'C' },
+      keys = { 'i' }, -- as in the client view
       kinds = { submitted = true },
       footer = 20,
       when = function(item)
@@ -312,8 +327,7 @@ local function actions(view)
     {
       id = 'refresh',
       desc = 'Refresh',
-      keys = { 'gr' },
-      p4v = { '<F5>' }, -- P4V's refresh key
+      keys = { '<F5>' }, -- P4V's refresh key (as in the client view)
       nomenu = true,
       run = function()
         reload(view)

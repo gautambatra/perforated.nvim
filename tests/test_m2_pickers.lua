@@ -363,6 +363,14 @@ T['changes']["a user's submitted CL expands into its files; d diffs one against 
   table.sort(names)
   H.eq(names, { 'perforated:////depot/b.txt#1', 'perforated:////depot/b.txt#2' })
   child.cmd('tabclose')
+  -- Same keys as the client view: i edits a description, <F5> refreshes (gr and C are gone).
+  local function map(lhs)
+    return child.lua_get(('vim.fn.maparg(%q, "n", false, true).desc or ""'):format(lhs))
+  end
+  H.eq(map('i'), 'perforated: Edit description')
+  H.eq(map('<F5>'), 'perforated: Refresh')
+  H.eq(map('gr'):find('perforated', 1, true), nil)
+  H.eq(map('C'):find('perforated', 1, true), nil)
   -- h on the file collapses its changelist; the files stay loaded for the next l.
   goto_text('//depot/b.txt')
   child.type_keys('h')

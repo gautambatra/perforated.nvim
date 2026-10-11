@@ -189,6 +189,7 @@ Client view (:P4)                                     *perforated-client-view*
   A               Toggle scope: this client / all my clients
   W               Switch client (pick one of your clients)
   d <C-d>         Diff against have revision
+  d <C-d>         Diff against the previous revision
   gD              Diff against revision…
   d <C-d>         Diff shelved vs base revision
   s               Shelve
@@ -335,7 +336,7 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
   gh <C-t>        File history
   t <C-S-t>       Time-lapse
   D <CR> <C-d>    Diff all files
-  C               Edit description
+  i               Edit description
   g@              Sync workspace to this CL
   I               Integrate (cherry-pick) into this workspace
   gd              Describe changelist
@@ -344,7 +345,7 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
   K               View changelist
   y               Copy CL number
   gn              Load more
-  gr <F5>         Refresh
+  <F5>            Refresh
   q <C-w>         Close
   ?               Help
   . <RightMouse>  Action menu
