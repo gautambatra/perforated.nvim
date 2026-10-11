@@ -815,7 +815,15 @@ function M.dispatch(name, o)
   end
   local args = o.fargs or {}
   M.resolve(cmd.scope, function(ctx)
-    cmd.run(ctx, o, args)
+    if not ctx or (ctx.info and ctx.settings) then
+      return cmd.run(ctx, o, args)
+    end
+    -- A first command (no Perforce file opened yet) mustn't run before the client and user
+    -- are known: `:P4 pick pending` would fail with "unknown client/user". An unreachable
+    -- server still runs the command, which then reports it.
+    ctx:ensure_info(function()
+      cmd.run(ctx, o, args)
+    end)
   end)
 end
 

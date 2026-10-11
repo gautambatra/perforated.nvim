@@ -821,7 +821,10 @@ decides the context: `'none'` (no Perforce needed: log, debug, jobs), `'workspac
 outside a workspace) or `'connection'` (uses the workspace if there is one, else the
 connection context). `M.resolve(scope, cb)` finds the context: the current buffer's workspace,
 the workspace of the file's or cwd's directory (through activation, including env-only
-setups), or the connection context. `parse_file_args` handles `-c CL` and file arguments
+setups), or the connection context. `M.dispatch` then runs the command, after
+`ctx:ensure_info()` when the context's client and user aren't known yet: a first command in a
+fresh Neovim (no Perforce file opened, so nothing has run `p4 info`) would otherwise fail with
+"unknown client/user". `parse_file_args` handles `-c CL` and file arguments
 (default: the current file). `M.names()` feeds completion and the doc generator; each `desc`
 becomes the command's entry in `:h perforated`.
 

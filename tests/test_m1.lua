@@ -756,6 +756,25 @@ T['modes']['the client view alone (no Perforce file open) still catches changes 
   wait(text .. ':find("b.txt", 1, true) ~= nil')
 end
 
+T['modes'][':P4 pick pending as the first command (no Perforce file open) knows the client'] = function()
+  setup()
+  child.cmd('cd ' .. root)
+  child.lua([[
+    _G.errors = {}
+    local notify = require('perforated.ui.toast').notify
+    require('perforated.ui.toast').notify = function(msg, level, ...)
+      if level == vim.log.levels.ERROR then table.insert(_G.errors, msg) end
+      return notify(msg, level, ...)
+    end
+    vim.ui.select = function(items, opts, cb) _G.labels = vim.tbl_map(opts.format_item, items); cb(nil) end
+    require('perforated.config').set({ picker = 'select' })
+  ]])
+  child.cmd('P4 pick pending')
+  wait([[_G.labels ~= nil or #_G.errors > 0]])
+  H.eq(child.lua_get('_G.errors'), {})
+  H.eq(child.lua_get('_G.labels')[1], 'default  (0 files)')
+end
+
 T['stale'] = MiniTest.new_set({
   hooks = {
     pre_case = function()
