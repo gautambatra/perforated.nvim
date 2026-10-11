@@ -880,6 +880,126 @@ T['m4']['integrate: preview, confirm, integrate into a branch, resolve'] = funct
   H.eq(table.concat(vim.fn.readfile(root .. '/rel/b.txt'), '\n'), 'b-fix')
 end
 
+T['m4']['integrate: the target defaults to the client stream; relative paths line up'] = function()
+  setup()
+  -- Two "streams" as depot paths; the changed files sit a few levels below the root.
+  for _, f in ipairs({ 's1/app/src/core/x.txt', 's1/app/src/util/y.txt', 's1/top.txt' }) do
+    H.write(root .. '/' .. f, 'v1\n')
+    p4({ 'add', root .. '/' .. f })
+  end
+  p4({ 'submit', '-d', 's1' })
+  p4({ 'integrate', '//depot/s1/...', '//depot/s2/...' })
+  p4({ 'submit', '-d', 'branch s2' })
+  p4({ 'edit', root .. '/s1/app/src/core/x.txt', root .. '/s1/app/src/util/y.txt' })
+  H.write(root .. '/s1/app/src/core/x.txt', 'fix\n')
+  H.write(root .. '/s1/app/src/util/y.txt', 'fix\n')
+  p4({ 'submit', '-d', 'fix in s1' })
+  local fix = server:p4({ 'changes', '-m1', '//depot/s1/...' }).stdout:match('Change (%d+)')
+  child.lua([[_G.defaults = {}
+    require('perforated.ui.prompt').input = function(o, cb)
+      table.insert(_G.defaults, o.default) cb(o.default) end
+    vim.ui.select = function(items, _, cb) cb(items[1]) end -- default changelist
+    _G.ws = require('perforated').workspace()
+    _G.ws.info.clientStream = '//depot/s2']])
+  H.stub_menu(child) -- resolve's result pop-up
+  child.lua(
+    ([[require('perforated.integrate').run(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      fix
+    )
+  )
+  wait('_G.r ~= nil')
+  -- the files' common directory is //depot/s1/app/src; the target the stream root, and the
+  -- files land at the same paths in s2
+  H.eq(child.lua_get('_G.defaults'), { '//depot/s2/...' })
+  H.eq(child.lua_get('_G.r'), true)
+  local o = opened()
+  H.eq(o['//depot/s2/app/src/core/x.txt'].action, 'integrate')
+  H.eq(o['//depot/s2/app/src/util/y.txt'].action, 'integrate')
+  H.eq(o['//depot/s2/top.txt'], nil)
+  H.eq(table.concat(vim.fn.readfile(root .. '/s2/app/src/core/x.txt'), '\n'), 'fix')
+
+  -- No default: not a stream client, or the source is in the client's stream.
+  local function default_for(stream, src)
+    return child.lua_get(([[(function()
+      local ws = _G.ws
+      ws.info.clientStream, ws.integrate_target = %s, nil
+      return require('perforated.integrate').default_target(ws, %q)
+    end)()]]):format(stream and ('%q'):format(stream) or 'nil', src))
+  end
+  H.eq(default_for(nil, '//depot/s1/app'), '')
+  H.eq(default_for('//depot/s1', '//depot/s1/app'), '')
+  H.eq(default_for('//depot/s2', '//depot/s1'), '//depot/s2/...') -- the stream root itself
+  -- a target as deep as the source: as it is; a shallower one: the source cut to its depth
+  local function root(src, tgt)
+    return child.lua_get(([[require('perforated.integrate').source_root(%q, %q)]]):format(src, tgt))
+  end
+  H.eq(root('//depot/s1/app/src', '//depot/s2/app/src'), '//depot/s1/app/src')
+  H.eq(root('//depot/s1/app/src', '//depot/s2'), '//depot/s1')
+  H.eq(root('//depot/s1', '//depot/s2/app'), '//depot/s1')
+  -- the last answer wins over the stream
+  child.lua([[_G.ws.integrate_target = '//depot/rel/...']])
+  H.eq(
+    child.lua_get([[require('perforated.integrate').default_target(_G.ws, '//depot/s1/app')]]),
+    '//depot/rel/...'
+  )
+end
+
+T['m4']['integrate: into a new changelist with the original description, edited'] = function()
+  setup()
+  p4({ 'integrate', '//depot/main/...', '//depot/rel/...' })
+  p4({ 'submit', '-d', 'branch rel' })
+  bob_submits('main/b.txt', 'b-fix\n', 'Fix the b parser\n\nDetails here.')
+  local fix = server:p4({ 'changes', '-m1', '//depot/main/b.txt' }).stdout:match('Change (%d+)')
+  child.lua([[
+    require('perforated.ui.prompt').input = function(_, cb) cb('//depot/rel/...') end
+    vim.ui.select = function(items, o, cb)
+      _G.labels = vim.tbl_map(o.format_item, items)
+      _G.picker_title = o.prompt
+      cb(items[#items]) -- the last: a new changelist with the description
+    end
+  ]])
+  child.lua([[require('perforated.config').set({ picker = 'select' })]])
+  H.stub_menu(child) -- resolve's result pop-up
+  child.lua(
+    ([[require('perforated.integrate').run(require('perforated').workspace(), %q, function(ok) _G.r = ok end)]]):format(
+      fix
+    )
+  )
+  wait([[vim.bo.filetype == 'perforated-description']])
+  local labels = child.lua_get('_G.labels')
+  H.eq(labels[#labels], ("+ new changelist with CL %s's description…"):format(fix))
+  H.eq(labels[#labels - 1], '+ new changelist…')
+  -- pre-filled, in normal mode, to edit before saving
+  H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'Fix the b parser', '', 'Details here.' })
+  H.eq(child.api.nvim_get_mode().mode, 'n')
+  child.type_keys('A', ' (from main)', '<C-s>')
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), true)
+  local cl = opened()['//depot/rel/b.txt'].change
+  H.neq(cl, 'default')
+  H.neq(p4({ 'describe', '-s', cl }):find('Fix the b parser (from main)', 1, true), nil)
+
+  -- Cancelled at the preview: the changelist made for it is deleted again.
+  p4({ 'revert', '//...' })
+  p4({ 'change', '-d', cl })
+  local function pending()
+    return server:p4({ 'changes', '-s', 'pending' }).stdout
+  end
+  H.eq(pending(), '')
+  child.lua([[_G.r = nil
+    require('perforated.ui.prompt').confirm = function() return 2 end]])
+  child.lua(
+    ([[require('perforated.integrate').run(require('perforated.core.workspace').list()[1], %q, function(ok) _G.r = ok end)]]):format(
+      fix
+    )
+  )
+  wait([[vim.bo.filetype == 'perforated-description']])
+  child.type_keys('<C-s>')
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), false)
+  H.eq(pending(), '')
+end
+
 -- Fake p4: a slow sync streams output; :P4 jobs shows it and :P4 cancel stops it.
 T['sync monitoring'] = function()
   local r = H.tmp()

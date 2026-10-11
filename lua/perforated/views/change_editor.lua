@@ -281,7 +281,7 @@ end
 
 --- Create a new (empty) pending changelist from a description entered in the float.
 ---@param ws perforated.Workspace
----@param opts { on_done: fun(change: string?, desc: string?)? }?
+---@param opts { on_done: fun(change: string?, desc: string?)?, desc: string? }?  desc: pre-filled (instead of the template)
 function M.new(ws, opts)
   opts = opts or {}
   local template = config.get().change.template
@@ -300,8 +300,10 @@ function M.new(ws, opts)
   end
   open_float({
     title = 'New changelist',
-    lines = template and vim.split(template, '\n', { plain = true }) or { '' },
-    insert = true,
+    lines = opts.desc and vim.split(vim.trim(opts.desc), '\n', { plain = true })
+      or template and vim.split(template, '\n', { plain = true })
+      or { '' },
+    insert = not opts.desc, -- a copied description: start in normal mode, to read it first
     on_save = function(desc, close)
       saving = true
       p4.new_change(ws, desc, function(cl, err)

@@ -2,7 +2,8 @@
 ---
 ---   1. The source is the common directory of the changelist's files (`describe -s`).
 ---   2. The target is a path (`//depot/rel/...`) or a branch spec (`-b name`); the last
----      answer is remembered for the session.
+---      answer is remembered for the session. The first time, the client's stream is offered.
+---      Relative paths line up: the source is cut to the target's depth (`source_root`).
 ---   3. Preview (`integrate -n`) → confirmation → `integrate -c <target CL>` → resolve (clean
 ---      merges are accepted; conflicts go to the merge tool).
 ---
@@ -47,9 +48,43 @@ local function integ_args(src, change, target)
     return { '-b', branch, '-s', src .. '/...@=' .. change }
   end
   local tgt = target:gsub('/%.%.%.$', ''):gsub('/$', '')
-  return { src .. '/...@=' .. change, tgt .. '/...' }
+  return { M.source_root(src, tgt) .. '/...@=' .. change, tgt .. '/...' }
+end
+
+--- The source directory matching a target path: the source cut to the target's depth, so
+--- relative paths line up — files under `//stream1/app/src` integrated into `//stream2/...`
+--- come from `//stream1/...` (`@=CL` keeps it to that changelist's files) and land in
+--- `//stream2/app/src/…`, not at the top of `//stream2`. A target as deep as the source (or
+--- deeper) takes the source as it is.
+---@param src string  source directory (no trailing slash)
+---@param tgt string  target directory (no trailing slash or `...`)
+---@return string
+function M.source_root(src, tgt)
+  local depth = #vim.split(tgt:sub(3), '/', { plain = true })
+  local parts = vim.split(src:sub(3), '/', { plain = true })
+  if #parts <= depth then
+    return src
+  end
+  return '//' .. table.concat(parts, '/', 1, depth)
 end
 M._integ_args = integ_args
+
+--- The target offered first: the last answer this session, else the client's stream
+--- (`//stream2/...`; relative paths are matched, see `source_root`). Nothing when the client
+--- isn't a stream client or the source is in its stream.
+---@param ws perforated.Workspace
+---@param src string  source directory
+---@return string
+function M.default_target(ws, src)
+  if ws.integrate_target then
+    return ws.integrate_target
+  end
+  local stream = ws.info and ws.info.clientStream
+  if not stream or stream == '' or M.source_root(src, stream) == stream then
+    return ''
+  end
+  return stream .. '/...'
+end
 
 --- Preview, confirm, integrate, resolve.
 ---@param ws perforated.Workspace
@@ -90,7 +125,12 @@ local function go(ws, change, src, target, into, cb)
       items = items,
     })
     local ok = require('perforated.ui.prompt').confirm(
-      ('Integrate CL %s (%d file(s)) from %s into %s?'):format(change, #items, src, target),
+      ('Integrate CL %s (%d file(s)) from %s into %s?'):format(
+        change,
+        #items,
+        target:match('^%-b') and (src .. '/...') or (args[1]:gsub('@=.*$', '')),
+        target
+      ),
       '&Integrate\n&Cancel',
       2
     ) == 1
@@ -179,19 +219,33 @@ function M.run(ws, change, cb)
     end
     require('perforated.ui.prompt').input({
       prompt = ('Integrate CL %s from %s/... into (path or -b branch): '):format(change, src),
-      default = ws.integrate_target or '',
+      default = M.default_target(ws, src),
     }, function(target)
       if not target or vim.trim(target) == '' then
         return cb(false)
       end
       target = vim.trim(target)
       ws.integrate_target = target
-      require('perforated.checkout').pick_change(ws, function(into)
+      require('perforated.checkout_prompt').pick_change(ws, function(into, _, created)
         if not into then
           return cb(false)
         end
-        go(ws, change, src, target, into, cb)
-      end)
+        go(ws, change, src, target, into, function(ok)
+          if not ok and created then
+            -- Made for this integrate, which didn't happen (cancelled at the preview, nothing
+            -- to integrate, failed): don't leave an empty changelist behind.
+            ws:run({ 'change', '-d', into }, {}, function()
+              require('perforated.checkout').changed(ws)
+              cb(false)
+            end)
+            return
+          end
+          cb(ok)
+        end)
+      end, {
+        title = 'Open the integrated files in',
+        copy_desc = { change = change, desc = d.rec.desc or '' },
+      })
     end)
   end)
 end
