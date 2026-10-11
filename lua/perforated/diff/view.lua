@@ -112,15 +112,17 @@ function M.external(ws, path, spec)
           else
             vim.system(argv, { cwd = cwd, env = { PWD = cwd }, detach = true }, function(res)
               cleanup()
-              local code = require('perforated.tools').exit_code(res)
-              if code ~= 0 and code ~= 1 then -- diff tools exit 1 for "files differ"
-                vim.schedule(function()
-                  notify(
-                    'external diff failed: ' .. vim.trim(res.stderr or ''),
-                    vim.log.levels.ERROR
-                  )
-                end)
-              end
+              vim.schedule(function()
+                local tools = require('perforated.tools')
+                local code = tools.exit_code(res)
+                -- Diff tools exit 1 for "files differ"; so do Tk tools (tkdiff) that can't
+                -- open a window, which say so on stderr: then it's a failure.
+                local err = code == 1 and tools.error_line(res.stderr, true)
+                  or (code > 1 and (tools.error_line(res.stderr) or ('exited with ' .. code)))
+                if err then
+                  notify('external diff failed: ' .. err, vim.log.levels.ERROR)
+                end
+              end)
             end)
           end
         end

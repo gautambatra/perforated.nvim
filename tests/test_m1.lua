@@ -649,6 +649,36 @@ T['modes']["external diff runs p4 diff with the user's own P4DIFF"] = function()
   local old, new = args:match('^(%S+) (%S+)$')
   H.eq(new, root .. '/a.txt')
   H.eq(vim.fs.basename(old), 'a.txt_1')
+
+  -- Exit 1 is "files differ" — unless the tool said it failed (tkdiff without a display).
+  local function failures()
+    return child.lua_get(
+      [[vim.tbl_filter(function(t) return t:find('external diff failed', 1, true) ~= nil end,
+      vim.tbl_map(function(t) return t.title .. ' ' .. table.concat(t.lines, ' ') end,
+        require('perforated.ui.toast').history()))]]
+    )
+  end
+  H.write(tool, '#!/bin/sh\necho "$@" > ' .. tool_log .. '\nexit 1\n')
+  vim.fn.delete(tool_log)
+  child.cmd('P4 diff!')
+  vim.wait(10000, function()
+    return vim.uv.fs_stat(tool_log) ~= nil
+  end, 50)
+  vim.uv.sleep(300)
+  H.eq(failures(), {})
+  H.write(
+    tool,
+    '#!/bin/sh\necho "Error in startup script: couldn\'t connect to display \\":9\\"" >&2\n'
+      .. 'echo "    while executing" >&2\nexit 1\n'
+  )
+  child.cmd('P4 diff!')
+  H.eq(
+    vim.wait(10000, function()
+      return #failures() > 0
+    end, 50),
+    true
+  )
+  H.neq(failures()[1]:find([[couldn't connect to display]], 1, true), nil)
 end
 
 T['modes']['revert -a reverts only unchanged files'] = function()
