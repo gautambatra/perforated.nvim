@@ -574,6 +574,7 @@ can override them:
   PerforatedDim                Comment
   PerforatedFloat              NormalFloat
   PerforatedFloatBorder        FloatBorder
+  PerforatedFloatBorderActive  FloatTitle
   PerforatedFooter             StatusLineNC
   PerforatedHeader             Comment
   PerforatedKey                Special

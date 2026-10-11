@@ -376,6 +376,7 @@ function M.help(actions, title)
     title_pos = 'center',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   for _, lhs in ipairs({ 'q', '<Esc>', '?' }) do
     vim.keymap.set('n', lhs, '<cmd>close<cr>', { buffer = buf, nowait = true })
   end

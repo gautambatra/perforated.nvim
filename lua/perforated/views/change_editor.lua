@@ -66,6 +66,7 @@ local function open_float(opts)
   end
   vim.wo[win][0].wrap = true
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   -- Soft ruler where Swarm/P4V truncate the summary line.
   vim.wo[win][0].colorcolumn = '73'
 

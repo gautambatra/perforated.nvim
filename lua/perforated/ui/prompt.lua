@@ -87,6 +87,7 @@ function M.input(opts, on_confirm)
     zindex = 200,
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
+  require('perforated.ui.stack').register(win)
   vim.wo[win][0].wrap = false
 
   local done = false
