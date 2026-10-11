@@ -61,26 +61,61 @@ function M.no_display()
   end
 end
 
---- The last lines a failed tool printed, joined (a reason for a pop-up).
+-- Words that mark the line saying what went wrong.
+local ERROR_WORDS = {
+  'could not',
+  'cannot',
+  "can't",
+  'unable',
+  'error',
+  'failed',
+  'fatal',
+  'not found',
+  'no such',
+  'denied',
+}
+
+--- The line of a failed tool's output that says what went wrong (a reason for a pop-up): the
+--- first one with an error word, else the last. Qt's display failure, for one, prints
+--- "could not connect to display" first and ends with a list of plugins and the shell's
+--- "Aborted (core dumped)".
 ---@param text string?
 ---@return string?
-local function last_words(text)
+function M.error_line(text)
   local lines = {}
   for l in vim.gsplit(text or '', '\n', { plain = true }) do
     l = vim.trim(l)
-    if l ~= '' then
+    -- the shell reporting the crash, not the tool
+    if l ~= '' and not l:match('%(core dumped%)$') and not l:match('^Aborted$') then
       lines[#lines + 1] = l
     end
   end
   if #lines == 0 then
     return nil
   end
-  return table.concat(vim.list_slice(lines, math.max(1, #lines - 1)), ' ')
+  local pick = lines[#lines]
+  for _, l in ipairs(lines) do
+    local low = l:lower()
+    for _, w in ipairs(ERROR_WORDS) do
+      if low:find(w, 1, true) then
+        pick = l
+        break
+      end
+    end
+    if pick == l then
+      break
+    end
+  end
+  if vim.fn.strchars(pick) > 100 then
+    pick = vim.fn.strcharpart(pick, 0, 99) .. '…'
+  end
+  return pick
 end
 
 --- Run `tool file…` (through `sh`, so the setting may carry arguments). `on_exit` gets the
---- exit code and, when it failed, what the tool printed last (its stderr; for a terminal
---- tool, the end of its screen) — e.g. "cannot open display".
+--- exit code and, when it failed, the line of its output that says why (`error_line`; its
+--- stderr, or for a terminal tool its screen) — e.g. "could not connect to display". A GUI
+--- tool's whole stderr goes to the debug log.
 ---@param ws perforated.Workspace
 ---@param tool string
 ---@param files string[]
@@ -100,7 +135,7 @@ function M.run(ws, tool, files, on_exit)
         vim.schedule(function()
           local err
           if code ~= 0 and vim.api.nvim_buf_is_valid(term_buf) then
-            err = last_words(
+            err = M.error_line(
               table
                 .concat(vim.api.nvim_buf_get_lines(term_buf, 0, -1, false), '\n')
                 :gsub('%[Process exited %d+%]', '')
@@ -123,7 +158,17 @@ function M.run(ws, tool, files, on_exit)
     end
     vim.system(argv, { cwd = cwd, env = { PWD = cwd }, text = true }, function(res)
       vim.schedule(function()
-        on_exit(res.code, res.code ~= 0 and last_words(res.stderr) or nil)
+        if res.code ~= 0 then
+          require('perforated.core.debug').log(
+            'warn',
+            'tools',
+            '%s exited with %d: %s',
+            tool,
+            res.code,
+            res.stderr or ''
+          )
+        end
+        on_exit(res.code, res.code ~= 0 and M.error_line(res.stderr) or nil)
       end)
     end)
   end

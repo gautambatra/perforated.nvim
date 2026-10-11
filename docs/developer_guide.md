@@ -1166,8 +1166,9 @@ buffer), move (renames the buffer and keeps unsaved edits), delete a pending cha
 remaining conflicts; for each content conflict, base and theirs are printed to temp files and
 the merge tool (`merge.tool` or `$P4MERGE`) runs as `tool base theirs yours merged`; exit 0
 with a changed result → written through the buffer and accepted with `resolve -ay`. A
-failing tool's last output lines (stderr for a GUI tool, the end of the terminal screen for a
-terminal one) are added to the reason.
+failing tool's error line (`tools.error_line`: the first output line with an error word, else
+the last, skipping the shell's "Aborted (core dumped)"; stderr for a GUI tool, the terminal
+screen for a terminal one) is added to the reason.
 Everything else goes to quickfix, where `R` retries. It runs as a quiet job
 (`jobs.start(ws, title, { quiet = true })`: listed in `:P4 jobs`, stoppable, but without the
 start and result notices; `resolve -am` has no call timeout: it fetches revisions and merges
@@ -1195,7 +1196,7 @@ resolve tests finish before the first tick, which once let a crash there through
 #### `tools.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
 tools with their environment (terminal tab or detached GUI). `run` passes `on_exit(code, err)`
-the tool's last output lines on failure. `no_display()` says why a GUI tool can't open a window
+the tool's error line on failure, and logs a GUI tool's whole stderr. `no_display()` says why a GUI tool can't open a window
 (Linux/BSD without `$DISPLAY` or `$WAYLAND_DISPLAY`, e.g. a tmux server started outside the
 desktop session): `run` then calls back with code -1 instead of launching, and the external
 diff reports it. `lookup` (`g/`) routes a number to describe, a path to history, a bare word to a
