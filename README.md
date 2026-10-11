@@ -502,6 +502,9 @@ When one pop-up opens over another (the lookup over a file history, an action me
 `K` pop-up), the one in use gets a border in your theme's accent colour
 (`PerforatedFloatBorderActive`, linked to `FloatTitle`) and the ones under it are dimmed, text
 and border. With the cursor back in a normal window, open pop-ups look as usual.
+Every pop-up you can focus closes with `q` or `<Esc>`: `K`, history, the client view as a
+float, menus, prompts, the picker, `?` help, `:P4 jobs`. The hunk preview closes with `<Esc>`
+or when you move.
 Questions are pop-ups too: confirmations are a small centred menu (the underlined letter
 chooses, `<CR>` takes the default, `<Esc>` cancels) and text prompts (submit description,
 `g/`, integrate, time-lapse revision, reconcile paths) a one-line input float. Long jobs pop up

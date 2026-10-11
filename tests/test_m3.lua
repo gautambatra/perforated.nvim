@@ -176,6 +176,15 @@ T['m3']['describe Q: files to quickfix (workspace paths when mapped)'] = functio
   H.eq(names, { root .. '/a.txt', root .. '/b.txt' })
 end
 
+T['m3']['the history pop-up closes on <Esc> as well as q'] = function()
+  child.cmd('P4 filelog')
+  wait_text('initial import')
+  local win = child.api.nvim_get_current_win()
+  H.eq(child.api.nvim_win_get_config(win).relative, 'editor')
+  child.type_keys('<Esc>')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+end
+
 T['m3']['history: m m D, V…D and gD diff two revisions (older left)'] = function()
   child.cmd('P4 filelog')
   wait_text('initial import')
