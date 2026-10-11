@@ -475,15 +475,36 @@ function M.list()
   return out
 end
 
---- Workspace for the current buffer, else for Neovim's cwd (resolved via the activation
---- gate, which may create it). Returns nil outside any workspace.
+--- The directory a buffer stands for: a file's directory, the directory a file explorer shows
+--- (oil's `oil:///path/`, netrw's directory buffer), else Neovim's cwd.
+---@param buf integer?
+---@return string
+function M.buf_dir(buf)
+  buf = buf or vim.api.nvim_get_current_buf()
+  local name = vim.api.nvim_buf_get_name(buf)
+  local oil = name:match('^oil://(/.*)$') -- local only, not oil-ssh://
+  if oil and vim.fn.isdirectory(oil) == 1 then
+    return normalize(oil)
+  end
+  if vim.bo[buf].buftype == '' and name ~= '' and not name:find('^%a[%w+.-]*://') then
+    if vim.fn.isdirectory(name) == 1 then
+      return normalize(name)
+    end
+    return vim.fs.dirname(name)
+  end
+  return normalize(vim.uv.cwd() or '.')
+end
+
+--- Workspace for the current buffer, else for the directory it shows (a file explorer) or
+--- Neovim's cwd (resolved via the activation gate, which may create it). Returns nil outside
+--- any workspace.
 ---@return perforated.Workspace?
 function M.current()
   local ws = M.for_buf()
   if ws then
     return ws
   end
-  return require('perforated.core.activation').for_dir(normalize(vim.uv.cwd() or '.'))
+  return require('perforated.core.activation').for_dir(M.buf_dir())
 end
 
 --- Test helper.

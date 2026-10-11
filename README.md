@@ -804,7 +804,9 @@ Nothing is mapped globally by default. Every action is available as a `<Plug>` m
 <Plug>(perforated-view)
 ```
 
-`keymaps = 'default'` installs this preset, in Perforce buffers only:
+`keymaps = 'default'` installs this preset, in Perforce buffers only. File explorers (oil,
+netrw, mini.files, nvim-tree, neo-tree) showing a directory inside a workspace get the keys
+that need no current file: `<leader>pp`, `po`, `ps`, `pi`, `pl`, `pm`, `pq`, `pg` and `pY`.
 
 | Keys | Action |
 |---|---|
