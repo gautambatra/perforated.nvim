@@ -1196,7 +1196,10 @@ resolve tests finish before the first tick, which once let a crash there through
 #### `tools.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
 tools with their environment (terminal tab or detached GUI). `run` passes `on_exit(code, err)`
-the tool's error line on failure, and logs a GUI tool's whole stderr. `no_display()` says why a GUI tool can't open a window
+the tool's error line on failure, and logs a GUI tool's whole stderr. Its exit code goes
+through `exit_code(res)`: death by a signal counts as 128 + signal, as a shell reports it —
+`vim.system` gives code 0 and signal 6 for a tool that aborts when `sh -c` execs it (bash does
+for a single command), which had looked like a clean exit. `no_display()` says why a GUI tool can't open a window
 (Linux/BSD without `$DISPLAY` or `$WAYLAND_DISPLAY`, e.g. a tmux server started outside the
 desktop session): `run` then calls back with code -1 instead of launching, and the external
 diff reports it. `lookup` (`g/`) routes a number to describe, a path to history, a bare word to a
