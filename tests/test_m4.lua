@@ -581,9 +581,17 @@ T['m4']["resolve: a GUI merge tool that can't open says why"] = function()
   local log = root .. '/merge.log'
   setup({
     merge = {
-      tool = ('FAKE_MERGE_LOG=%s FAKE_MERGE_EXIT=1 FAKE_MERGE_STDERR=%q %s'):format(
+      -- p4merge with an unreachable $DISPLAY: Qt's lines, then a crash.
+      tool = ("FAKE_MERGE_LOG=%s FAKE_MERGE_EXIT=134 FAKE_MERGE_STDERR='%s' %s"):format(
         log,
-        'qt.qpa.xcb: could not connect to display',
+        table.concat({
+          'qt.qpa.xcb: could not connect to display :1',
+          'This application failed to start because no Qt platform plugin could be initialized.',
+          '',
+          'Available platform plugins are: eglfs, minimal, offscreen, xcb.',
+          '',
+          'Aborted (core dumped)',
+        }, '\\n'),
         H.root .. '/tests/bin/fake-merge'
       ),
     },
@@ -609,7 +617,7 @@ T['m4']["resolve: a GUI merge tool that can't open says why"] = function()
   end
   H.eq(
     resolve(),
-    '  main/a.txt  (merge tool exited with 1: qt.qpa.xcb: could not connect to display)'
+    '  main/a.txt  (merge tool exited with 134: qt.qpa.xcb: could not connect to display :1)'
   )
   H.eq(vim.fn.filereadable(log), 1)
   -- No display at all (tmux started outside the desktop): said before launching anything.
