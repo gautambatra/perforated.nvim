@@ -315,7 +315,7 @@ end of a line or inline, virtual lines above/below, a whole-line highlight.
 local ns = vim.api.nvim_create_namespace('perforated.signs')
 vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
   end_row = row + count - 1,                -- one extmark spans a whole hunk
-  sign_text = '▎', sign_hl_group = 'PerforatedAdd',
+  sign_text = '+', sign_hl_group = 'PerforatedAdd',
 })
 vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 ```

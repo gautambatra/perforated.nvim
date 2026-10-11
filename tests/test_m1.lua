@@ -100,6 +100,7 @@ T['checkout']['first change prompts; <CR> checks out to default; signs appear'] 
   )
   H.eq(#marks, 1)
   H.eq(marks[1][4].sign_hl_group, 'PerforatedChange')
+  H.eq(marks[1][4].sign_text, '~ ') -- +/~/- by default, not bars
   -- Client, action@CL, the modified marker and the revision; line counts only via {diff}.
   wait([[vim.b.perforated_status:match('^alice_ws .*edit@default ' .. vim.pesc(
     require('perforated.ui.icons').glyph('modified')) .. ' #1$') ~= nil]])
