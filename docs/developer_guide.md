@@ -1170,7 +1170,11 @@ buffer), move (renames the buffer and keeps unsaved edits), delete a pending cha
 `run(ws, paths)`: `resolve -am` (p4 takes clean merges), then `resolve -n -o` to find the
 remaining conflicts; for each content conflict, base and theirs are printed to temp files and
 the merge tool (`merge.tool` or `$P4MERGE`) runs as `tool base theirs yours merged`; exit 0
-with a changed result → written through the buffer and accepted with `resolve -ay`. A
+with a changed result → `resolve -af` (accepted as an edited merge, "edit from", like p4's
+`ae`), then the result is written over the file (through the buffer when loaded), made
+writable first: p4 leaves an integrated file read-only. Not `-ay` after writing: that
+records "ignored", and submit then refuses an integrated file ("tampered with after
+resolve"). A
 failing tool's error line (`tools.error_line`: the first output line with an error word, else
 the last, skipping the shell's "Aborted (core dumped)"; stderr for a GUI tool, the terminal
 screen for a terminal one) is added to the reason.

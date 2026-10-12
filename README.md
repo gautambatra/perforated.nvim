@@ -481,7 +481,9 @@ edits the lines that differ (about 3 ms for a 20k-line file with 200 revisions).
 - **Resolve (`R`, `:P4 resolve [file…]`):** `resolve -am` first, so p4 takes every clean merge.
   Each remaining conflict opens your merge tool (`$P4MERGE`, or `merge.tool`) as
   `tool base theirs yours merged`, asynchronously. When it exits 0 with a changed result, the
-  result is written (through the buffer if it's open) and accepted. Anything else stays
+  result is accepted as an edited merge, like `p4 resolve`'s own `ae` ("edit from"), and
+  written to the file (through the buffer if it's open; integrated files, which p4 leaves
+  read-only, are made writable). Anything else stays
   unresolved and goes to quickfix, where `R` on an entry tries again. While p4 works a
   **centred busy pop-up** says so (it closes while your merge tool runs, so it doesn't cover
   it); at the end a **centred pop-up that waits for a key** says what happened: merged

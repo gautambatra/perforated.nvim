@@ -4,9 +4,12 @@
 ---   2. For each remaining content conflict: base and theirs are printed to temp files, and
 ---      the merge tool ($P4MERGE or `merge.tool`) runs asynchronously as
 ---      `tool base theirs yours merged` (p4's convention).
----   3. Exit 0 with a changed result: the result is written to the workspace file (through its
----      buffer when loaded) and accepted with `resolve -ay`. Anything else leaves the file
----      unresolved.
+---   3. Exit 0 with a changed result: accepted as an edited merge, the way p4's own resolve
+---      does after its merge tool (`ae`): `resolve -af` ("edit from"), then the result is
+---      written over the workspace file (through its buffer when loaded), made writable first
+---      — p4 leaves an integrated file read-only. Accepting yours (`-ay`) after writing it
+---      would record "ignored", and submit refuses an integrated file changed after that
+---      ("tampered with after resolve"). Anything else leaves the file unresolved.
 ---
 --- Files still unresolved at the end (tool cancelled, non-content resolves, no tool) go to
 --- quickfix, where `R` on an entry resumes.
@@ -45,20 +48,28 @@ local function yours(path)
   return ok and lines or {}
 end
 
---- Write the merge result to the workspace file (through its buffer when loaded).
+--- Write the merge result to the workspace file (through its buffer when loaded), making it
+--- writable first: p4 leaves an integrated file read-only, even once resolved.
 ---@param path string
 ---@param lines string[]
+---@return string? err
 local function write_result(path, lines)
+  local perm = vim.fn.getfperm(path)
+  if perm ~= '' and perm:sub(2, 2) ~= 'w' then
+    vim.fn.setfperm(path, 'rw' .. perm:sub(3))
+  end
   local b = require('perforated.buffer').find(path)
   if b and vim.api.nvim_buf_is_loaded(b) then
     vim.bo[b].modifiable = true
+    vim.bo[b].readonly = false
     vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
-    vim.api.nvim_buf_call(b, function()
-      vim.cmd('silent! write!')
+    local ok, err = pcall(vim.api.nvim_buf_call, b, function()
+      vim.cmd('write!')
     end)
-  else
-    vim.fn.writefile(lines, path)
+    return not ok and tostring(err) or nil
   end
+  local ok, err = pcall(vim.fn.writefile, lines, path)
+  return not ok and tostring(err) or nil
 end
 
 --- Merge one conflict with the tool.
@@ -110,10 +121,14 @@ local function merge_one(ws, rec, tool, cb)
       if table.concat(result, '\n') == before then
         return cb(false, 'merge result unchanged (merge cancelled?)')
       end
-      write_result(path, result)
-      ws:run({ 'resolve', '-ay', p4.escape(path) }, {}, function(res)
+      ws:run({ 'resolve', '-af', p4.escape(path) }, {}, function(res)
         if #res.errors > 0 then
           return cb(false, res.errors[1])
+        end
+        local werr = write_result(path, result)
+        if werr then
+          -- resolved, but holding p4's merge with conflict markers
+          return cb(false, 'could not write the merge result: ' .. werr)
         end
         cb(true)
       end)
