@@ -1005,6 +1005,60 @@ T['m4']['integrate: between streams, in a stream client (-F)'] = function()
   H.eq(table.concat(vim.fn.readfile(dev2 .. '/app/src/x.txt'), '\n'), 'fix')
 end
 
+T['m4']['integrate: a conflict merged with the tool goes into the read-only file; submits'] = function()
+  setup()
+  p4({ 'integrate', '//depot/main/...', '//depot/rel/...' })
+  p4({ 'submit', '-d', 'branch rel' })
+  -- rel changes line 1 of both files; so does main: conflicts
+  p4({ 'edit', root .. '/rel/a.txt', root .. '/rel/b.txt' })
+  H.write(root .. '/rel/a.txt', 'rel1\nl2\nl3\nl4\nl5\n')
+  H.write(root .. '/rel/b.txt', 'rel-b\n')
+  p4({ 'submit', '-d', 'rel work' })
+  bob_submits('main/a.txt', 'main1\nl2\nl3\nl4\nl5\n', 'fix a')
+  local fix_a = server:p4({ 'changes', '-m1', '//depot/main/a.txt' }).stdout:match('Change (%d+)')
+  bob_submits('main/b.txt', 'main-b\n', 'fix b')
+  local fix_b = server:p4({ 'changes', '-m1', '//depot/main/b.txt' }).stdout:match('Change (%d+)')
+  local result = server.dir .. '/result.txt'
+  child.lua(([[
+    require('perforated.ui.prompt').input = function(_, cb) cb('//depot/rel/...') end
+    vim.ui.select = function(items, _, cb) cb(items[1]) end -- default changelist
+    require('perforated.config').set({ merge = { tool = 'FAKE_MERGE_RESULT=%s %s' } })
+  ]]):format(result, H.root .. '/tests/bin/fake-merge'))
+  H.stub_menu(child) -- resolve's result pop-up
+  local function integrate(change)
+    child.lua(
+      ([[_G.r = nil; require('perforated.integrate').run(require('perforated.core.workspace').list()[1], %q, function(ok) _G.r = ok end)]]):format(
+        change
+      )
+    )
+    wait('_G.r ~= nil')
+    H.eq(child.lua_get('_G.r'), true)
+    H.eq(child.lua_get('_G.menus[#_G.menus].header'), { '1 file(s) merged with your merge tool' })
+  end
+  -- not loaded in Neovim: p4 left the integrated file read-only
+  H.write(result, 'merged-a\nl2\nl3\nl4\nl5\n')
+  integrate(fix_a)
+  H.eq(vim.fn.readfile(root .. '/rel/a.txt')[1], 'merged-a')
+  -- loaded in a buffer
+  child.cmd('edit ' .. root .. '/rel/b.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  H.write(result, 'merged-b\n')
+  integrate(fix_b)
+  local buf = child.fn.bufnr(root .. '/rel/b.txt')
+  H.eq(child.api.nvim_buf_get_lines(buf, 0, -1, false), { 'merged-b' })
+  H.eq(child.api.nvim_get_option_value('modified', { buf = buf }), false)
+  H.eq(vim.fn.readfile(root .. '/rel/b.txt'), { 'merged-b' })
+  -- accepted as an edited merge: submit takes the tool's result (not "tampered with")
+  H.eq(p4({ '-ztag', 'fstat', '-Ru', root .. '/rel/...' }), '')
+  p4({ 'submit', '-d', 'integrate fixes' })
+  H.eq(p4({ 'print', '-q', '//depot/rel/a.txt' }), 'merged-a\nl2\nl3\nl4\nl5\n')
+  H.eq(p4({ 'print', '-q', '//depot/rel/b.txt' }), 'merged-b\n')
+  H.neq(
+    p4({ 'filelog', '-m1', '//depot/rel/a.txt' }):find('edit from //depot/main/a.txt', 1, true),
+    nil
+  )
+end
+
 T['m4']['integrate: into a new changelist with the original description, edited'] = function()
   setup()
   p4({ 'integrate', '//depot/main/...', '//depot/rel/...' })
