@@ -362,6 +362,10 @@ function M.menu(actions, view)
   end
 end
 
+--- Between an action's alternative keys in the help (`l · <Tab> · <CR>`): not a key itself,
+--- so alternatives don't read as one key sequence.
+M.KEY_SEP = ' · '
+
 ---@alias perforated.HelpSection { [1]: string, [2]: (string|{ [1]: string, [2]: string })[] }
 ---  a title and its actions in order: an id, or { id, help text }
 
@@ -375,7 +379,7 @@ end
 function M.help_rows(actions, sections)
   local rows = {}
   local function keys_str(a)
-    return table.concat(M.keys_of(a), ' ')
+    return table.concat(M.keys_of(a), M.KEY_SEP)
   end
   if not sections then
     for _, a in ipairs(actions) do
@@ -451,13 +455,24 @@ function M.help(actions, title, sections)
         (' '):rep(width - vim.fn.strdisplaywidth(r[1])),
         r[2]
       )
-      marks[#marks + 1] = { #lines - 1, 3, 3 + #r[1], 'PerforatedKey' }
+      -- each key in the key colour, the separators between alternatives dimmed
+      local col = 3
+      for i, k in ipairs(vim.split(r[1], M.KEY_SEP, { plain = true })) do
+        if i > 1 then
+          marks[#marks + 1] = { #lines - 1, col + 1, col + #M.KEY_SEP - 1, 'PerforatedDim' }
+          col = col + #M.KEY_SEP
+        end
+        marks[#marks + 1] = { #lines - 1, col, col + #k, 'PerforatedKey' }
+        col = col + #k
+      end
     end
   end
   if not sections then -- a flat list: no indent for headings
     for i, l in ipairs(lines) do
       lines[i] = l:sub(3)
-      marks[i][2], marks[i][3] = marks[i][2] - 2, marks[i][3] - 2
+    end
+    for _, m in ipairs(marks) do
+      m[2], m[3] = m[2] - 2, m[3] - 2
     end
   end
   local buf = vim.api.nvim_create_buf(false, true)

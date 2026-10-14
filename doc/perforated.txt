@@ -175,199 +175,199 @@ remove them); `keys.p4v = false` removes the P4V-style keys (<C-d>, <C-r>,
 Client view (:P4)                                     *perforated-client-view*
 
   Move around
-    l <Tab> <CR>    Expand / toggle
-    h               Collapse
-    ]]              Next section
-    [[              Previous section
-    g1 <C-1>        Go to Pending
-    g2 <C-2>        Go to Submitted
-    <F5>            Refresh
-    q <C-w>         Close
+    l · <Tab> · <CR>  Expand / toggle
+    h                 Collapse
+    ]]                Next section
+    [[                Previous section
+    g1 · <C-1>        Go to Pending
+    g2 · <C-2>        Go to Submitted
+    <F5>              Refresh
+    q · <C-w>         Close
 
   Select
-    m               Mark / unmark
-    u               Clear marks
-    . <RightMouse>  Action menu
-    ?               Help
+    m                 Mark / unmark
+    u                 Clear marks
+    . · <RightMouse>  Action menu
+    ?                 Help
 
   Workspace
-    W               Switch client (pick one of your clients)
-    A               Toggle scope: this client / all my clients
-    gS <C-S-g>      Sync workspace
-    g/ <C-g>        Go to changelist / path / user
-    gn              All my submitted changelists
+    W                 Switch client (pick one of your clients)
+    A                 Toggle scope: this client / all my clients
+    gS · <C-S-g>      Sync workspace
+    g/ · <C-g>        Go to changelist / path / user
+    gn                All my submitted changelists
 
   Changelists
-    c <C-n>         New changelist
-    i               Edit description
-    K               View changelist
-    D <C-d>         Diff all files
-    P <C-s>         Submit
-    gm              Move all files to another changelist
-    dd              Delete changelist
-    y               Copy CL number
-    gX              Copy Swarm URL
-    gd              Describe changelist
+    c · <C-n>         New changelist
+    i                 Edit description
+    K                 View changelist
+    D · <C-d>         Diff all files
+    P · <C-s>         Submit
+    gm                Move all files to another changelist
+    dd                Delete changelist
+    y                 Copy CL number
+    gX                Copy Swarm URL
+    gd                Describe changelist
 
   Files
-    o               Open file
-    d <C-d>         Diff against have revision
-    gD              Diff against revision…
-    r <C-r>         Revert
-    gr              Revert if unchanged (on a changelist: its unchanged files)
-    gm              Move to changelist
-    gh <C-t>        File history
-    t <C-S-t>       Time-lapse
-    b               Annotate
+    o                 Open file
+    d · <C-d>         Diff against have revision
+    gD                Diff against revision…
+    r · <C-r>         Revert
+    gr                Revert if unchanged (on a changelist: its unchanged files)
+    gm                Move to changelist
+    gh · <C-t>        File history
+    t · <C-S-t>       Time-lapse
+    b                 Annotate
 
   Shelves
-    s               Shelve
-    S               Unshelve
-    d <C-d>         Diff shelved vs base revision
-    w               Diff shelved vs workspace file
-    <Del>           Delete shelved files
-    g<Del>          Delete shelved files (on a changelist)
+    s                 Shelve
+    S                 Unshelve
+    d · <C-d>         Diff shelved vs base revision
+    w                 Diff shelved vs workspace file
+    <Del>             Delete shelved files
+    g<Del>            Delete shelved files (on a changelist)
 
   Sync and merge
-    gs              Sync to latest revision (file, changelist or section)
-    g@              Get revision… (file) / sync workspace to this CL (changelist)
-    R               Resolve
-    I               Integrate into this workspace
+    gs                Sync to latest revision (file, changelist or section)
+    g@                Get revision… (file) / sync workspace to this CL (changelist)
+    R                 Resolve
+    I                 Integrate into this workspace
 
   Reconcile
-    a               Open for add / edit / delete as found
-    r               Reconcile: scan again
-    p               Reconcile: set the paths to scan
-    x               Cancel scan
+    a                 Open for add / edit / delete as found
+    r                 Reconcile: scan again
+    p                 Reconcile: set the paths to scan
+    x                 Cancel scan
 
   Quickfix
-    Q               Send to quickfix
-    gQ              Send to location list
+    Q                 Send to quickfix
+    gQ                Send to location list
 
   Submitted files
-    o               Open
-    d <CR> <C-d>    Diff against previous revision
-    gD              Diff against revision…
+    o                 Open
+    d · <CR> · <C-d>  Diff against previous revision
+    gD                Diff against revision…
 
 Describe buffer (:P4 describe)                           *perforated-describe*
 
-  g/ <C-g>        Go to changelist / path / user
-  l <Tab>         Expand / toggle
-  h <S-Tab>       Collapse
-  gr <F5>         Refresh
-  q <C-w>         Close
-  ?               Help
-  . <RightMouse>  Action menu
-  <CR>            Open file at this line
-  <CR>            Expand / collapse
-  d <C-d>         Diff
-  d <C-d>         Diff shelved vs base revision
-  w gw            Diff shelved vs workspace file
-  w gw            Diff every shelved file vs workspace
-  gh              Diff shelved vs head revision
-  D               Diff all files
-  o               Open file
-  gL <C-t>        File history
-  t <C-S-t>       Time-lapse
-  b               Annotate
-  C               Edit description
-  y               Copy CL number
-  S               Unshelve
-  P <C-s>         Submit
-  <Del>           Delete changelist
-  g@              Sync workspace to this CL
-  I               Integrate into this workspace
-  Q               Files to quickfix
-  gX              Copy Swarm URL
+  g/ · <C-g>        Go to changelist / path / user
+  l · <Tab>         Expand / toggle
+  h · <S-Tab>       Collapse
+  gr · <F5>         Refresh
+  q · <C-w>         Close
+  ?                 Help
+  . · <RightMouse>  Action menu
+  <CR>              Open file at this line
+  <CR>              Expand / collapse
+  d · <C-d>         Diff
+  d · <C-d>         Diff shelved vs base revision
+  w · gw            Diff shelved vs workspace file
+  w · gw            Diff every shelved file vs workspace
+  gh                Diff shelved vs head revision
+  D                 Diff all files
+  o                 Open file
+  gL · <C-t>        File history
+  t · <C-S-t>       Time-lapse
+  b                 Annotate
+  C                 Edit description
+  y                 Copy CL number
+  S                 Unshelve
+  P · <C-s>         Submit
+  <Del>             Delete changelist
+  g@                Sync workspace to this CL
+  I                 Integrate into this workspace
+  Q                 Files to quickfix
+  gX                Copy Swarm URL
 
 File history (:P4 filelog)                                *perforated-history*
 
-  g/ <C-g>             Go to changelist / path / user
-  l <Tab>              Expand / toggle
-  h <S-Tab>            Collapse
-  gr <F5>              Refresh
-  q <C-w>              Close
-  ?                    Help
-  . <RightMouse> <CR>  Action menu
-  d <C-d>              Diff against previous revision
-  w                    Diff against workspace file
-  gD                   Diff against revision…
-  gd                   Describe changelist
-  K                    View changelist
-  o                    Open revision (read-only)
-  t <C-S-t>            Time-lapse
-  b                    Annotate this revision
-  g@                   Sync workspace to this CL
-  y                    Copy CL number
-  gX                   Copy Swarm URL
+  g/ · <C-g>               Go to changelist / path / user
+  l · <Tab>                Expand / toggle
+  h · <S-Tab>              Collapse
+  gr · <F5>                Refresh
+  q · <C-w>                Close
+  ?                        Help
+  . · <RightMouse> · <CR>  Action menu
+  d · <C-d>                Diff against previous revision
+  w                        Diff against workspace file
+  gD                       Diff against revision…
+  gd                       Describe changelist
+  K                        View changelist
+  o                        Open revision (read-only)
+  t · <C-S-t>              Time-lapse
+  b                        Annotate this revision
+  g@                       Sync workspace to this CL
+  y                        Copy CL number
+  gX                       Copy Swarm URL
 
 Annotate (:P4 annotate)                                  *perforated-annotate*
 
-  g/ <C-g>        Go to changelist / path / user
-  <CR> gd         Describe changelist
-  K               View changelist
-  ~               Annotate the revision before this change
-  <BS>            Back to the newer revision
-  d <C-d>         Diff this change (the file's revision in it vs the one before)
-  t <C-S-t>       Time-lapse from this revision
-  gL <C-t>        File history
-  Q               Lines from this changelist to the location list
-  y               Copy CL number
-  gX              Copy Swarm URL
-  q               Close
-  ?               Help
-  . <RightMouse>  Action menu
+  g/ · <C-g>        Go to changelist / path / user
+  <CR> · gd         Describe changelist
+  K                 View changelist
+  ~                 Annotate the revision before this change
+  <BS>              Back to the newer revision
+  d · <C-d>         Diff this change (the file's revision in it vs the one before)
+  t · <C-S-t>       Time-lapse from this revision
+  gL · <C-t>        File history
+  Q                 Lines from this changelist to the location list
+  y                 Copy CL number
+  gX                Copy Swarm URL
+  q                 Close
+  ?                 Help
+  . · <RightMouse>  Action menu
 
 Time-lapse (:P4 timelapse)                              *perforated-timelapse*
 
-  g/ <C-g>        Go to changelist / path / user
-  [r h            Previous revision
-  ]r l            Next revision
-  [R              First revision
-  ]R              Last revision
-  m               Mode: single / incremental diff / range
-  [a              Move ◆ back (diff / range mode)
-  ]a              Move ◆ forward (diff / range mode)
-  s               Show / hide the slider
-  S               Slider labels: changelists / revisions
-  i               Show / hide the revision details
-  r               Go to revision (#N) or changelist (@CL)
-  T               Pick a revision by description
-  d <C-d>         Diff against the previous revision
-  D gd            Describe changelist
-  K               View changelist
-  y               Copy CL number
-  Q               Lines added in this revision to the location list
-  a               Toggle the age gutter
-  b               Annotate this revision
-  gL <C-t>        File history
-  q               Close
-  ?               Help
-  . <RightMouse>  Action menu
+  g/ · <C-g>        Go to changelist / path / user
+  [r · h            Previous revision
+  ]r · l            Next revision
+  [R                First revision
+  ]R                Last revision
+  m                 Mode: single / incremental diff / range
+  [a                Move ◆ back (diff / range mode)
+  ]a                Move ◆ forward (diff / range mode)
+  s                 Show / hide the slider
+  S                 Slider labels: changelists / revisions
+  i                 Show / hide the revision details
+  r                 Go to revision (#N) or changelist (@CL)
+  T                 Pick a revision by description
+  d · <C-d>         Diff against the previous revision
+  D · gd            Describe changelist
+  K                 View changelist
+  y                 Copy CL number
+  Q                 Lines added in this revision to the location list
+  a                 Toggle the age gutter
+  b                 Annotate this revision
+  gL · <C-t>        File history
+  q                 Close
+  ?                 Help
+  . · <RightMouse>  Action menu
 
 Submitted changelists (:P4 changes)                       *perforated-changes*
 
-  l <Tab>         Expand / collapse (files)
-  h <S-Tab>       Collapse
-  gh <C-t>        File history
-  t <C-S-t>       Time-lapse
-  D <CR> <C-d>    Diff all files
-  i               Edit description
-  g@              Sync workspace to this CL
-  I               Integrate into this workspace
-  gd              Describe changelist
-  gX              Copy Swarm URL
-  g/ <C-g>        Go to changelist / path / user
-  K               View changelist
-  y               Copy CL number
-  gn              Load more
-  <F5>            Refresh
-  q <C-w>         Close
-  ?               Help
-  . <RightMouse>  Action menu
-  o               Open
-  d <CR> <C-d>    Diff against previous revision
-  gD              Diff against revision…
+  l · <Tab>         Expand / collapse (files)
+  h · <S-Tab>       Collapse
+  gh · <C-t>        File history
+  t · <C-S-t>       Time-lapse
+  D · <CR> · <C-d>  Diff all files
+  i                 Edit description
+  g@                Sync workspace to this CL
+  I                 Integrate into this workspace
+  gd                Describe changelist
+  gX                Copy Swarm URL
+  g/ · <C-g>        Go to changelist / path / user
+  K                 View changelist
+  y                 Copy CL number
+  gn                Load more
+  <F5>              Refresh
+  q · <C-w>         Close
+  ?                 Help
+  . · <RightMouse>  Action menu
+  o                 Open
+  d · <CR> · <C-d>  Diff against previous revision
+  gD                Diff against revision…
 
 Diff tab (D, :P4 diff -a)                               *perforated-diff-tab*
 

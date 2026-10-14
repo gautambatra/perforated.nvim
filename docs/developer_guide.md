@@ -1263,7 +1263,9 @@ outside the view does nothing. `menu` (the `.` menu), `help` (`?`; with a view's
 `help(actions, title, sections)`: `help_rows` groups the actions under section titles, in
 the order given, merges rows with the same keys within a section — `gs` on a file, a
 changelist, a section — worded by the first entry or its `{ id, text }`, and lists unplaced
-actions under "Other"; the client view's are `M.HELP_SECTIONS`, also used by `make doc`),
+actions under "Other"; the client view's are `M.HELP_SECTIONS`, also used by `make doc`;
+an action's alternative keys are joined by `M.KEY_SEP`, ` · `, each key in `PerforatedKey` and
+the `·` in `PerforatedDim`),
 `footer` (chunks for the key footer, keys in `PerforatedBarBold`, descriptions in
 `PerforatedBarText`; an action's
 `footer_when(item, node)` narrows where it's shown without changing where the key works —
