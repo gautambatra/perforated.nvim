@@ -312,6 +312,9 @@ T['m3']['annotate: two p4 calls, CL per line, ~ walks back, <BS> returns, Q'] = 
   H.eq(p4_calls('annotate')[1]:match('annotate .*'), 'annotate -c -i -u -q //depot/a.txt#3')
   H.eq(H.p4_subcommands(child), { 'annotate' })
   H.eq(child.wo.scrollbind, true)
+  -- both windows follow a mouse-wheel scroll of the other (ui/scrollsync.lua)
+  H.eq(child.lua_get([[vim.w.perforated_scrollsync]]), true)
+  H.eq(child.lua_get([=[vim.w[vim.fn.win_getid(vim.fn.winnr('l'))].perforated_scrollsync]=]), true)
   H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
   H.eq(child.lua_get([=[vim.api.nvim_win_get_cursor(vim.fn.win_getid(vim.fn.winnr('l')))[1]]=]), 3)
   -- ~ on line 3 (CL 3 = #3): the file at #2, where line 3 came from CL 1.

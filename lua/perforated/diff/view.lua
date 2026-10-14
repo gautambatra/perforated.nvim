@@ -425,6 +425,8 @@ function M.diffthis(wins)
     if not ok then
       errs[#errs + 1] = tostring(err)
     end
+    -- the mouse wheel over the side that isn't current scrolls both
+    require('perforated.ui.scrollsync').watch(w)
   end
   if #errs > 0 then
     local first = errs[1]:match('(E%d+:[^\n]*)') or errs[1]:match('[^\n]*')
