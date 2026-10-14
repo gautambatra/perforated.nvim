@@ -289,8 +289,12 @@ global). Behaviour checked in a real terminal for `diff/look.lua`:
 - `'winhighlight'` (per-window remapping, `Normal:MyNormal`) is older and remaps only the
   groups listed. A window namespace replaces it entirely: while a window has one, its
   `'winhighlight'` is ignored, even for groups the namespace doesn't define (verified in a
-  real terminal). `nvim_win_set_hl_ns(win, 0)` goes back to `'winhighlight'`, and
-  `nvim_get_hl_ns({ winid })` then reports `'winhighlight'`'s internal namespace, not 0.
+  real terminal). There is no going back: after `nvim_win_set_hl_ns(win, 0)` (or `-1`) the
+  window keeps ignoring `'winhighlight'` — for good on Neovim 0.11, until `'winhighlight'` is
+  set again on 0.12. To return, give the window a namespace holding the same mappings as
+  links (groups a window namespace doesn't define fall back to the global ones; verified on
+  both). A window never given a namespace reports `'winhighlight'`'s internal one from
+  `nvim_get_hl_ns({ winid })`, not 0.
 
 **Inspecting.** `:Inspect` (cursor) lists every highlight at a position — syntax, treesitter,
 semantic tokens, extmarks. `:hi Name` shows a group, `vim.api.nvim_get_hl(0, { name = 'X',
@@ -1292,7 +1296,10 @@ pop-up) swaps its border for `PerforatedFloatBorderActive`, or the group in
 `register(win, { border })` (the input prompt: `PerforatedInputBorder` → `DiagnosticWarn`,
 prominent, on heavy border glyphs set in `prompt.input`); **dim** (another pop-up is
 active) gets the dim namespace; **plain** (no pop-up in use) restores its own
-`'winhighlight'`. `group` makes several windows one pop-up (the picker's filter, list and
+`'winhighlight'`. Active and plain only set `'winhighlight'` on a window never dimmed; one
+that has been gets a namespace made of the `'winhighlight'` string instead (`ns_of`, its
+`From:To` pairs as links, one per distinct string), since 0.11 never honours
+`'winhighlight'` again once a window had a namespace. `group` makes several windows one pop-up (the picker's filter, list and
 preview). The dim namespace sets *every* group defined at build time to
 the text colour blended 55 % towards the float background, without a background (selection
 and cursor line vanish), plus the float's own background and a fainter border: a window

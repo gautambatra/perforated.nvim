@@ -18,6 +18,12 @@ T['stack'] = MiniTest.new_set({
           return vim.api.nvim_get_hl_ns({ winid = win }) == vim.api.nvim_get_namespaces()['perforated.stack.dim']
         end
         _G.st = function(win) return require('perforated.ui.stack').state(win) end
+        -- The border a window draws: FloatBorder in the namespace it uses ('winhighlight' is
+        -- one too). Neovim 0.11 ignores 'winhighlight' once a window's namespace was ever set.
+        _G.border = function(win)
+          local ns = vim.api.nvim_get_hl_ns({ winid = win })
+          return vim.api.nvim_get_hl(ns, { name = 'FloatBorder' }).link
+        end
       ]])
     end,
     post_case = function()
@@ -53,6 +59,7 @@ T['stack']['history pop-up, then the lookup on top: the lookup stands out, histo
     child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedInputBorder' }).link]]),
     'DiagnosticWarn'
   )
+  H.eq(child.lua_get('_G.border(...)', { prompt }), 'PerforatedInputBorder')
   -- and heavy lines, so it stands out whatever the colour (a thin yellow line didn't)
   H.eq(
     child.lua_get('vim.api.nvim_win_get_config(...).border', { prompt }),
@@ -74,6 +81,8 @@ T['stack']['history pop-up, then the lookup on top: the lookup stands out, histo
   child.type_keys('<Esc>')
   H.eq(H.wait(child, [[_G.answer ~= nil and _G.st(_G.hist) == 'active']]), true)
   H.eq(child.lua_get('_G.dimmed(_G.hist)'), false)
+  -- back from dim: the accent border again, drawn (not only in 'winhighlight')
+  H.eq(child.lua_get('_G.border(_G.hist)'), 'PerforatedFloatBorderActive')
 end
 
 T['stack']['an action menu (never focused) is the active one while it is open'] = function()
