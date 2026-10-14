@@ -114,18 +114,20 @@ local function build(view, data)
     line_hl = 'PerforatedBar',
     text = {
       { 'Client ', 'PerforatedBar' },
-      { ws:client() or '?', 'PerforatedBarBold' },
-      { info.clientStream and ('  Stream ' .. info.clientStream) or '', 'PerforatedBar' },
-      { '  User ' .. (ws:user() or '?'), 'PerforatedBar' },
+      { ws:client() or '?', 'PerforatedBarText' },
+      { info.clientStream and '  Stream ' or '', 'PerforatedBar' },
+      { info.clientStream or '', 'PerforatedBarText' },
+      { '  User ', 'PerforatedBar' },
+      { ws:user() or '?', 'PerforatedBarText' },
       {
         '  ' .. vim.fn.strcharpart(
           (ws.settings and ws.settings.P4PORT) or info.serverAddress or '',
           0,
           40
         ),
-        'PerforatedBar',
+        'PerforatedBarText',
       },
-      { '  ' .. conn, conn == 'online' and 'PerforatedBar' or 'PerforatedBarBold' },
+      { '  ' .. conn, conn == 'online' and 'PerforatedBarText' or 'PerforatedBarBold' },
       { view.scope == 'user' and '  [all my clients]' or '', 'PerforatedBarBold' },
     },
   }
@@ -2071,7 +2073,7 @@ function M.open(ws, opts)
       id = 'hdr',
       kind = 'header',
       line_hl = 'PerforatedBar',
-      text = { { 'Client ', 'PerforatedBar' }, { ws:client() or '…', 'PerforatedBarBold' } },
+      text = { { 'Client ', 'PerforatedBar' }, { ws:client() or '…', 'PerforatedBarText' } },
     },
     { id = 'sec:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
   })

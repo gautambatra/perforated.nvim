@@ -1264,7 +1264,8 @@ outside the view does nothing. `menu` (the `.` menu), `help` (`?`; with a view's
 the order given, merges rows with the same keys within a section — `gs` on a file, a
 changelist, a section — worded by the first entry or its `{ id, text }`, and lists unplaced
 actions under "Other"; the client view's are `M.HELP_SECTIONS`, also used by `make doc`),
-`footer` (chunks for the key footer, in `PerforatedBar` / `PerforatedBarBold`; an action's
+`footer` (chunks for the key footer, keys in `PerforatedBarBold`, descriptions in
+`PerforatedBarText`; an action's
 `footer_when(item, node)` narrows where it's shown without changing where the key works —
 the client view's `Q` only on changelists and files that aren't shelved, `gS` and `W` only
 off them — and `footer_desc` is a shorter label). Keys of actions that take several items (`multi`) are also mapped in visual mode:
@@ -1281,7 +1282,8 @@ column.
 
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, in `PerforatedFooter`
-(→ `PerforatedBar`: black on the accent, `hl.setup` from `Title`'s fg), updated on cursor
+(→ `PerforatedBar`: black on `Changed`'s fg, else `Title`'s, set in `hl.setup`; `PerforatedBarBold`
+for keys and headings, `PerforatedBarText` white for values and descriptions), updated on cursor
 moves (per-window statuslines are hidden with `laststatus=3`, so a float is used instead).
 Only for normal windows: it sits at zindex 40, under any float (default 50), so a view shown
 in a float puts the same keys in the float's border footer instead (`base.finish`, and the

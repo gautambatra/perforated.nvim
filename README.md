@@ -270,8 +270,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     shelves, sync and merge, reconcile, quickfix, submitted files). A footer always shows the
     keys that apply to the current line; off a changelist or file (a section heading, the
     client line) it offers `gS` sync workspace and `W` switch client. The top line (client,
-    user, server) and the footer are bars in black on your theme's accent colour
-    (`PerforatedBar`, from `Title`'s colour).
+    user, server) and the footer are bars in your theme's colour for changed files
+    (`PerforatedBar`, from `Changed`, else `Title`): headings and keys in black, values and
+    descriptions in white (`PerforatedBarText`).
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
   - `m` marks files for multi-file actions (revert, move, shelve, …) and `u` clears the marks;
     or select rows with `V` and press the action's key. A changelist selected with its files

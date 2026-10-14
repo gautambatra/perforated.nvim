@@ -99,12 +99,20 @@ function M.setup()
   else
     vim.api.nvim_set_hl(0, 'PerforatedUnchanged', { link = 'Comment', default = true })
   end
-  -- The bars of a view (the client view's top line, the key footers): black text on the
-  -- theme's accent colour (Title's), so they stand out from the content.
-  local accent = fg('Title') or '#5fafd7'
-  local bar = { fg = '#000000', bg = accent, ctermfg = 16, ctermbg = 74, default = true }
+  -- The bars of a view (the client view's top line, the key footers), so they stand out from
+  -- the content: on the colour of a changed file (Changed's, else Title's); headings and keys
+  -- black, values and descriptions light.
+  local changed = fg('Changed')
+  local accent = changed or fg('Title') or '#5fafd7'
+  local cterm = changed and 68 or 74
+  local bar = { fg = '#000000', bg = accent, ctermfg = 16, ctermbg = cterm, default = true }
   vim.api.nvim_set_hl(0, 'PerforatedBar', bar)
   vim.api.nvim_set_hl(0, 'PerforatedBarBold', vim.tbl_extend('force', bar, { bold = true }))
+  vim.api.nvim_set_hl(
+    0,
+    'PerforatedBarText',
+    vim.tbl_extend('force', bar, { fg = '#ffffff', ctermfg = 231 })
+  )
   if not done then
     done = true
     vim.api.nvim_create_autocmd('ColorScheme', {

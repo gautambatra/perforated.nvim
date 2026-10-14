@@ -409,17 +409,32 @@ T['client view']['? help is in sections; the top line and the footer are bars'] 
   H.eq(#gs, 1)
   H.neq(gs[1]:find('file, changelist or section', 1, true), nil)
   child.type_keys('q')
-  -- Bars: black text on the theme's accent (Title's colour), the top line to the window's edge.
+  -- Bars: on the colour of a changed file (Changed), the top line to the window's edge; headings
+  -- and keys black, values and descriptions light.
   child.lua([[vim.cmd('hi clear') -- as :colorscheme does
     vim.api.nvim_set_hl(0, 'Title', { fg = '#56b6c2' })
+    vim.api.nvim_set_hl(0, 'Changed', { fg = '#61afef' })
     vim.api.nvim_exec_autocmds('ColorScheme', {})]])
   H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' })]]), {
     fg = 0,
-    bg = 0x56b6c2,
+    bg = 0x61afef,
     ctermfg = 16,
-    ctermbg = 74,
+    ctermbg = 68,
     default = true,
   })
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBarText' })]]), {
+    fg = 0xffffff,
+    bg = 0x61afef,
+    ctermfg = 231,
+    ctermbg = 68,
+    default = true,
+  })
+  -- without Changed: Title's colour
+  child.lua([[vim.cmd('hi clear')
+    vim.api.nvim_set_hl(0, 'Title', { fg = '#56b6c2' })
+    vim.api.nvim_set_hl(0, 'Changed', {})
+    vim.api.nvim_exec_autocmds('ColorScheme', {})]])
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' }).bg]]), 0x56b6c2)
   H.eq(
     child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedFooter' }).link]]),
     'PerforatedBar'
@@ -431,14 +446,42 @@ T['client view']['? help is in sections; the top line and the footer are bars'] 
     -- ephemeral: capture what the provider draws for the header row
     local set = vim.api.nvim_buf_set_extmark
     vim.api.nvim_buf_set_extmark = function(b, n, r, c, o)
-      if n == ns and r == 0 then table.insert(out, { o.hl_group, o.hl_eol or false }) end
+      if n == ns and r == 0 then
+        local text = o.end_col and vim.trim(vim.api.nvim_buf_get_text(b, r, c, r, o.end_col, {})[1])
+        table.insert(out, { o.hl_group, o.hl_eol or false, text })
+      end
       return set(b, n, r, c, o)
     end
     vim.cmd('redraw!')
     vim.api.nvim_buf_set_extmark = set
     return out
   end)()]])
-  H.eq(marks[1], { 'PerforatedBar', true })
+  H.eq(marks[1][1], 'PerforatedBar')
+  H.eq(marks[1][2], true)
+  -- headings black, values light: `Client` and `alice_ws`, `User` and `alice`
+  H.eq(marks[2], { 'PerforatedBar', false, 'Client' })
+  H.eq(marks[3], { 'PerforatedBarText', false, 'alice_ws' })
+  H.eq(marks[4], { 'PerforatedBar', false, 'User' })
+  H.eq(marks[5], { 'PerforatedBarText', false, 'alice' })
+  -- the footer: keys black and bold, descriptions light
+  child.cmd('doautocmd CursorMoved')
+  local foot = child.lua_get([[(function()
+    local ns = vim.api.nvim_get_namespaces()['perforated.footer']
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      local c = vim.api.nvim_win_get_config(w)
+      if c.relative == 'win' and c.focusable == false then
+        local b = vim.api.nvim_win_get_buf(w)
+        local line = vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]
+        local out = {}
+        for _, m in ipairs(vim.api.nvim_buf_get_extmarks(b, ns, 0, -1, { details = true })) do
+          out[#out + 1] = { vim.trim(line:sub(m[3] + 1, m[4].end_col)), m[4].hl_group }
+        end
+        return out
+      end
+    end
+  end)()]])
+  H.eq(foot[#foot - 1], { '?', 'PerforatedBarBold' })
+  H.eq(foot[#foot], { 'help', 'PerforatedBarText' })
 end
 
 T['client view']['<F5> refreshes the view'] = function()
