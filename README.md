@@ -266,7 +266,12 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     shelved files. `w` diffs a shelved file against your workspace file; on the "Shelved (N)"
     line it opens a diff tab of every shelved file against the workspace. `y` copies the
     changelist number.
-  - `?` lists every key, and a footer always shows the keys that apply to the current line.
+  - `?` lists every key, by section (moving around, selecting, workspace, changelists, files,
+    shelves, sync and merge, reconcile, quickfix, submitted files). A footer always shows the
+    keys that apply to the current line; off a changelist or file (a section heading, the
+    client line) it offers `gS` sync workspace and `W` switch client. The top line (client,
+    user, server) and the footer are bars in black on your theme's accent colour
+    (`PerforatedBar`, from `Title`'s colour).
   - `l`/`<Tab>`/`<CR>` expand and `h` collapses. Folds are kept across refreshes.
   - `m` marks files for multi-file actions (revert, move, shelve, …) and `u` clears the marks;
     or select rows with `V` and press the action's key. A changelist selected with its files
@@ -538,7 +543,9 @@ Errors have a red border. `:P4 messages` (`<leader>pm`) shows the recent ones an
 When one pop-up opens over another (the lookup over a file history, an action menu over the
 `K` pop-up), the one in use gets a border in your theme's accent colour
 (`PerforatedFloatBorderActive`, linked to `FloatTitle`) and the ones under it are dimmed, text
-and border. With the cursor back in a normal window, open pop-ups look as usual.
+and border. Text boxes asking for input (the lookup, an integrate target, …) have a more
+prominent border (`PerforatedInputBorder`, linked to `DiagnosticWarn`: yellow in most
+themes). With the cursor back in a normal window, open pop-ups look as usual.
 Every pop-up you can focus closes with `q` or `<Esc>`: `K`, history, the client view as a
 float, menus, prompts, the picker, `?` help, `:P4 jobs`. The hunk preview closes with `<Esc>`
 or when you move.

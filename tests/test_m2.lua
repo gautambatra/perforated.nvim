@@ -349,17 +349,96 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(has_line('Workspace reconcile'), true)
   H.eq(goto_line('Workspace reconcile') < goto_line('Recent submitted'), true)
   -- The footer float shows the keys for the cursor's node.
-  goto_line('b.txt')
-  local footer = child.lua_get([[(function()
+  local footer_expr = [[(function()
     for _, w in ipairs(vim.api.nvim_list_wins()) do
       local c = vim.api.nvim_win_get_config(w)
       if c.relative == 'win' and c.focusable == false then
         return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)[1]
       end
     end
-  end)()]])
+  end)()]]
+  local function footer_at(text)
+    goto_line(text)
+    child.cmd('doautocmd CursorMoved')
+    return child.lua_get(footer_expr)
+  end
+  local footer = footer_at('b.txt')
   H.expect.no_equality(footer:find('d diff', 1, true), nil)
   H.expect.no_equality(footer:find('r revert', 1, true), nil)
+  H.expect.no_equality(footer:find('Q send to quickfix', 1, true), nil)
+  H.eq(footer:find('sync workspace', 1, true), nil)
+  -- Not on a changelist or file: workspace-wide keys instead of "send to quickfix".
+  for _, line in ipairs({ 'Client alice_ws', 'Pending', 'Recent submitted' }) do
+    footer = footer_at(line)
+    H.eq(footer:find('send to quickfix', 1, true), nil)
+    H.expect.no_equality(footer:find('gS sync workspace', 1, true), nil)
+    H.expect.no_equality(footer:find('W switch client', 1, true), nil)
+  end
+  -- A shelf: no "send to quickfix" either.
+  footer = footer_at('Shelved (1)')
+  H.eq(footer:find('send to quickfix', 1, true), nil)
+  H.expect.no_equality(footer:find('S unshelve', 1, true), nil)
+end
+
+T['client view']['? help is in sections; the top line and the footer are bars'] = function()
+  open_view()
+  child.type_keys('?')
+  local help = child.api.nvim_buf_get_lines(0, 0, -1, false)
+  local sections = vim.tbl_map(
+    vim.trim,
+    vim.tbl_filter(function(l)
+      return l:match('^ %S')
+    end, help)
+  )
+  H.eq(sections, {
+    'Move around',
+    'Select',
+    'Workspace',
+    'Changelists',
+    'Files',
+    'Shelves',
+    'Sync and merge',
+    'Reconcile',
+    'Quickfix',
+    'Submitted files',
+  })
+  -- One row for a key that does the same job on different nodes.
+  local gs = vim.tbl_filter(function(l)
+    return l:match('^%s+gs%s')
+  end, help)
+  H.eq(#gs, 1)
+  H.neq(gs[1]:find('file, changelist or section', 1, true), nil)
+  child.type_keys('q')
+  -- Bars: black text on the theme's accent (Title's colour), the top line to the window's edge.
+  child.lua([[vim.cmd('hi clear') -- as :colorscheme does
+    vim.api.nvim_set_hl(0, 'Title', { fg = '#56b6c2' })
+    vim.api.nvim_exec_autocmds('ColorScheme', {})]])
+  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' })]]), {
+    fg = 0,
+    bg = 0x56b6c2,
+    ctermfg = 16,
+    ctermbg = 74,
+    default = true,
+  })
+  H.eq(
+    child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedFooter' }).link]]),
+    'PerforatedBar'
+  )
+  goto_line('Client alice_ws')
+  local marks = child.lua_get([[(function()
+    local ns = require('perforated.ui.tree').ns
+    local out = {}
+    -- ephemeral: capture what the provider draws for the header row
+    local set = vim.api.nvim_buf_set_extmark
+    vim.api.nvim_buf_set_extmark = function(b, n, r, c, o)
+      if n == ns and r == 0 then table.insert(out, { o.hl_group, o.hl_eol or false }) end
+      return set(b, n, r, c, o)
+    end
+    vim.cmd('redraw!')
+    vim.api.nvim_buf_set_extmark = set
+    return out
+  end)()]])
+  H.eq(marks[1], { 'PerforatedBar', true })
 end
 
 T['client view']['<F5> refreshes the view'] = function()

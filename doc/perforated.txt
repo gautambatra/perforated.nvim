@@ -174,65 +174,80 @@ remove them); `keys.p4v = false` removes the P4V-style keys (<C-d>, <C-r>,
 
 Client view (:P4)                                     *perforated-client-view*
 
-  l <Tab> <CR>    Expand / toggle
-  h               Collapse
-  ]]              Next section
-  [[              Previous section
-  g1 <C-1>        Go to Pending
-  g2 <C-2>        Go to Submitted
-  <F5>            Refresh
-  q <C-w>         Close
-  ?               Help
-  . <RightMouse>  Action menu
-  m               Mark / unmark
-  u               Clear marks
-  A               Toggle scope: this client / all my clients
-  W               Switch client (pick one of your clients)
-  d <C-d>         Diff against have revision
-  gD              Diff against revision…
-  d <C-d>         Diff shelved vs base revision
-  s               Shelve
-  S               Unshelve
-  <Del>           Delete shelved files
-  g<Del>          Delete shelved files
-  P <C-s>         Submit
-  R               Resolve
-  gs              Sync to latest revision
-  g@              Get revision…
-  gs              Sync to latest revision
-  gs              Sync these files to latest revision
-  gS <C-S-g>      Sync workspace
-  gn              All my submitted changelists
-  g@              Sync workspace to this CL
-  I               Integrate into this workspace
-  gd              Describe changelist
-  gX              Copy Swarm URL
-  g/ <C-g>        Go to changelist / path / user
-  gh <C-t>        File history
-  t <C-S-t>       Time-lapse
-  b               Annotate
-  w               Diff shelved vs workspace file
-  K               View changelist
-  D <C-d>         Diff all files
-  o               Open file
-  r <C-r>         Revert
-  gr              Revert if unchanged
-  gr              Revert unchanged files
-  gm              Move to changelist
-  gm              Move all files to another changelist
-  y               Copy CL number
-  c <C-n>         New changelist
-  dd              Delete changelist
-  i               Edit description
-  a               Open for add / edit / delete as found
-  x               Cancel scan
-  r               Reconcile: scan again
-  p               Reconcile: set the paths to scan
-  Q               Send to quickfix
-  gQ              Send to location list
-  o               Open
-  d <CR> <C-d>    Diff against previous revision
-  gD              Diff against revision…
+  Move around
+    l <Tab> <CR>    Expand / toggle
+    h               Collapse
+    ]]              Next section
+    [[              Previous section
+    g1 <C-1>        Go to Pending
+    g2 <C-2>        Go to Submitted
+    <F5>            Refresh
+    q <C-w>         Close
+
+  Select
+    m               Mark / unmark
+    u               Clear marks
+    . <RightMouse>  Action menu
+    ?               Help
+
+  Workspace
+    W               Switch client (pick one of your clients)
+    A               Toggle scope: this client / all my clients
+    gS <C-S-g>      Sync workspace
+    g/ <C-g>        Go to changelist / path / user
+    gn              All my submitted changelists
+
+  Changelists
+    c <C-n>         New changelist
+    i               Edit description
+    K               View changelist
+    D <C-d>         Diff all files
+    P <C-s>         Submit
+    gm              Move all files to another changelist
+    dd              Delete changelist
+    y               Copy CL number
+    gX              Copy Swarm URL
+    gd              Describe changelist
+
+  Files
+    o               Open file
+    d <C-d>         Diff against have revision
+    gD              Diff against revision…
+    r <C-r>         Revert
+    gr              Revert if unchanged (on a changelist: its unchanged files)
+    gm              Move to changelist
+    gh <C-t>        File history
+    t <C-S-t>       Time-lapse
+    b               Annotate
+
+  Shelves
+    s               Shelve
+    S               Unshelve
+    d <C-d>         Diff shelved vs base revision
+    w               Diff shelved vs workspace file
+    <Del>           Delete shelved files
+    g<Del>          Delete shelved files (on a changelist)
+
+  Sync and merge
+    gs              Sync to latest revision (file, changelist or section)
+    g@              Get revision… (file) / sync workspace to this CL (changelist)
+    R               Resolve
+    I               Integrate into this workspace
+
+  Reconcile
+    a               Open for add / edit / delete as found
+    r               Reconcile: scan again
+    p               Reconcile: set the paths to scan
+    x               Cancel scan
+
+  Quickfix
+    Q               Send to quickfix
+    gQ              Send to location list
+
+  Submitted files
+    o               Open
+    d <CR> <C-d>    Diff against previous revision
+    gD              Diff against revision…
 
 Describe buffer (:P4 describe)                           *perforated-describe*
 
@@ -587,8 +602,9 @@ can override them:
   PerforatedFloat              NormalFloat
   PerforatedFloatBorder        FloatBorder
   PerforatedFloatBorderActive  FloatTitle
-  PerforatedFooter             StatusLineNC
+  PerforatedFooter             PerforatedBar
   PerforatedHeader             Comment
+  PerforatedInputBorder        DiagnosticWarn
   PerforatedKey                Special
   PerforatedLoading            Comment
   PerforatedMark               Todo

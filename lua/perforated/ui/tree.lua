@@ -22,6 +22,17 @@ vim.api.nvim_set_decoration_provider(ns, {
   end,
   on_line = function(_, _, buf, row)
     local t = trees[buf]
+    local node = t and t.rows[row + 1]
+    if node and node.line_hl then
+      vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+        end_row = row + 1,
+        end_col = 0,
+        hl_group = node.line_hl,
+        hl_eol = true, -- to the window's edge
+        priority = 50, -- under the row's own chunks
+        ephemeral = true,
+      })
+    end
     local hls = t and t.row_hls[row]
     if hls then
       -- flat: { start, end, group, start, end, group, … }
@@ -44,6 +55,7 @@ vim.api.nvim_set_decoration_provider(ns, {
 ---@field children perforated.TreeNode[]?
 ---@field open boolean?          default fold state (children shown)
 ---@field on_open fun(node: perforated.TreeNode)?  called the first time the node is expanded
+---@field line_hl string?         highlight of the whole row, to the window's edge (a bar)
 ---@field parent perforated.TreeNode?   set by render
 ---@field depth integer?                set by render
 

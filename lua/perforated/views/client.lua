@@ -111,21 +111,22 @@ local function build(view, data)
   roots[#roots + 1] = {
     id = 'hdr',
     kind = 'header',
+    line_hl = 'PerforatedBar',
     text = {
-      { 'Client ', 'PerforatedHeader' },
-      { ws:client() or '?', 'PerforatedTitle' },
-      { info.clientStream and ('  Stream ' .. info.clientStream) or '', 'PerforatedHeader' },
-      { '  User ' .. (ws:user() or '?'), 'PerforatedHeader' },
+      { 'Client ', 'PerforatedBar' },
+      { ws:client() or '?', 'PerforatedBarBold' },
+      { info.clientStream and ('  Stream ' .. info.clientStream) or '', 'PerforatedBar' },
+      { '  User ' .. (ws:user() or '?'), 'PerforatedBar' },
       {
         '  ' .. vim.fn.strcharpart(
           (ws.settings and ws.settings.P4PORT) or info.serverAddress or '',
           0,
           40
         ),
-        'PerforatedHeader',
+        'PerforatedBar',
       },
-      { '  ' .. conn, conn == 'online' and 'PerforatedDim' or 'PerforatedOffline' },
-      { view.scope == 'user' and '  [all my clients]' or '', 'PerforatedBadge' },
+      { '  ' .. conn, conn == 'online' and 'PerforatedBar' or 'PerforatedBarBold' },
+      { view.scope == 'user' and '  [all my clients]' or '', 'PerforatedBarBold' },
     },
   }
 
@@ -761,6 +762,24 @@ end
 
 ---@param view table
 ---@return perforated.Action[]
+-- Kinds that are a changelist or a file (the rest: section headers, the client header, spacers,
+-- loading lines): the footer offers per-item actions on these, workspace-wide ones elsewhere.
+local ITEM_KINDS = {
+  change = true,
+  opened_file = true,
+  shelf = true,
+  shelved_file = true,
+  submitted = true,
+  submitted_file = true,
+  have_cl = true,
+  reconcile_file = true,
+}
+
+---@param node perforated.TreeNode?
+local function on_item(_, node)
+  return node ~= nil and ITEM_KINDS[node.kind] == true
+end
+
 local function actions(view)
   local ws = view.ws
   local function all_submitted()
@@ -864,7 +883,7 @@ local function actions(view)
       keys = { '?' },
       nomenu = true,
       run = function()
-        keys.help(view.actions, 'Perforce')
+        keys.help(view.actions, 'Perforce', M.HELP_SECTIONS)
       end,
     },
     {
@@ -909,6 +928,11 @@ local function actions(view)
       id = 'switch_client',
       desc = 'Switch client (pick one of your clients)',
       keys = { 'W' },
+      footer = 71,
+      footer_desc = 'switch client',
+      footer_when = function(item, node)
+        return not on_item(item, node)
+      end,
       run = function()
         M.switch_client(view)
       end,
@@ -1159,6 +1183,10 @@ local function actions(view)
       desc = 'Sync workspace',
       keys = { 'gS' },
       p4v = { '<C-S-g>' },
+      footer = 70,
+      footer_when = function(item, node)
+        return not on_item(item, node)
+      end,
       run = function()
         require('perforated.ops').sync(ws, {}) -- asks for confirmation
       end,
@@ -1605,6 +1633,10 @@ local function actions(view)
       nomenu = 'layout', -- a key everywhere; in the menu on changelists
       multi = true,
       footer = 60,
+      -- in the footer on a changelist or file, not a shelved one (nor on a section)
+      footer_when = function(item, node)
+        return on_item(item, node) and node.kind ~= 'shelf' and node.kind ~= 'shelved_file'
+      end,
       run = function(items, ctx)
         M.to_qf(view, items, ctx, false)
       end,
@@ -2038,7 +2070,8 @@ function M.open(ws, opts)
     {
       id = 'hdr',
       kind = 'header',
-      text = { { 'Client ', 'PerforatedHeader' }, { ws:client() or '…', 'PerforatedTitle' } },
+      line_hl = 'PerforatedBar',
+      text = { { 'Client ', 'PerforatedBar' }, { ws:client() or '…', 'PerforatedBarBold' } },
     },
     { id = 'sec:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
   })
@@ -2145,5 +2178,84 @@ function M._get(ws_key)
 end
 
 M._actions = actions -- for the generated help (scripts/gen_doc.lua)
+
+--- The `?` help's sections (ui/keys.lua `help_rows`), also used by the generated help.
+---@type perforated.HelpSection[]
+M.HELP_SECTIONS = {
+  {
+    'Move around',
+    {
+      'expand',
+      'collapse',
+      'next_section',
+      'prev_section',
+      'goto_pending',
+      'goto_submitted',
+      'refresh',
+      'close',
+    },
+  },
+  { 'Select', { 'mark', 'unmark_all', 'menu', 'help' } },
+  { 'Workspace', { 'switch_client', 'scope', 'sync', 'lookup', 'all_submitted' } },
+  {
+    'Changelists',
+    {
+      'new_change',
+      'edit_description',
+      'view_change',
+      'diff_all',
+      'submit',
+      'move_all',
+      'delete_change',
+      'yank',
+      'swarm_copy',
+      'describe',
+    },
+  },
+  {
+    'Files',
+    {
+      'open',
+      'diff',
+      'diff_revision',
+      'revert',
+      { 'revert_if_unchanged', 'Revert if unchanged (on a changelist: its unchanged files)' },
+      'revert_unchanged',
+      'move',
+      'history',
+      'timelapse',
+      'annotate',
+    },
+  },
+  {
+    'Shelves',
+    {
+      'shelve',
+      'unshelve',
+      'diff_shelved',
+      'diff_shelved_workspace',
+      'delete_shelved',
+      { 'delete_shelved_change', 'Delete shelved files (on a changelist)' },
+    },
+  },
+  {
+    'Sync and merge',
+    {
+      { 'get_latest', 'Sync to latest revision (file, changelist or section)' },
+      'get_latest_change',
+      'get_latest_attention',
+      { 'get_revision', 'Get revision… (file) / sync workspace to this CL (changelist)' },
+      'sync_to_change',
+      'resolve',
+      'integrate',
+    },
+  },
+  {
+    'Reconcile',
+    { 'reconcile_apply', 'reconcile_rescan', 'reconcile_scope', 'reconcile_cancel' },
+  },
+  { 'Quickfix', { 'to_qf', 'to_loclist' } },
+  { 'Submitted files', { 'open_revision', 'diff_file', 'diff_file_revision' } },
+}
 
 return M
