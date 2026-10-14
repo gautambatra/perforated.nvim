@@ -79,7 +79,8 @@ function M.input(opts, on_confirm)
     width = width,
     height = 1,
     style = 'minimal',
-    border = 'rounded',
+    -- Heavy lines: a question waiting for an answer stands out whatever the theme's colours.
+    border = { '┏', '━', '┓', '┃', '┛', '━', '┗', '┃' },
     title = ' ' .. title .. ' ',
     title_pos = 'left',
     footer = ' <CR> ok · <Esc> cancel ',

@@ -53,6 +53,11 @@ T['stack']['history pop-up, then the lookup on top: the lookup stands out, histo
     child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedInputBorder' }).link]]),
     'DiagnosticWarn'
   )
+  -- and heavy lines, so it stands out whatever the colour (a thin yellow line didn't)
+  H.eq(
+    child.lua_get('vim.api.nvim_win_get_config(...).border', { prompt }),
+    { '┏', '━', '┓', '┃', '┛', '━', '┗', '┃' }
+  )
   H.eq(child.lua_get('_G.st(_G.hist)'), 'dim')
   H.eq(child.lua_get('_G.dimmed(_G.hist)'), true)
   local dim = child.lua_get([[vim.api.nvim_get_namespaces()['perforated.stack.dim'] ]])
