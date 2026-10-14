@@ -100,17 +100,9 @@ function M.setup()
     vim.api.nvim_set_hl(0, 'PerforatedUnchanged', { link = 'Comment', default = true })
   end
   -- The bars of a view (the client view's top line, the key footers), so they stand out from
-  -- the content: on the colour of a changed file (Changed's, else Title's) taken 40 % towards
-  -- the background, dark enough for white values and descriptions and still light enough for
-  -- black headings and keys.
-  local changed = fg('Changed')
-  local accent = changed or fg('Title') or '#5fafd7'
-  local ok, normal_hl = pcall(vim.api.nvim_get_hl, 0, { name = 'Normal', link = false })
-  if ok and normal_hl.bg then
-    accent = M.blend(accent, ('#%06x'):format(normal_hl.bg), 0.4)
-  end
-  local cterm = changed and 67 or 31
-  local bar = { fg = '#000000', bg = accent, ctermfg = 16, ctermbg = cterm, default = true }
+  -- the content: gdu's blue, whatever the theme; headings and keys black, values and
+  -- descriptions white (`default`: a theme or the user can still set them).
+  local bar = { fg = '#000000', bg = '#2479d0', ctermfg = 16, ctermbg = 32, default = true }
   vim.api.nvim_set_hl(0, 'PerforatedBar', bar)
   vim.api.nvim_set_hl(0, 'PerforatedBarBold', vim.tbl_extend('force', bar, { bold = true }))
   vim.api.nvim_set_hl(
