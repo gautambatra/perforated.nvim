@@ -513,7 +513,7 @@ function M.footer(actions, node, max)
     if keys[1] then
       chunks[#chunks + 1] = { ' ' .. keys[1], 'PerforatedBarBold' }
       chunks[#chunks + 1] =
-        { ' ' .. (list[i].footer_desc or list[i].desc:lower()) .. ' ', 'PerforatedBar' }
+        { ' ' .. (list[i].footer_desc or list[i].desc:lower()) .. ' ', 'PerforatedBarText' }
     end
   end
   for _, a in ipairs(actions) do
@@ -521,9 +521,9 @@ function M.footer(actions, node, max)
       chunks[#chunks + 1] = { ' ' .. (M.keys_of(a)[1] or '.'), 'PerforatedBarBold' }
     end
   end
-  chunks[#chunks + 1] = { ' actions ', 'PerforatedBar' }
+  chunks[#chunks + 1] = { ' actions ', 'PerforatedBarText' }
   chunks[#chunks + 1] = { ' ?', 'PerforatedBarBold' }
-  chunks[#chunks + 1] = { ' help', 'PerforatedBar' }
+  chunks[#chunks + 1] = { ' help', 'PerforatedBarText' }
   return chunks
 end
 
