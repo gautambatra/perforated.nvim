@@ -408,6 +408,27 @@ T['client view']['? help is in sections; the top line and the footer are bars'] 
   end, help)
   H.eq(#gs, 1)
   H.neq(gs[1]:find('file, changelist or section', 1, true), nil)
+  -- Alternative keys are set apart by a dimmed `·` (not one long key sequence), each key in the
+  -- key colour.
+  local row = child.lua_get([[(function()
+    for i, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('Expand / toggle', 1, true) then
+        local hls = {}
+        for _, m in ipairs(vim.api.nvim_buf_get_extmarks(0, -1, { i - 1, 0 }, { i - 1, -1 }, { details = true })) do
+          hls[#hls + 1] = { vim.trim(l:sub(m[3] + 1, m[4].end_col)), m[4].hl_group }
+        end
+        return { line = l, hls = hls }
+      end
+    end
+  end)()]])
+  H.neq(row.line:find('l · <Tab> · <CR>', 1, true), nil)
+  H.eq(row.hls, {
+    { 'l', 'PerforatedKey' },
+    { '·', 'PerforatedDim' },
+    { '<Tab>', 'PerforatedKey' },
+    { '·', 'PerforatedDim' },
+    { '<CR>', 'PerforatedKey' },
+  })
   child.type_keys('q')
   -- Bars: on the colour of a changed file (Changed) taken 40 % towards the background, the top
   -- line to the window's edge; headings and keys black, values and descriptions white.

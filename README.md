@@ -267,7 +267,8 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     line it opens a diff tab of every shelved file against the workspace. `y` copies the
     changelist number.
   - `?` lists every key, by section (moving around, selecting, workspace, changelists, files,
-    shelves, sync and merge, reconcile, quickfix, submitted files). A footer always shows the
+    shelves, sync and merge, reconcile, quickfix, submitted files); keys that do the same thing
+    are set apart by a dimmed `·` (`l · <Tab> · <CR>`). A footer always shows the
     keys that apply to the current line; off a changelist or file (a section heading, the
     client line) it offers `gS` sync workspace and `W` switch client. The top line (client,
     user, server) and the footer are bars in a darkened version of your theme's colour for
