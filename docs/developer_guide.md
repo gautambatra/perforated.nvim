@@ -1282,7 +1282,8 @@ column.
 
 #### `ui/footer.lua`
 A one-line, non-focusable float anchored to the bottom of a view window, in `PerforatedFooter`
-(→ `PerforatedBar`: black on `Changed`'s fg, else `Title`'s, set in `hl.setup`; `PerforatedBarBold`
+(→ `PerforatedBar`: black on `Changed`'s fg, else `Title`'s, blended 40 % towards
+`Normal`'s bg when there is one, set in `hl.setup`; `PerforatedBarBold`
 for keys and headings, `PerforatedBarText` white for values and descriptions), updated on cursor
 moves (per-window statuslines are hidden with `laststatus=3`, so a float is used instead).
 Only for normal windows: it sits at zindex 40, under any float (default 50), so a view shown
