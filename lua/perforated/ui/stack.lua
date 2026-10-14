@@ -12,6 +12,12 @@
 --- use and again after a colorscheme change. While a window has a namespace its 'winhighlight'
 --- is ignored, so the namespace also gives the background and the border.
 ---
+--- Leaving dim can't go back to the 'winhighlight': on Neovim 0.11 a window whose namespace was
+--- ever set (even to 0) ignores its 'winhighlight' for good (0.12 only until it is set again).
+--- So a pop-up that has been dimmed gets a namespace made of its 'winhighlight' instead (one
+--- per distinct string, its pairs as links; other groups fall back to the global ones), and one
+--- never dimmed is left alone.
+---
 --- Pop-ups opt in with `register(win, opts)` right after setting their 'winhighlight'. Toasts
 --- (never focused, own coloured borders) and the hunk preview (gone on the next cursor move)
 --- don't.
@@ -25,11 +31,27 @@ local M = {}
 ---@field active string    the same with the accent border
 ---@field seq integer      registration order: the newest modal wins
 ---@field state string?    'active' | 'dim' | 'plain' (as applied)
+---@field dimmed boolean?  its namespace has been set ('winhighlight' alone no longer applies)
 
 local entries = {} ---@type table<integer, perforated.StackEntry>
 local seq = 0
 local ns ---@type integer?
 local built = false
+local winhl_ns = {} ---@type table<string, integer>
+
+--- A namespace standing in for a 'winhighlight' value: `From:To` pairs as links.
+---@param winhl string
+---@return integer
+local function ns_of(winhl)
+  if not winhl_ns[winhl] then
+    local id = vim.api.nvim_create_namespace('perforated.stack.winhl.' .. winhl)
+    for from, to in winhl:gmatch('([^,:]+):([^,]+)') do
+      vim.api.nvim_set_hl(id, from, { link = to })
+    end
+    winhl_ns[winhl] = id
+  end
+  return winhl_ns[winhl]
+end
 
 --- The dim namespace: every highlight group defined now becomes the dimmed text colour, with
 --- no background (so selections and the cursor line disappear too) — except the float's own
@@ -77,10 +99,14 @@ local function apply(win, e, state)
       M.build()
     end
     vim.api.nvim_win_set_hl_ns(win, ns)
+    e.dimmed = true
     return
   end
-  vim.api.nvim_win_set_hl_ns(win, 0)
-  vim.wo[win][0].winhighlight = state == 'active' and e.active or e.base
+  local winhl = state == 'active' and e.active or e.base
+  vim.wo[win][0].winhighlight = winhl
+  if e.dimmed then
+    vim.api.nvim_win_set_hl_ns(win, ns_of(winhl))
+  end
 end
 
 --- Bring every registered pop-up up to date with the focus.
