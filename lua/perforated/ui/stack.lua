@@ -135,7 +135,9 @@ end
 
 --- Take part in stacking. Call after setting the window's 'winhighlight'.
 ---@param win integer
----@param opts { modal: boolean?, group: any? }?  group: windows that are one pop-up
+---@param opts { modal: boolean?, group: any?, border: string? }?  group: windows that are one
+---  pop-up; border: the group for its border while in use (default the accent,
+---  `PerforatedFloatBorderActive`)
 function M.register(win, opts)
   if not vim.api.nvim_win_is_valid(win) then
     return
@@ -145,9 +147,10 @@ function M.register(win, opts)
   opts = opts or {}
   seq = seq + 1
   local base = vim.wo[win].winhighlight
-  local active, n = base:gsub('FloatBorder:[^,]*', 'FloatBorder:PerforatedFloatBorderActive')
+  local border = 'FloatBorder:' .. (opts.border or 'PerforatedFloatBorderActive')
+  local active, n = base:gsub('FloatBorder:[^,]*', border)
   if n == 0 then
-    active = (base == '' and '' or (base .. ',')) .. 'FloatBorder:PerforatedFloatBorderActive'
+    active = (base == '' and '' or (base .. ',')) .. border
   end
   entries[win] = {
     group = opts.group or win,

@@ -65,23 +65,27 @@ end
 
 local keys = require('perforated.ui.keys')
 
-local function key_table(actions)
-  local rows, width = {}, 0
-  for _, a in ipairs(actions) do
-    local k = table.concat(keys.keys_of(a), ' ')
-    if k ~= '' then
-      rows[#rows + 1] = { k, a.desc }
-      width = math.max(width, vim.fn.strdisplaywidth(k))
+local function key_table(actions, sections)
+  local rows, width = keys.help_rows(actions, sections), 0
+  for _, r in ipairs(rows) do
+    if r[1] then
+      width = math.max(width, vim.fn.strdisplaywidth(r[1]))
     end
   end
   width = math.min(width, 26)
-  for _, r in ipairs(rows) do
+  local ind = sections and '    ' or '  ' -- rows under their section's heading
+  for i, r in ipairs(rows) do
     local k = r[1]
-    if vim.fn.strdisplaywidth(k) > width then
-      add('  ' .. k)
-      add('  ' .. (' '):rep(width) .. '  ' .. r[2])
+    if r.section then
+      if i > 1 then
+        add()
+      end
+      add('  ' .. r.section)
+    elseif vim.fn.strdisplaywidth(k) > width then
+      add(ind .. k)
+      add(ind .. (' '):rep(width) .. '  ' .. r[2])
     else
-      add('  ' .. k .. (' '):rep(width - vim.fn.strdisplaywidth(k)) .. '  ' .. r[2])
+      add(ind .. k .. (' '):rep(width - vim.fn.strdisplaywidth(k)) .. '  ' .. r[2])
     end
   end
 end
@@ -140,6 +144,7 @@ local views = {
     'Client view (:P4)',
     'perforated-client-view',
     require('perforated.views.client')._actions(stub()),
+    require('perforated.views.client').HELP_SECTIONS,
   },
   {
     'Describe buffer (:P4 describe)',
@@ -174,7 +179,7 @@ for _, v in ipairs(views) do
   add()
   add(v[1] .. (' '):rep(math.max(1, W - #v[1] - #v[2] - 2)) .. '*' .. v[2] .. '*')
   add()
-  key_table(v[3])
+  key_table(v[3], v[4])
 end
 add()
 add('Diff tab (D, :P4 diff -a)' .. (' '):rep(W - 25 - 22) .. '*perforated-diff-tab*')

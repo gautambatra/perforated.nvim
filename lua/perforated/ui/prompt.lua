@@ -86,8 +86,9 @@ function M.input(opts, on_confirm)
     footer_pos = 'right',
     zindex = 200,
   })
-  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
-  require('perforated.ui.stack').register(win)
+  vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedInputBorder'
+  -- A prominent border (not the usual accent): a question waiting for an answer.
+  require('perforated.ui.stack').register(win, { border = 'PerforatedInputBorder' })
   vim.wo[win][0].wrap = false
 
   local done = false

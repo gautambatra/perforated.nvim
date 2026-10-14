@@ -15,6 +15,7 @@ local LINKS = {
   PerforatedFloat = 'NormalFloat',
   PerforatedFloatBorder = 'FloatBorder',
   PerforatedFloatBorderActive = 'FloatTitle', -- the pop-up in use, over others (ui/stack.lua)
+  PerforatedInputBorder = 'DiagnosticWarn', -- a text box asking for input (ui/prompt.lua)
   PerforatedMenuSel = 'PmenuSel', -- the highlighted item of an action menu (and the picker's)
   PerforatedPickerMatch = 'Special', -- characters matching the picker's filter
   PerforatedToast = 'NormalFloat',
@@ -45,7 +46,7 @@ local LINKS = {
   PerforatedTimelapseDelete = 'DiffDelete', -- lines deleted in it (virtual lines)
   PerforatedModified = 'Changed', -- opened file that differs from its base
   PerforatedMark = 'Todo',
-  PerforatedFooter = 'StatusLineNC',
+  PerforatedFooter = 'PerforatedBar', -- the key footer under a view
   PerforatedLoading = 'Comment',
   PerforatedPreviewDelete = 'DiffDelete',
 }
@@ -98,6 +99,12 @@ function M.setup()
   else
     vim.api.nvim_set_hl(0, 'PerforatedUnchanged', { link = 'Comment', default = true })
   end
+  -- The bars of a view (the client view's top line, the key footers): black text on the
+  -- theme's accent colour (Title's), so they stand out from the content.
+  local accent = fg('Title') or '#5fafd7'
+  local bar = { fg = '#000000', bg = accent, ctermfg = 16, ctermbg = 74, default = true }
+  vim.api.nvim_set_hl(0, 'PerforatedBar', bar)
+  vim.api.nvim_set_hl(0, 'PerforatedBarBold', vim.tbl_extend('force', bar, { bold = true }))
   if not done then
     done = true
     vim.api.nvim_create_autocmd('ColorScheme', {

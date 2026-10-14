@@ -8,6 +8,8 @@
 ---     run = function(items, ctx) … end,    -- items: marked items, else the cursor's item
 ---     multi = true,                        -- accepts several (marked) items
 ---     footer = 10,                         -- show in footer (lower = earlier)
+---     footer_when = function(item, node) … end, -- optional: in the footer only here (the
+---                                          -- key still works wherever the action applies)
 ---   }
 ---
 --- A doubled key (`dd`) shares its first key with single-key actions without delaying them:
@@ -29,6 +31,8 @@ local M = {}
 ---@field run fun(items: any[], ctx: table)
 ---@field multi boolean?
 ---@field footer integer?
+---@field footer_when (fun(item: any, node: perforated.TreeNode?): boolean)?
+---@field footer_desc string?  a shorter label for the footer
 ---@field nomenu boolean|'layout'|nil  hide from the `.` menu (navigation keys); 'layout': only
 ---  where a menu layout lists it
 
@@ -358,35 +362,112 @@ function M.menu(actions, view)
   end
 end
 
---- `?`: floating help listing every action with all its keys.
+---@alias perforated.HelpSection { [1]: string, [2]: (string|{ [1]: string, [2]: string })[] }
+---  a title and its actions in order: an id, or { id, help text }
+
+--- Rows of the `?` help: every action with keys, as `{ keys, desc }`. With `sections`, grouped
+--- under `{ section = title }` rows in that order; within a section, actions sharing their
+--- keys (`gs` on a file, a changelist, a section) make one row, worded by the first entry.
+--- Actions with keys that no section lists come last, under "Other".
 ---@param actions perforated.Action[]
----@param title string
-function M.help(actions, title)
-  local lines = {}
-  local width = 0
+---@param sections perforated.HelpSection[]?
+---@return ({ [1]: string, [2]: string }|{ section: string })[]
+function M.help_rows(actions, sections)
   local rows = {}
+  local function keys_str(a)
+    return table.concat(M.keys_of(a), ' ')
+  end
+  if not sections then
+    for _, a in ipairs(actions) do
+      local k = keys_str(a)
+      if k ~= '' then
+        rows[#rows + 1] = { k, a.desc }
+      end
+    end
+    return rows
+  end
+  local by_id, used = {}, {}
   for _, a in ipairs(actions) do
-    local keys = table.concat(M.keys_of(a), ' ')
-    if keys ~= '' then
-      rows[#rows + 1] = { keys, a.desc }
-      width = math.max(width, vim.fn.strdisplaywidth(keys))
+    by_id[a.id] = by_id[a.id] or a
+  end
+  local function section(title, entries)
+    local seen, out = {}, {}
+    for _, e in ipairs(entries) do
+      local id, text = e, nil
+      if type(e) == 'table' then
+        id, text = e[1], e[2]
+      end
+      local a = by_id[id]
+      if a then
+        used[id] = true
+        local k = keys_str(a)
+        if k ~= '' and not seen[k] then
+          seen[k] = true
+          out[#out + 1] = { k, text or a.desc }
+        end
+      end
+    end
+    if #out > 0 then
+      rows[#rows + 1] = { section = title }
+      vim.list_extend(rows, out)
     end
   end
+  for _, s in ipairs(sections) do
+    section(s[1], s[2])
+  end
+  local rest = {}
+  for _, a in ipairs(actions) do
+    if not used[a.id] then
+      rest[#rest + 1] = a.id
+    end
+  end
+  section('Other', rest)
+  return rows
+end
+
+--- `?`: floating help listing every action with all its keys (by section, when given).
+---@param actions perforated.Action[]
+---@param title string
+---@param sections perforated.HelpSection[]?
+function M.help(actions, title, sections)
+  local rows = M.help_rows(actions, sections)
+  local width = 0
   for _, r in ipairs(rows) do
-    lines[#lines + 1] = (' %s%s  %s'):format(
-      r[1],
-      (' '):rep(width - vim.fn.strdisplaywidth(r[1])),
-      r[2]
-    )
+    if r[1] then
+      width = math.max(width, vim.fn.strdisplaywidth(r[1]))
+    end
+  end
+  local lines, marks = {}, {}
+  for _, r in ipairs(rows) do
+    if r.section then
+      if #lines > 0 then
+        lines[#lines + 1] = ''
+      end
+      lines[#lines + 1] = ' ' .. r.section
+      marks[#marks + 1] = { #lines - 1, 1, 1 + #r.section, 'PerforatedSection' }
+    else
+      lines[#lines + 1] = ('   %s%s  %s'):format(
+        r[1],
+        (' '):rep(width - vim.fn.strdisplaywidth(r[1])),
+        r[2]
+      )
+      marks[#marks + 1] = { #lines - 1, 3, 3 + #r[1], 'PerforatedKey' }
+    end
+  end
+  if not sections then -- a flat list: no indent for headings
+    for i, l in ipairs(lines) do
+      lines[i] = l:sub(3)
+      marks[i][2], marks[i][3] = marks[i][2] - 2, marks[i][3] - 2
+    end
   end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
-  for i = 1, #lines do
-    vim.api.nvim_buf_set_extmark(buf, require('perforated.ui.tree').ns, i - 1, 1, {
-      end_col = 1 + #rows[i][1],
-      hl_group = 'PerforatedKey',
+  for _, m in ipairs(marks) do
+    vim.api.nvim_buf_set_extmark(buf, require('perforated.ui.tree').ns, m[1], m[2], {
+      end_col = m[3],
+      hl_group = m[4],
     })
   end
   local w = 0
@@ -419,7 +500,9 @@ end
 ---@return { [1]: string, [2]: string }[] chunks
 function M.footer(actions, node, max)
   local list = vim.tbl_filter(function(a)
-    return a.footer and M.applies(a, node)
+    return a.footer
+      and M.applies(a, node)
+      and (not a.footer_when or a.footer_when(node and node.item, node))
   end, actions)
   table.sort(list, function(a, b)
     return a.footer < b.footer
@@ -428,18 +511,19 @@ function M.footer(actions, node, max)
   for i = 1, math.min(#list, max or 8) do
     local keys = M.keys_of(list[i])
     if keys[1] then
-      chunks[#chunks + 1] = { ' ' .. keys[1], 'PerforatedKey' }
-      chunks[#chunks + 1] = { ' ' .. list[i].desc:lower() .. ' ', 'PerforatedDim' }
+      chunks[#chunks + 1] = { ' ' .. keys[1], 'PerforatedBarBold' }
+      chunks[#chunks + 1] =
+        { ' ' .. (list[i].footer_desc or list[i].desc:lower()) .. ' ', 'PerforatedBar' }
     end
   end
   for _, a in ipairs(actions) do
     if a.id == 'menu' then
-      chunks[#chunks + 1] = { ' ' .. (M.keys_of(a)[1] or '.'), 'PerforatedKey' }
+      chunks[#chunks + 1] = { ' ' .. (M.keys_of(a)[1] or '.'), 'PerforatedBarBold' }
     end
   end
-  chunks[#chunks + 1] = { ' actions ', 'PerforatedDim' }
-  chunks[#chunks + 1] = { ' ?', 'PerforatedKey' }
-  chunks[#chunks + 1] = { ' help', 'PerforatedDim' }
+  chunks[#chunks + 1] = { ' actions ', 'PerforatedBar' }
+  chunks[#chunks + 1] = { ' ?', 'PerforatedBarBold' }
+  chunks[#chunks + 1] = { ' help', 'PerforatedBar' }
   return chunks
 end
 

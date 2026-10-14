@@ -42,6 +42,17 @@ T['stack']['history pop-up, then the lookup on top: the lookup stands out, histo
   )
   local prompt = child.api.nvim_get_current_win()
   H.eq(child.lua_get('_G.st(...)', { prompt }), 'active')
+  -- in use, its border is the input colour (prominent: DiagnosticWarn), not the accent
+  H.neq(
+    child
+      .lua_get('vim.wo[...].winhighlight', { prompt })
+      :find('FloatBorder:PerforatedInputBorder', 1, true),
+    nil
+  )
+  H.eq(
+    child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedInputBorder' }).link]]),
+    'DiagnosticWarn'
+  )
   H.eq(child.lua_get('_G.st(_G.hist)'), 'dim')
   H.eq(child.lua_get('_G.dimmed(_G.hist)'), true)
   local dim = child.lua_get([[vim.api.nvim_get_namespaces()['perforated.stack.dim'] ]])

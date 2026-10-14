@@ -1255,8 +1255,15 @@ only on a node where no single-key `d` action applies (a changelist), so a diff 
 still starts at once. `nomenu = 'layout'` keeps an action out of the generic menus but lets a
 menu layout list it (`Q`/`gQ` on changelists, `m` in the file menus). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
 clicked line (`cursor_to_mouse`), since the mapping replaces Vim's own cursor move; a click
-outside the view does nothing. `menu` (the `.` menu), `help` (`?`), `footer` (chunks for the key
-footer). Keys of actions that take several items (`multi`) are also mapped in visual mode:
+outside the view does nothing. `menu` (the `.` menu), `help` (`?`; with a view's sections,
+`help(actions, title, sections)`: `help_rows` groups the actions under section titles, in
+the order given, merges rows with the same keys within a section — `gs` on a file, a
+changelist, a section — worded by the first entry or its `{ id, text }`, and lists unplaced
+actions under "Other"; the client view's are `M.HELP_SECTIONS`, also used by `make doc`),
+`footer` (chunks for the key footer, in `PerforatedBar` / `PerforatedBarBold`; an action's
+`footer_when(item, node)` narrows where it's shown without changing where the key works —
+the client view's `Q` only on changelists and files that aren't shelved, `gS` and `W` only
+off them — and `footer_desc` is a shorter label). Keys of actions that take several items (`multi`) are also mapped in visual mode:
 `selection(view)` turns the selected rows into nodes and `dispatch(a, view, selected)` runs
 the action on those that apply (instead of the marks), dropping a node whose ancestor is also
 in the list, so a changelist selected with its files counts once. `menu_items` builds the `.` menu: valid actions in definition order, unless the view
@@ -1269,7 +1276,8 @@ never lead, trail or double up. Each item's `hint` is the action's Ctrl keys in 
 column.
 
 #### `ui/footer.lua`
-A one-line, non-focusable float anchored to the bottom of a view window, updated on cursor
+A one-line, non-focusable float anchored to the bottom of a view window, in `PerforatedFooter`
+(→ `PerforatedBar`: black on the accent, `hl.setup` from `Title`'s fg), updated on cursor
 moves (per-window statuslines are hidden with `laststatus=3`, so a float is used instead).
 Only for normal windows: it sits at zindex 40, under any float (default 50), so a view shown
 in a float puts the same keys in the float's border footer instead (`base.finish`, and the
@@ -1280,7 +1288,9 @@ Pop-ups over pop-ups. `register(win, { modal, group })` after a float sets its
 `'winhighlight'`; `update()` (on `WinEnter`, a registered window closing, and each
 (un)registration) gives every registered window one state: **active** (the newest open modal
 float, i.e. an action menu, which reads keys without taking focus; else the current window's
-pop-up) swaps its border for `PerforatedFloatBorderActive`; **dim** (another pop-up is
+pop-up) swaps its border for `PerforatedFloatBorderActive`, or the group in
+`register(win, { border })` (the input prompt: `PerforatedInputBorder` → `DiagnosticWarn`,
+prominent); **dim** (another pop-up is
 active) gets the dim namespace; **plain** (no pop-up in use) restores its own
 `'winhighlight'`. `group` makes several windows one pop-up (the picker's filter, list and
 preview). The dim namespace sets *every* group defined at build time to
@@ -1528,7 +1538,9 @@ on_open? }`; `depth` and `parent` are set when rendered. `kind` is what actions 
 `reconcile_file`, `describe_file`, `diff_line`, `rev`, `spacer`, …).
 
 **Action** (`ui/keys.lua`): `{ id, desc, keys, p4v?, kinds?, when?, run, multi?, footer?,
-nomenu? }`.
+footer_when?, footer_desc?, nomenu? }`. A tree node may carry `line_hl`, a highlight for the
+whole row to the window's edge (the client view's header bar: `hl_eol` from the decoration
+provider).
 
 **Sides**: `perforated.DiffSide` = `{ buf } | { spec } | { empty }` for diff windows;
 `perforated.RevSide` = `{ spec } | { path } | { empty }` for comparisons and content.
@@ -1586,7 +1598,9 @@ co-author / AI attribution trailers.
 **A key in a view**
 1. Add an action to the view's `actions(view)` list: `id`, `desc`, `keys`, `kinds` (node kinds
    it applies to), optional `when(item, node)`, `run(items, ctx)`, `multi` if it accepts marked
-   items, `footer = N` to show it in the footer.
+   items, `footer = N` to show it in the footer (`footer_when` to narrow where).
+   In the client view, add its id to a section of `M.HELP_SECTIONS` (else it lands under
+   "Other" in `?`).
 2. Avoid buffer-local key prefixes of existing keys (see [§14](#14-traps-we-fell-into)).
 3. `make doc` — the key tables in `:h perforated` come from these registries.
 
