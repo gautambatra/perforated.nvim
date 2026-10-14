@@ -559,6 +559,7 @@ lua/perforated/
     footer.lua               key footer float anchored to a window
     float.lua                single-key modal menu
     stack.lua                pop-ups over pop-ups: accent border on the one in use, the rest dimmed
+    scrollsync.lua           scroll-bound windows follow a mouse-wheel scroll of a non-current one
     qf.lua                   quickfix/location-list sink and qf-window keys
     toast.lua                pop-up notifications (placed by kind; activity- and focus-gated)
     prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
@@ -1310,6 +1311,26 @@ the text colour blended 55 % towards the float background, without a background 
 and cursor line vanish), plus the float's own background and a fainter border: a window
 namespace replaces `'winhighlight'`, so it must carry those too. Built on first use and after
 `:colorscheme` (~1.5 ms for ~1300 groups). Toasts and the hunk preview don't register.
+
+#### `ui/scrollsync.lua`
+
+`watch(win)` marks a scroll-bound window (`diff.view.diffthis` marks every diff side: diff
+tab, `:P4 diff`, time-lapse; annotate marks its two windows). Neovim syncs `'scrollbind'`
+windows only when the *current* window scrolls (`do_check_scrollbind` at the end of a
+Normal-mode command), but the mouse wheel scrolls the window under the pointer. One global
+`WinScrolled` handler: a marked, bound window in the current tab that isn't current and moved
+→ `noautocmd` into it, `CTRL-Y CTRL-E` (the second scroll triggers Neovim's diff-aware sync of
+the others; the first only records the window), back with `noautocmd`, and a no-op `<Esc>`
+there so Neovim compares the next scroll against that window. `own` holds every bound
+window's `topline:topfill` after our sync: WinScrolled reports changes since the last event,
+so our sync and the user's next wheel scroll can arrive together, and only a window that
+moved since counts. Pitfalls found on the way (each verified in a real terminal): `:syncbind`
+uses equal line numbers, not the diff's, and sets `did_syncbind`, which skips the *next* sync
+(the user's next scroll); scrolling the current window by the event's `topline` delta drifts
+through filler lines (they change `topfill`, not `topline`); `line('w0')` scrolls a window to
+its cursor. Headless tests can't show the scroll-back of a current window with its cursor out
+of view (no UI redraw), so `tests/test_scrollsync.lua` covers the wiring and the real-terminal
+check covers the rest.
 
 #### `ui/float.lua`
 `menu(opts)` — a single-key modal menu that waits with `getcharstr()` (events keep

@@ -94,7 +94,7 @@ set in your environment or with `p4 set`.
 | Start editing a read-only file | A small menu offers to check it out — into your last changelist with `<CR>` |
 | Look at the sign column | Added / changed / deleted lines against your have revision; `]h` / `[h` jump between hunks |
 | `:P4` | The **client view**: your pending changelists, shelves, stale files and recent submits. Press `?` for its keys |
-| `d` on a file there, or `:P4 diff` | A side-by-side diff in a new tab (`q` closes it) |
+| `d` on a file there, or `:P4 diff` | A side-by-side diff in a new tab (`q` closes it). The mouse wheel over either side scrolls both, whichever window has focus |
 | `D` on a changelist | Every file of the changelist in a diff tab with a file panel |
 | `:P4 annotate` / `:P4 blame` | Who changed each line, coloured by age / as virtual text on the current line |
 | `:P4 timelapse` | Step through every revision of the file with `h` / `l`, P4V-style |

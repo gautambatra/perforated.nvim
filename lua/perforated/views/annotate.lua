@@ -202,6 +202,9 @@ end
 local function set_bind(win, on)
   if vim.api.nvim_win_is_valid(win) then
     vim.wo[win][0].scrollbind, vim.wo[win][0].cursorbind = on, on
+    if on then
+      require('perforated.ui.scrollsync').watch(win) -- the mouse wheel over either scrolls both
+    end
   end
 end
 
