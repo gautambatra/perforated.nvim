@@ -430,8 +430,8 @@ T['client view']['? help is in sections; the top line and the footer are bars'] 
     { '<CR>', 'PerforatedKey' },
   })
   child.type_keys('q')
-  -- Bars: on the colour of a changed file (Changed) taken 40 % towards the background, the top
-  -- line to the window's edge; headings and keys black, values and descriptions white.
+  -- Bars: gdu's blue whatever the theme, the top line to the window's edge; headings and keys
+  -- black, values and descriptions white.
   child.lua([[vim.cmd('hi clear') -- as :colorscheme does
     vim.api.nvim_set_hl(0, 'Title', { fg = '#56b6c2' })
     vim.api.nvim_set_hl(0, 'Changed', { fg = '#61afef' })
@@ -439,31 +439,18 @@ T['client view']['? help is in sections; the top line and the footer are bars'] 
     vim.api.nvim_exec_autocmds('ColorScheme', {})]])
   H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' })]]), {
     fg = 0,
-    bg = 0x4a7ba4,
+    bg = 0x2479d0,
     ctermfg = 16,
-    ctermbg = 67,
+    ctermbg = 32,
     default = true,
   })
   H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBarText' })]]), {
     fg = 0xffffff,
-    bg = 0x4a7ba4,
+    bg = 0x2479d0,
     ctermfg = 231,
-    ctermbg = 67,
+    ctermbg = 32,
     default = true,
   })
-  -- without Changed: Title's colour
-  child.lua([[vim.cmd('hi clear')
-    vim.api.nvim_set_hl(0, 'Title', { fg = '#56b6c2' })
-    vim.api.nvim_set_hl(0, 'Changed', {})
-    vim.api.nvim_set_hl(0, 'Normal', { fg = '#abb2bf', bg = '#282c34' })
-    vim.api.nvim_exec_autocmds('ColorScheme', {})]])
-  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' }).bg]]), 0x447f89)
-  -- without a background (transparent themes): the colour as it is
-  child.lua([[vim.cmd('hi clear')
-    vim.api.nvim_set_hl(0, 'Changed', { fg = '#61afef' })
-    vim.api.nvim_set_hl(0, 'Normal', { fg = '#abb2bf' })
-    vim.api.nvim_exec_autocmds('ColorScheme', {})]])
-  H.eq(child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedBar' }).bg]]), 0x61afef)
   H.eq(
     child.lua_get([[vim.api.nvim_get_hl(0, { name = 'PerforatedFooter' }).link]]),
     'PerforatedBar'
