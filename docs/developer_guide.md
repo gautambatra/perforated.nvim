@@ -1294,7 +1294,7 @@ Pop-ups over pop-ups. `register(win, { modal, group })` after a float sets its
 float, i.e. an action menu, which reads keys without taking focus; else the current window's
 pop-up) swaps its border for `PerforatedFloatBorderActive`, or the group in
 `register(win, { border })` (the input prompt: `PerforatedInputBorder` → `DiagnosticWarn`,
-prominent, on heavy border glyphs set in `prompt.input`); **dim** (another pop-up is
+prominent); **dim** (another pop-up is
 active) gets the dim namespace; **plain** (no pop-up in use) restores its own
 `'winhighlight'`. Active and plain only set `'winhighlight'` on a window never dimmed; one
 that has been gets a namespace made of the `'winhighlight'` string instead (`ns_of`, its
