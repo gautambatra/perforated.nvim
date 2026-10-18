@@ -131,6 +131,8 @@ T['m4']['shelve (replace after confirm), delete shelved, unshelve into the same 
   -- Each step showed a busy pop-up, closed when p4 was done.
   H.eq(child.lua_get('_G.busy'), {
     { msg = ('Shelving CL %s…'):format(cl), open = false },
+    -- the shelf exists: hidden for the question, shown again
+    { msg = ('Shelving CL %s…'):format(cl), open = false },
     { msg = ('Shelving CL %s…'):format(cl), open = false },
     { msg = ('Unshelving CL %s…'):format(cl), open = false },
     { msg = ('Deleting shelved files of CL %s…'):format(cl), open = false },
@@ -186,6 +188,59 @@ end
 
 local function changes_pending()
   return p4({ 'changes', '-s', 'pending' })
+end
+
+T['m4']['shelve / unshelve: busy pop-up from the command on, hidden while a question is up'] = function()
+  setup()
+  local cl = new_change('busy shelf')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  H.write(root .. '/main/b.txt', 'b2\n')
+  p4({ 'shelve', '-c', cl })
+  -- A timeline of busy pop-ups opening / closing and the questions asked (with how many busy
+  -- pop-ups were open then).
+  child.lua([[
+    _G.events = {}
+    local open = 0
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    toast.busy = function(msg)
+      local close = busy(msg)
+      open = open + 1
+      table.insert(_G.events, 'show ' .. msg)
+      return function() open = open - 1; table.insert(_G.events, 'hide'); close() end
+    end
+    require('perforated.ui.prompt').confirm = function()
+      table.insert(_G.events, 'confirm, ' .. open .. ' open')
+      return 1
+    end
+    require('perforated.checkout').pick_change = function(_, cb)
+      table.insert(_G.events, 'pick, ' .. open .. ' open')
+      vim.schedule(function() cb('default') end)
+    end
+  ]])
+  -- Shelve over the existing shelf: the pop-up is up before p4 is asked anything.
+  H.eq(
+    child.lua_get(([[(function()
+        require('perforated.ops').shelve(require('perforated').workspace(), %q, nil,
+          function(ok) _G.r = ok end)
+        return _G.events
+      end)()]]):format(cl)),
+    { ('show Shelving CL %s…'):format(cl) }
+  )
+  wait('_G.r == true')
+  local shelving = ('show Shelving CL %s…'):format(cl)
+  H.eq(child.lua_get('_G.events'), { shelving, 'hide', 'confirm, 0 open', shelving, 'hide' })
+  -- Unshelve a shelf that isn't one of our pending CLs: the target (default) is picked.
+  p4({ 'revert', root .. '/main/b.txt' })
+  child.lua(
+    [[_G.r = nil; _G.events = {}
+    require('perforated.p4').pending_changes = function(_, cb) vim.schedule(function() cb({}) end) end]]
+  )
+  child.lua(([[require('perforated.ops').unshelve(require('perforated').workspace(), %q, nil, nil,
+      function(ok) _G.r = ok end)]]):format(cl))
+  wait('_G.r ~= nil')
+  local unshelving = ('show Unshelving CL %s…'):format(cl)
+  H.eq(child.lua_get('_G.events'), { unshelving, 'hide', 'pick, 0 open', unshelving, 'hide' })
 end
 
 T['m4']['shelve over a shelf with files no longer opened: replace all (shelve -r)'] = function()

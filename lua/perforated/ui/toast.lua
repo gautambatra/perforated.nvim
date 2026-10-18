@@ -330,6 +330,30 @@ function M.busy(msg)
   end
 end
 
+--- A busy pop-up for an action that also asks questions (a confirmation, a picker): shown at
+--- once, `pause()` hides it while the question is up, `resume()` shows it again, `done()` closes
+--- it. With `toast.backend = 'notify'` the message is sent once.
+---@param msg string
+---@return { pause: fun(), resume: fun(), done: fun() }
+function M.task(msg)
+  local closer = M.busy(msg)
+  local function hide()
+    if closer then
+      closer()
+      closer = nil
+    end
+  end
+  return {
+    pause = hide,
+    resume = function()
+      if not closer then
+        closer = cfg().backend == 'notify' and function() end or M.busy(msg)
+      end
+    end,
+    done = hide,
+  }
+end
+
 --- Close every toast.
 function M.dismiss()
   for i = #shown, 1, -1 do

@@ -1159,7 +1159,9 @@ Shelve (`shelve -f`, confirmation before replacing; when a whole changelist is r
 one `opened -c` shows the shelf holding files no longer opened in it, a third choice "replace
 all" runs `shelve -r` and the prompt lists those files), delete shelved files, unshelve (into the
 shelf's own changelist when it's yours, else a picked one; `-f` only after confirming) — each
-with a centred busy pop-up; shelve and unshelve move file content, so they have no call timeout;
+with a centred busy pop-up; shelve and unshelve show theirs from the start (`toast.task`), while
+they check the shelf or find the target, hidden while the confirmation or picker is up and shown
+again for p4's work; they move file content, so they have no call timeout;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
 quickfix), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
 reloads unmodified buffers without prompts; afterwards can't-clobber files, files named by
@@ -1386,7 +1388,9 @@ tells the user something (never `vim.notify` directly): a toast titled by level 
 `vim.notify` when `toast.backend = 'notify'`. Safe from fast (luv) callbacks. `show(title,
 lines, level, { detail, place })` is the lower-level call (stale-file toasts: a dimmed details line).
 `busy(msg)` is a "working on it" pop-up with no countdown and no history entry; it returns the
-function that closes it (the diff tab's "Opening diff view…").
+function that closes it (the diff tab's "Opening diff view…"). `task(msg)` is a busy pop-up for
+an action that also asks questions: `pause()` hides it for a confirmation or picker, `resume()`
+shows it again, `done()` closes it (with `backend = 'notify'` the message is sent once).
 
 #### `ui/icons.lua`
 File icons from mini.icons or nvim-web-devicons (detected via runtime files, without loading

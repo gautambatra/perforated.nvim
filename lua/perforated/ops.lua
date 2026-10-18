@@ -123,6 +123,11 @@ function M.shelve(ws, change, paths, cb)
     )
     return cb(false)
   end
+  -- From the command on, while the shelf is checked too (hidden while a question is up).
+  local task = require('perforated.ui.toast').task(
+    paths and ('Shelving %d file(s) in CL %s…'):format(#paths, change)
+      or ('Shelving CL %s…'):format(change)
+  )
   local function run(replace_all)
     local args = replace_all and { 'shelve', '-r', '-c', change }
       or { 'shelve', '-f', '-c', change }
@@ -131,12 +136,9 @@ function M.shelve(ws, change, paths, cb)
     if paths then
       opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths), timeout = 0 }
     end
-    local done = busy(
-      paths and ('Shelving %d file(s) in CL %s…'):format(#paths, change)
-        or ('Shelving CL %s…'):format(change)
-    )
+    task.resume()
     ws:run(args, opts, function(res)
-      done()
+      task.done()
       co.report('shelve', res, #res.records)
       co.changed(ws)
       cb(#res.errors == 0 and #res.records > 0)
@@ -152,6 +154,7 @@ function M.shelve(ws, change, paths, cb)
       #existing,
       what
     )
+    task.pause()
     if not extra or #extra == 0 then
       if not confirm(msg, '&Replace\n&Cancel') then
         return cb(false)
@@ -236,16 +239,18 @@ end
 ---@param cb fun(ok: boolean)?
 function M.unshelve(ws, shelf, depot_files, target, cb)
   cb = cb or function() end
+  -- From the command on, while the target is found too (hidden while a question is up).
+  local task = require('perforated.ui.toast').task(('Unshelving CL %s…'):format(shelf))
   local function run(into, force)
     local args = { 'unshelve', '-s', shelf, '-c', into }
     if force then
       table.insert(args, 2, '-f')
     end
     vim.list_extend(args, depot_files or {})
+    task.resume()
     -- No call timeout: unshelving downloads every file's content.
-    local done = busy(('Unshelving CL %s…'):format(shelf))
     ws:run(args, { timeout = 0 }, function(res)
-      done()
+      task.done()
       local texts = messages(res)
       if #clobbered(res.errors) > 0 and not force then
         if
@@ -297,6 +302,7 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
         return run(shelf) -- our own pending changelist in this client
       end
     end
+    task.pause()
     co.pick_change(ws, function(cl)
       if cl then
         run(cl)

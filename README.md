@@ -235,8 +235,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
     - **On a changelist:** submit; view, diff all (`<C-d>` too), edit the description, copy
       the number or Swarm URL, quickfix, sync to latest revision (only when a file is stale),
       delete (only when no files are opened in it); revert unchanged, revert, resolve (only
-      with unresolved files), move all files; shelve, unshelve, delete shelved files; new
-      changelist, sync, switch client. Describe (`gd`) isn't offered; `K` is its quick
+      with unresolved files), move all files; shelve, unshelve, delete shelved files (a busy
+      pop-up from the moment you ask until p4 is done, set aside while a question such as
+      "replace the shelf?" is up); new changelist, sync, switch client. Describe (`gd`) isn't offered; `K` is its quick
       counterpart.
     - **On an opened file:** open, sync to latest revision (only when stale), **get
       revision…** (`g@`: pick one from the file's history, then sync the file to it); revert
