@@ -287,6 +287,28 @@ T['checkout']['add prompt: s = do not ask again for this file, even after reopen
   child.type_keys('<Esc>')
 end
 
+T['checkout']['add prompt: s holds when the server turns out case-insensitive afterwards'] = function()
+  -- (macOS: `p4 info` can answer after the prompt; keys are case-folded from then on.)
+  edit('New.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'fresh' })
+  child.cmd('write')
+  wait_prompt()
+  child.type_keys('s')
+  child.lua([[
+    local ws = require('perforated').workspace()
+    ws.icase = true
+    require('perforated.buffer').rekey(ws)
+  ]])
+  child.cmd('bwipeout!')
+  edit('New.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'new']])
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'fresh', 'er' })
+  child.cmd('write')
+  vim.uv.sleep(500)
+  H.eq(child.lua_get([[require('perforated.ui.float').active]]), vim.NIL)
+end
+
 T['checkout'][':w <new name> offers to add the new file, not the buffer'] = function()
   edit('new.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'new']])
@@ -413,6 +435,50 @@ T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it
   child.type_keys('q')
   H.eq(#child.api.nvim_list_tabpages(), 1)
   H.eq(child.wo.diff, false)
+end
+
+T['ops'][':P4 diff: "Opening diff view…" from the command until the revision has arrived'] = function()
+  H.record_timeline(child)
+  -- When it closes: is the revision side filled?
+  child.lua([[
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    toast.busy = function(msg)
+      local close = busy(msg)
+      return function()
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          local b = vim.api.nvim_win_get_buf(w)
+          if vim.api.nvim_buf_get_name(b):find('^perforated://') then
+            table.insert(_G.events, 'loaded: ' .. tostring(vim.b[b].perforated_loaded))
+          end
+        end
+        close()
+      end
+    end
+  ]])
+  -- Up before anything is asked of p4.
+  H.eq(
+    child.lua_get([[(function() vim.cmd('P4 diff'); return _G.events end)()]]),
+    { 'show Opening diff view…' }
+  )
+  wait('#_G.events == 3')
+  H.eq(child.lua_get('_G.events'), { 'show Opening diff view…', 'loaded: true', 'hide' })
+  H.eq(#child.api.nvim_list_tabpages(), 2)
+  -- Identical files: closed, and said so.
+  child.cmd('tabclose') -- the diff tab
+  edit('b.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  child.lua('_G.events = {}')
+  child.cmd('P4 diff')
+  wait('#_G.events == 2')
+  H.eq(child.lua_get('_G.events'), { 'show Opening diff view…', 'hide' })
+  H.eq(#child.api.nvim_list_tabpages(), 1)
+  H.eq(
+    child.lua_get(
+      [[(function() local h = require('perforated.ui.toast').history(); return h[#h].title end)()]]
+    ),
+    'Perforce: identical, nothing to diff'
+  )
 end
 
 T['ops'][':P4 diff: headers name each side; q in the user file closes, only in the tab'] = function()

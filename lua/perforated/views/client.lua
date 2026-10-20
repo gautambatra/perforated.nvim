@@ -739,6 +739,9 @@ local function diff_file(rec, rev)
   if not path or not path:match('^/') then
     return notify('no local file for ' .. (rec.depotFile or '?'), vim.log.levels.WARN)
   end
+  -- Loading the file and its status takes a moment too.
+  local dview = require('perforated.diff.view')
+  dview.start_busy()
   local buf = vim.fn.bufadd(path)
   vim.fn.bufload(buf)
   local st = require('perforated.buffer').get(buf)
@@ -754,7 +757,10 @@ local function diff_file(rec, rev)
     local s = require('perforated.buffer').get(buf)
     return s ~= nil and s.rec ~= nil
   end, 10)
-  require('perforated.diff.view').open(buf, rev)
+  if not (require('perforated.buffer').get(buf) or {}).rec then
+    dview.finish_busy() -- open() says why
+  end
+  dview.open(buf, rev)
 end
 
 --- A workspace file with depot history (not another client's file, not a new add).

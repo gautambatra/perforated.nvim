@@ -183,6 +183,43 @@ function H.record_busy(child)
   ]])
 end
 
+--- A timeline in the child (`_G.events`) of busy pop-ups shown (`show <msg>`) and hidden
+--- (`hide`), and of the questions asked while it runs, each with how many busy pop-ups were
+--- open then (`confirm, 0 open`, `menu, 0 open`, `pick, 0 open`). Confirmations answer
+--- `_G.answer` (default 1), menus their item with value `_G.menu_answer` (default the first),
+--- the changelist picker `default`.
+---@param child table
+function H.record_timeline(child)
+  child.lua([[
+    _G.events = {}
+    local open = 0
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    toast.busy = function(msg)
+      local close = busy(msg)
+      open = open + 1
+      table.insert(_G.events, 'show ' .. msg)
+      return function() open = open - 1; table.insert(_G.events, 'hide'); close() end
+    end
+    require('perforated.ui.prompt').confirm = function()
+      table.insert(_G.events, 'confirm, ' .. open .. ' open')
+      return _G.answer or 1
+    end
+    require('perforated.ui.float').menu = function(opts)
+      table.insert(_G.events, 'menu, ' .. open .. ' open')
+      for _, it in ipairs(opts.items) do
+        if it.value == (_G.menu_answer or opts.items[1].value) then
+          return it
+        end
+      end
+    end
+    require('perforated.checkout').pick_change = function(_, cb)
+      table.insert(_G.events, 'pick, ' .. open .. ' open')
+      vim.schedule(function() cb('default') end)
+    end
+  ]])
+end
+
 --- Stand in for the modal pop-ups (`ui.float.menu`, which waits for a key): each call is
 --- recorded in `_G.menus` ({ title, header, keys }) and answered with its first choice.
 ---@param child table

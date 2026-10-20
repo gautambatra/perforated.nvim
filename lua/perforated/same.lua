@@ -191,8 +191,11 @@ end
 ---@param right table
 ---@param open fun()
 function M.or_open(ws, left, right, open)
+  local view = require('perforated.diff.view')
+  view.start_busy() -- "Opening diff view…" (closed by the diff view, once it has its content)
   M.check(ws, { { left = left, right = right } }, function(same)
     if same[1] then
+      view.finish_busy()
       require('perforated.ui.toast').show(
         'Perforce: identical, nothing to diff',
         { label(left), label(right) },

@@ -1017,7 +1017,8 @@ behaviour to some directories. `edit` and `add` show a centred `toast.busy` pop-
 runs. The write hooks compare the file written (`ev.match`) with the buffer's path: `:w
 other.c` doesn't touch the buffer's file, and offers to add `other.c` instead
 (`checkout_prompt.add_other`, which fstats it first). `M._session.skip_files` holds the files
-the add prompt's `s` silenced for the session. The prompt (which can ask about a buffer or a
+the add prompt's `s` silenced for the session, by path (`M._skipped` compares them case-folded
+on case-insensitive servers: cache keys fold only once `p4 info` has said so). The prompt (which can ask about a buffer or a
 bare path) and changelist picker live in `checkout_prompt.lua` so the activation path doesn't
 load UI code.
 
@@ -1051,6 +1052,8 @@ depot path, keeps the buffer read-only (with `readonly` off while writing, to av
 refreshes diff mode in windows showing it. Revision buffers outlive their views (`bufhidden=hide`), so
 reusing one of a *mutable* spec (`@=CL` shelves, `#head`, `@label`) reads it again, keeping the
 old text until the new arrives; only numbered revisions (`#N`) are reused as they are.
+`when_loaded(buf, fn)` calls `fn` once the buffer has its content (at once if it isn't
+loading): the single-file diff closes its "Opening diff view…" with it.
 
 #### `diff/engine.lua`
 In-process diffs: `hunks(base, cur)` via `vim.text.diff` (`result_type = 'indices'`, myers +
@@ -1127,7 +1130,10 @@ outlives the diff.
 #### `same.lua`
 `check(ws, pairs, cb)` answers "identical?" for many pairs, cheaply: depot-vs-depot by digest
 (one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call), and
-only otherwise by content. `or_open(ws, left, right, open)` either says "identical" or opens.
+only otherwise by content. `or_open(ws, left, right, open)` either says "identical" or opens;
+it starts the single-file diff's "Opening diff view…" (`diff.view.start_busy`, also started
+earlier by `diff.view.open` and the client view's file diff), which `diff.view.pair` closes
+once both sides have their content (`uri.when_loaded`) and the identical answer closes at once.
 
 #### `revs.lua`
 Helpers for comparison sides (`{ spec }`, `{ path }`, `{ empty }`): `lines` (content),
@@ -1163,14 +1169,17 @@ with a centred busy pop-up; shelve and unshelve show theirs from the start (`toa
 they check the shelf or find the target, hidden while the confirmation or picker is up and shown
 again for p4's work; they move file content, so they have no call timeout;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
-quickfix), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
+quickfix; "Submitting CL N…" from the command on like shelve's, hidden for the float, the
+description editor or input; a quiet job, so the busy pop-up and the result replace the job's
+pop-ups), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
 reloads unmodified buffers without prompts; afterwards can't-clobber files, files named by
 other errors and every unresolved file go to quickfix, and `after_sync` shows a centred pop-up
 whenever something didn't go as asked (files p4 wouldn't overwrite, other errors; "must
 resolve" and "up-to-date" are expected) or files need resolving, offering to resolve now; the
 job's result message counts each kind), sync to a changelist and its picker, delete (closes the
 buffer), move (renames the buffer and keeps unsaved edits), delete a pending changelist
-(moving or reverting its files and deleting its shelf first). Messages of the form
+(moving or reverting its files and deleting its shelf first; "Deleting CL N…" from the command
+on, hidden for the confirmation). Messages of the form
 `<file> - <reason>` become quickfix items (`file_items`).
 
 #### `resolve.lua`

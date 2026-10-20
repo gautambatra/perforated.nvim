@@ -196,28 +196,7 @@ T['m4']['shelve / unshelve: busy pop-up from the command on, hidden while a ques
   p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
   H.write(root .. '/main/b.txt', 'b2\n')
   p4({ 'shelve', '-c', cl })
-  -- A timeline of busy pop-ups opening / closing and the questions asked (with how many busy
-  -- pop-ups were open then).
-  child.lua([[
-    _G.events = {}
-    local open = 0
-    local toast = require('perforated.ui.toast')
-    local busy = toast.busy
-    toast.busy = function(msg)
-      local close = busy(msg)
-      open = open + 1
-      table.insert(_G.events, 'show ' .. msg)
-      return function() open = open - 1; table.insert(_G.events, 'hide'); close() end
-    end
-    require('perforated.ui.prompt').confirm = function()
-      table.insert(_G.events, 'confirm, ' .. open .. ' open')
-      return 1
-    end
-    require('perforated.checkout').pick_change = function(_, cb)
-      table.insert(_G.events, 'pick, ' .. open .. ' open')
-      vim.schedule(function() cb('default') end)
-    end
-  ]])
+  H.record_timeline(child)
   -- Shelve over the existing shelf: the pop-up is up before p4 is asked anything.
   H.eq(
     child.lua_get(([[(function()
@@ -312,8 +291,13 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
     end, 100),
     true
   )
-  -- "Deleting CL N…" from the confirmation until it's done.
-  wait(('vim.deep_equal(_G.busy, { { msg = "Deleting CL %s…", open = false } })'):format(cl))
+  -- "Deleting CL N…" from the command on, hidden for the confirmation, back until it's done.
+  wait(
+    ('vim.deep_equal(_G.busy, { { msg = "Deleting CL %s…", open = false }, { msg = "Deleting CL %s…", open = false } })'):format(
+      cl,
+      cl
+    )
+  )
   H.eq(changes_pending():find('doomed', 1, true), nil)
   H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = 'default' })
   H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b2') -- edits kept
@@ -364,6 +348,61 @@ T['m4']['submit: confirmation float, s submits; buffer state follows'] = functio
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
   H.neq(p4({ 'changes', '-s', 'submitted' }):find('ship it', 1, true), nil)
   H.eq(child.lua_get([[require('perforated').workspace().sticky_cl]]), vim.NIL)
+end
+
+T['m4']['submit / delete changelist: busy pop-up from the command on, hidden while asking'] = function()
+  setup()
+  H.record_timeline(child)
+  -- Submit: up while the files are checked, hidden for the confirmation, back for the submit.
+  local cl = new_change('busy submit')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  H.write(root .. '/main/b.txt', 'b2\n')
+  local submitting = ('show Submitting CL %s…'):format(cl)
+  H.eq(
+    child.lua_get(([[(function()
+        require('perforated.ops').submit(require('perforated').workspace(), %q,
+          function(ok) _G.r = ok end)
+        return _G.events
+      end)()]]):format(cl)),
+    { submitting }
+  )
+  wait('_G.r == true')
+  H.eq(child.lua_get('_G.events'), { submitting, 'hide', 'menu, 0 open', submitting, 'hide' })
+  -- the result is still reported (the job has no pop-ups of its own now)
+  H.neq(
+    vim
+      .iter(child.lua_get([[vim.tbl_map(function(t) return table.concat(t.lines, ' ') end,
+      require('perforated.ui.toast').history())]]))
+      :find(function(l)
+        return l:find('submitted CL ' .. cl .. ' as CL', 1, true) ~= nil
+      end),
+    nil
+  )
+  -- Delete: up while the changelist is looked at, hidden for the confirmation, back for p4.
+  cl = new_change('busy delete')
+  p4({ 'edit', '-c', cl, root .. '/main/a.txt' })
+  child.lua([[_G.r = nil; _G.events = {}]])
+  local deleting = ('show Deleting CL %s…'):format(cl)
+  H.eq(
+    child.lua_get(([[(function()
+        require('perforated.ops').delete_change(require('perforated').workspace(), %q,
+          function(ok) _G.r = ok end)
+        return _G.events
+      end)()]]):format(cl)),
+    { deleting }
+  )
+  wait('_G.r == true')
+  H.eq(child.lua_get('_G.events'), { deleting, 'hide', 'confirm, 0 open', deleting, 'hide' })
+  -- Cancelled at the question: stays closed.
+  cl = new_change('kept')
+  child.lua([[_G.r = nil; _G.events = {}; _G.answer = 2]])
+  child.lua(([[require('perforated.ops').delete_change(require('perforated').workspace(), %q,
+      function(ok) _G.r = ok end)]]):format(cl))
+  wait('_G.r == false')
+  H.eq(
+    child.lua_get('_G.events'),
+    { ('show Deleting CL %s…'):format(cl), 'hide', 'confirm, 0 open' }
+  )
 end
 
 T['m4']['submit of an out-of-date file fails into quickfix'] = function()

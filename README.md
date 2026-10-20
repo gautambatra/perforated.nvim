@@ -301,7 +301,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
   is offered only on a changelist with no opened files. One confirmation says what's in
   it; its opened files move to the default changelist (or are reverted, if you choose that) and
   its shelved files are deleted, then the changelist is. The default changelist can't be
-  deleted; another client's changelist needs `change.allow_force`.
+  deleted; another client's changelist needs `change.allow_force`. "Deleting CL N…" shows
+  from the moment you ask (while the changelist is looked at), steps aside for the question
+  and comes back until it's done; submit does the same ("Submitting CL N…").
 - **`gm`: move files between changelists.** Pick an existing changelist (the default one
   included) or create a new one. On a file it moves that file (or the marked files); on a
   changelist it moves **all** its opened files, and the list leaves that changelist out.
@@ -348,7 +350,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - `:P4 diff` opens the current file against its depot revision, side by side in a new tab, using
   Neovim's diff mode (`]c`, `do`, `dp` all work). Each side has a header naming the file and
   what it is: `#4 (have)`, `@=123 (shelved)`, `(workspace)`. `q` in either side, or `:q`,
-  closes the whole tab (in your own file `q` only acts inside the diff tab).
+  closes the whole tab (in your own file `q` only acts inside the diff tab). "Opening diff
+  view…" shows from the moment you ask until the revision has arrived (or the files turn out
+  identical).
 - Accepts `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
 - `:P4 diff!` (or `diff.tool = 'external'`) opens your **`$P4DIFF`** tool with your own
   environment. GUI tools run detached; terminal tools open in a terminal tab. When a GUI tool

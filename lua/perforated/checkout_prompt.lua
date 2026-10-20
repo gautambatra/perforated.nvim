@@ -107,7 +107,7 @@ end
 function M.add_other(path)
   local ws = require('perforated.core.activation').for_dir(vim.fs.dirname(path))
   local session = co._session
-  if not ws or session.never or session.skip_files[p4.key(ws, path)] or not co._allowed(path) then
+  if not ws or session.never or co._skipped(ws, path) or not co._allowed(path) then
     return
   end
   local mode = config.get().checkout.add_on_write
@@ -263,7 +263,7 @@ function M.prompt(buf, verb, target)
   else
     c.skip = true
     if verb == 'add' then
-      co._session.skip_files[key] = true -- for the rest of the session, reopened or not
+      co._session.skip_files[st.path] = true -- for the rest of the session, reopened or not
     end
     if v == 'never' then
       co._session.never = true

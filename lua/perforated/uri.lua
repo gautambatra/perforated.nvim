@@ -11,6 +11,19 @@ local M = {}
 
 M.PREFIX = 'perforated://'
 
+local waiting = {} ---@type table<integer, fun()[]>  buffer → callbacks for when it's filled
+
+--- Call `fn` once the buffer has its content (at once when it isn't loading).
+---@param buf integer
+---@param fn fun()
+function M.when_loaded(buf, fn)
+  if vim.b[buf].perforated_loaded ~= false then
+    return fn()
+  end
+  waiting[buf] = waiting[buf] or {}
+  table.insert(waiting[buf], fn)
+end
+
 ---@param spec string
 ---@return string
 function M.name(spec)
@@ -158,6 +171,11 @@ function M._fetch(buf, spec, gen)
           end
         end
       end
+    end
+    local fns = waiting[buf] or {}
+    waiting[buf] = nil
+    for _, fn in ipairs(fns) do
+      fn()
     end
   end)
 end

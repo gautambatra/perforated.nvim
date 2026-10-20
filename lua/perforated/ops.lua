@@ -325,6 +325,13 @@ function M.delete_change(ws, change, cb)
     notify('the default changelist cannot be deleted', vim.log.levels.WARN)
     return cb(false)
   end
+  -- From the command on, while the changelist is looked at too (hidden while asking).
+  local task = require('perforated.ui.toast').task(('Deleting CL %s…'):format(change))
+  local outer = cb
+  cb = function(ok)
+    task.done()
+    outer(ok)
+  end
   cls.describe(ws, { change }, {}, function(by)
     local d = by[change]
     if not d or d.rec.status ~= 'pending' then
@@ -391,6 +398,7 @@ function M.delete_change(ws, change, cb)
         local msg = #what > 0 and (title .. '\nIt has ' .. table.concat(what, ' and ') .. '.')
           or title
         local mode
+        task.pause()
         if #paths > 0 then
           local choice = require('perforated.ui.prompt').confirm(
             msg .. '\nIts opened files:',
@@ -404,13 +412,7 @@ function M.delete_change(ws, change, cb)
         if not mode then
           return cb(false)
         end
-        -- From here on p4 runs several commands (shelf, files, the changelist itself): say so.
-        local done = require('perforated.ui.toast').busy(('Deleting CL %s…'):format(change))
-        local outer = cb
-        cb = function(ok)
-          done()
-          outer(ok)
-        end
+        task.resume() -- p4 runs several commands (shelf, files, the changelist itself)
         local function delete()
           local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
           ws:run(args, {}, function(res)
@@ -475,16 +477,24 @@ end
 -- Submit
 -- ---------------------------------------------------------------------------------------------
 
+local function submitting(change)
+  return change == 'default' and 'Submitting the default changelist…'
+    or ('Submitting CL %s…'):format(change)
+end
+
 --- Run the submit itself.
 ---@param ws perforated.Workspace
 ---@param change string
 ---@param desc string?  required for the default changelist
 ---@param cb fun(ok: boolean, submitted: string?)
 ---@param files table[]?  its opened files' fstat records, when already fetched
-function M.run_submit(ws, change, desc, cb, files)
+---@param task table?  the busy pop-up `submit` showed (`toast.task`)
+function M.run_submit(ws, change, desc, cb, files, task)
   local args = change == 'default' and { 'submit', '-d', desc or '' } or { 'submit', '-c', change }
   local label = change == 'default' and 'the default changelist' or ('CL ' .. change)
   local jobs = require('perforated.jobs')
+  task = task or require('perforated.ui.toast').task(submitting(change))
+  task.resume()
   local function go(before)
     local paths = {}
     for _, r in ipairs(before or {}) do
@@ -492,15 +502,19 @@ function M.run_submit(ws, change, desc, cb, files)
         paths[#paths + 1] = r.clientFile
       end
     end
-    local job, run_opts = jobs.start(ws, 'submit ' .. label)
+    -- A job (`:P4 jobs`, `:P4 cancel`) without its own pop-ups: the busy one says it's running.
+    local job, run_opts = jobs.start(ws, 'submit ' .. label, { quiet = true })
     ws:run(args, run_opts, function(res)
+      task.done()
       local submitted
       for _, r in ipairs(res.records) do
         submitted = submitted or r.submittedChange
       end
       local texts = messages(res)
       if submitted then
-        jobs.finish(job, ('submitted %s as CL %s (%d file(s))'):format(label, submitted, #paths))
+        local msg = ('submitted %s as CL %s (%d file(s))'):format(label, submitted, #paths)
+        jobs.finish(job, msg)
+        notify(msg)
         if ws.sticky_cl == change then
           ws.sticky_cl, ws.sticky_desc = nil, nil
         end
@@ -510,7 +524,9 @@ function M.run_submit(ws, change, desc, cb, files)
           renumbered = renumbered or t:match('p4 submit %-c (%d+)')
         end
         local first = res.errors[1] or texts[1] or 'submit failed'
-        jobs.finish(job, res.cancelled and 'submit stopped' or ('submit failed: ' .. first), true)
+        local msg = res.cancelled and 'submit stopped' or ('submit failed: ' .. first)
+        jobs.finish(job, msg, true)
+        notify(msg, res.cancelled and vim.log.levels.WARN or vim.log.levels.ERROR)
         local items = file_items(ws, texts, nil, 'submit_error')
         if #items > 0 then
           require('perforated.ui.qf').set({
@@ -543,7 +559,10 @@ end
 function M.submit(ws, change, cb)
   cb = cb or function() end
   local status = require('perforated.status')
+  -- From the command on, while the files are checked too (hidden while asking).
+  local task = require('perforated.ui.toast').task(submitting(change))
   local function show(desc, files, shelved)
+    task.pause()
     if #files == 0 then
       notify(
         ('nothing to submit in %s'):format(
@@ -620,11 +639,11 @@ function M.submit(ws, change, cb)
           if not input or vim.trim(input) == '' then
             return cb(false)
           end
-          M.run_submit(ws, change, input, cb, files)
+          M.run_submit(ws, change, input, cb, files, task)
         end
       )
     end
-    M.run_submit(ws, change, nil, cb, files)
+    M.run_submit(ws, change, nil, cb, files, task)
   end
   -- Fresh state for the warnings: `fstat -Ro` of opened files (stale / unresolved).
   p4.fstat_opened(ws, {}, function(recs)

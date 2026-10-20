@@ -76,12 +76,14 @@ function M.external(ws, path, spec)
       vim.schedule(function()
         local tool = vim.trim((r.stdout or ''):match('P4DIFF=(.*)') or '')
         if tool == '' then
+          M.finish_busy()
           return notify(
             'P4DIFF is not set (environment, P4CONFIG or P4ENVIRO)',
             vim.log.levels.WARN
           )
         end
         local function launch(lines)
+          M.finish_busy()
           local dir = vim.fn.tempname()
           vim.fn.mkdir(dir, 'p')
           local label = spec and (vim.fs.basename(spec):gsub('[#@=]', '_')) or 'empty'
@@ -131,6 +133,7 @@ function M.external(ws, path, spec)
         end
         require('perforated.p4').print(ws, spec, {}, function(lines, err)
           if not lines then
+            M.finish_busy()
             return notify('could not fetch ' .. spec .. ': ' .. tostring(err), vim.log.levels.ERROR)
           end
           launch(lines)
@@ -140,6 +143,34 @@ function M.external(ws, path, spec)
   )
 end
 
+-- "Opening diff view…" for a single-file diff: shown as soon as it's asked for (the
+-- identical-files check and the revision's content take a moment), closed once both sides
+-- have their content, or when the request ends any other way (identical files, an error).
+local busy ---@type fun()?
+
+function M.start_busy()
+  if busy then
+    return
+  end
+  local close = require('perforated.ui.toast').busy('Opening diff view…')
+  busy = close
+  -- Never left up by an unexpected failure.
+  vim.defer_fn(function()
+    if busy == close then
+      busy = nil
+      close()
+    end
+  end, 30000)
+end
+
+function M.finish_busy()
+  if busy then
+    local close = busy
+    busy = nil
+    close()
+  end
+end
+
 --- Side-by-side diff of a buffer against a depot revision, in a new tab.
 ---@param buf integer
 ---@param rev string?
@@ -147,16 +178,19 @@ end
 function M.open(buf, rev, opts)
   local st = require('perforated.buffer').get(buf)
   if not st or not st.rec then
+    M.finish_busy()
     return notify('not a Perforce depot file (or status not known yet)', vim.log.levels.WARN)
   end
   local spec = M.resolve_spec(st.rec, rev)
   if spec == nil then
+    M.finish_busy()
     return notify('invalid revision: ' .. tostring(rev), vim.log.levels.ERROR)
   end
   local ext = (opts and opts.external) or require('perforated.config').get().diff.tool == 'external'
   local have = st.rec.haveRev and (st.rec.depotFile .. '#' .. st.rec.haveRev)
   local left = spec and { spec = spec, label = spec == have and 'have' or nil }
     or { empty = 'opened for add' }
+  M.start_busy()
   require('perforated.same').or_open(st.ws, left, { buf = buf }, function()
     if ext then
       return M.external(st.ws, st.path, spec)
@@ -486,6 +520,23 @@ function M.pair(ws, left, right, info)
   M.header(rwin, ws, right)
   M.side_win(lwin)
   M.side_win(rwin)
+
+  -- "Opening diff view…" until a revision on its way from p4 has arrived.
+  local loading = 0
+  for _, b in ipairs({ lbuf, rbuf }) do
+    if vim.b[b].perforated_loaded == false then
+      loading = loading + 1
+      require('perforated.uri').when_loaded(b, function()
+        loading = loading - 1
+        if loading == 0 then
+          M.finish_busy()
+        end
+      end)
+    end
+  end
+  if loading == 0 then
+    M.finish_busy()
+  end
 
   local tab = vim.api.nvim_get_current_tabpage()
   local data = {

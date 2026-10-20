@@ -23,8 +23,29 @@ local M = {}
 
 local cs = {} ---@type table<integer, perforated.CheckoutState>
 -- Per Neovim session: never ask, always use the target, and files not to ask about again
--- (key → true; "don't ask again for this file" in the add prompt).
+-- (path → true; "don't ask again for this file" in the add prompt).
 local session = { never = false, auto = false, skip_files = {} }
+
+--- Did the user say not to ask about adding this file again? Paths, not cache keys: keys are
+--- case-folded only once `p4 info` says the server is case-insensitive, so a key stored
+--- before that would miss the folded one.
+---@param ws perforated.Workspace
+---@param path string
+---@return boolean
+function M._skipped(ws, path)
+  if session.skip_files[path] then
+    return true
+  end
+  if ws.icase then
+    local folded = path:lower()
+    for p in pairs(session.skip_files) do
+      if p:lower() == folded then
+        return true
+      end
+    end
+  end
+  return false
+end
 local group = vim.api.nvim_create_augroup('perforated.checkout', { clear = true })
 
 local function notify(msg, level)
@@ -447,7 +468,7 @@ local function after_write(buf, ev)
     st.status ~= 'new'
     or c.skip
     or session.never
-    or session.skip_files[st.key]
+    or M._skipped(st.ws, st.path)
     or not allowed(st.path)
   then
     return
