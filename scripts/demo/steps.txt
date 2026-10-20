@@ -1,0 +1,19 @@
+# The demo depot's history: one submitted changelist per line.
+# step|user|days ago|description
+# Lines in files/ are tagged with the steps they exist in (see demo-workspace.sh).
+1|gautam|400|Initial import: calculator skeleton
+2|aadya|370|Parser: multiplication and division
+3|ryan|340|Lexer: record each token's column
+4|gautam|310|Parser: parenthesised expressions
+5|mira|280|Unit tests for the parser
+6|aadya|250|Parser: rename pos_ to cursor_
+7|ryan|215|Unary minus
+8|mira|180|Error messages say where the problem is
+9|gautam|150|Power operator (right-associative)
+10|aadya|120|Remove debug tracing
+11|ryan|90|Variables and assignment
+12|mira|60|Built-in functions: sqrt, abs, min, max
+13|gautam|30|Fix crash on empty input
+14|aadya|10|Docs: operator precedence table
+15|ryan|2|Lexer: scientific notation (1e-3)
+16|mira|0|Parser: report division by zero

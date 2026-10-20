@@ -11,7 +11,7 @@ else
 endif
 P4_URL := https://cdist2.perforce.com/perforce/$(P4_REL)/$(P4_PLAT)
 
-.PHONY: test bench deps lint fmt clean dev-workspace doc
+.PHONY: test bench deps lint fmt clean dev-workspace demo-workspace doc
 
 deps: $(DEPS)/mini.nvim $(DEPS)/telescope.nvim $(DEPS)/plenary.nvim $(DEPS)/p4bin/p4 $(DEPS)/p4bin/p4d
 
@@ -54,6 +54,11 @@ fmt:
 # Persistent local Perforce sandbox in .dev/ (gitignored) for trying the plugin by hand.
 dev-workspace: deps
 	scripts/dev-workspace.sh
+
+# A richer workspace for screenshots and recordings, in /tmp/perforated-demo (server on
+# localhost:1666). scripts/demo-workspace.sh --reset / --stale / --stop / --start.
+demo-workspace: deps
+	scripts/demo-workspace.sh
 
 clean:
 	rm -rf $(DEPS)
