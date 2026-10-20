@@ -20,13 +20,15 @@
 
 ## Highlights
 
-- **A P4V-style client view** (`:P4`): pending changelists, shelves, stale and unresolved
+- 📋 **A P4V-style client view** (`:P4`): pending changelists, shelves, stale and unresolved
   files, workspace reconcile and your recent submits, with single-key actions.
-- **Check-out on edit**, and gutter signs against your have revision.
-- **Diff tabs** for a file or a whole changelist: pending, shelved or submitted.
-- **History, annotate, current-line blame and time-lapse**, P4V-style.
-- **Shelve, submit, sync, resolve and integrate**, with long jobs you can watch and stop.
-- **A statusline** with the file's action, changelist and revision, and a notification when
+- ⌨️ **P4V's shortcuts work** in the plugin's views: `Ctrl+D` diff, `Ctrl+T` history, `Ctrl+R`
+  revert, `Ctrl+S` submit, `Ctrl+G` go to, `F5` refresh and more, alongside Vim-style keys.
+- ✏️ **Check-out on edit**, and gutter signs against your have revision.
+- 🔍 **Diff tabs** for a file or a whole changelist: pending, shelved or submitted.
+- 📜 **History, annotate, current-line blame and time-lapse**, P4V-style.
+- 🚀 **Shelve, submit, sync, resolve and integrate**, with long jobs you can watch and stop.
+- 🔔 **A statusline** with the file's action, changelist and revision, and a notification when
   someone submits a newer revision of a file you have open.
 - ⚡ **It never blocks.** Every `p4` call is asynchronous, with timeouts, cancellation and an
   offline mode. Typing never waits on the server.
@@ -74,7 +76,17 @@ Any manager that puts the repository on `runtimepath` works; there's no build st
 **2. Check your setup** with `:checkhealth perforated`. Your workspace needs a `P4CONFIG` file
 (e.g. `.p4config`), or `P4CLIENT` set in your environment or with `p4 set`.
 
-**3. Take the five-minute tour.** Open any file in your workspace, then:
+**3. Add Perforce to your statusline** (optional): the client, the file's action, changelist
+and revision, and stale / unresolved markers, e.g. `alice_ws edit@123 ● #4 ↓#5`.
+
+```lua
+-- lualine
+sections = { lualine_c = { 'filename', 'perforated' } }
+-- or a plain statusline
+vim.o.statusline = '%f %= %{v:lua.require("perforated").statusline()} '
+```
+
+**4. Take the five-minute tour.** Open any file in your workspace, then:
 
 | Try this | What happens |
 |---|---|
@@ -83,8 +95,10 @@ Any manager that puts the repository on `runtimepath` works; there's no build st
 | `:P4` | The **client view**. Press `?` for its keys |
 | `d` on a file there, or `:P4 diff` | A side-by-side diff in a new tab; `q` closes it |
 | `D` on a changelist | Every file of the changelist in a diff tab |
+| `:P4 filelog`, or `gh` on a file in the client view | The file's history. `<CR>` on a revision for its actions; mark two with `m` and `D` diffs them |
 | `:P4 annotate` / `:P4 blame` | Who changed each line, coloured by age / on the current line |
 | `:P4 timelapse` | Step through every revision of the file with `h` / `l` |
+| `:P4 lookup`, or `g/` in the client view | Go to a changelist number, a path's history or a user's changelists |
 | `P` on a changelist | Submit it, after a confirmation |
 
 Everything is also under `:P4 <Tab>`. The [user guide](docs/user_guide.md) covers each feature
@@ -190,7 +204,7 @@ More: [time-lapse](docs/user_guide.md#time-lapse).
 
 More: [shelve, submit, sync, resolve, integrate](docs/user_guide.md#shelve-submit-sync-resolve-integrate).
 
-### 🔔 Messages, stale files, statusline
+### 🔔 Messages and stale files
 
 - **Messages are small pop-ups** that never take focus. Results appear near the top, news at the
   bottom and things you're waiting on in the middle. `:P4 messages` shows the recent ones.
@@ -200,25 +214,22 @@ More: [shelve, submit, sync, resolve, integrate](docs/user_guide.md#shelve-submi
 - **When someone submits a newer revision** of a file you have open, a pop-up tells you. A cheap
   background check runs every 30 s, only while Neovim has focus.
 - **Quickfix lists:** `:P4 opened`, `:P4 status` (stale and unresolved files) and `:P4 hunks`.
-- **Statusline:** a lualine component, or `require('perforated').statusline()`:
-
-  ```lua
-  sections = { lualine_c = { 'filename', 'perforated' } }
-  ```
 
 More: [messages](docs/user_guide.md#messages-and-pop-ups), [stale files](docs/user_guide.md#stale-files),
-[quickfix lists](docs/user_guide.md#quickfix-lists), [statusline](docs/user_guide.md#statusline).
+[quickfix lists](docs/user_guide.md#quickfix-lists).
 
 ### 🧩 Integrations
 
 - **Pickers:** telescope, fzf-lua, snacks.picker or mini.pick when installed, otherwise the
   plugin's own list.
+- **Statusline:** a lualine component, or `require('perforated').statusline()` for any other
+  statusline (see the [quick start](#quick-start)). `statusline.format` rearranges it.
 - **Icons** from mini.icons or nvim-web-devicons, and Nerd Font status glyphs with an ASCII
   fallback.
-- 🧪 **Code actions** (experimental): `lsp = { enabled = true }` offers Perforce actions in
+- **Code actions** 🧪 (experimental): `lsp = { enabled = true }` offers Perforce actions in
   your code-action menu.
 
-More: [pickers, icons, code actions](docs/user_guide.md#pickers-icons-code-actions), and
+More: [pickers, statusline, icons, code actions](docs/user_guide.md#pickers-statusline-icons-code-actions), and
 [integrations.md](docs/integrations.md) for every plugin it works with.
 
 ## Configuration

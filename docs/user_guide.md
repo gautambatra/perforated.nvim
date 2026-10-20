@@ -14,8 +14,7 @@ which is generated from the code.
 - [Messages and pop-ups](#messages-and-pop-ups)
 - [Stale files](#stale-files)
 - [Quickfix lists](#quickfix-lists)
-- [Statusline](#statusline)
-- [Pickers, icons, code actions](#pickers-icons-code-actions)
+- [Pickers, statusline, icons, code actions](#pickers-statusline-icons-code-actions)
 - [Workspaces and connections](#workspaces-and-connections)
 - [Debug log](#debug-log)
 - [Colours](#colours)
@@ -583,7 +582,33 @@ column until you sync.
   client view, `:P4 resolve`) or reverted, its entry disappears; when none are left, the title
   says "all resolved" and the window closes.
 
-## Statusline
+## Pickers, statusline, icons, code actions
+
+Every plugin that changes how perforated looks or behaves, and what you get without it, is
+listed in [integrations.md](integrations.md).
+
+### Pickers
+
+Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
+use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**, detected
+in that order. Without one, the plugin uses **its own list**: a filter line, the list and a
+preview.
+
+- Lists of changelists preview what `K` shows: the header, the full description, the files and
+  the shelved files. (fzf-lua shows no preview.)
+- In the plugin's own list: `j` / `k` / arrows move (wrapping around), `<CR>` or a double-click
+  chooses, `q` / `<Esc>` cancel. `i` or `/` types in the filter line (fuzzy; arrows still move
+  the list, `<Esc>` goes back to it). `m` marks several where that's allowed. Leaving the pop-up
+  cancels it.
+- Pickers open in **normal mode**, even from insert mode; `picker_mode = 'insert'` starts in the
+  filter line instead. That applies to the plugin's list, telescope and snacks.picker (fzf-lua
+  and mini.pick have no normal mode).
+- `picker = 'telescope'` (etc.) chooses one explicitly, `'perforated'` forces the plugin's own
+  list and `'select'` uses `vim.ui.select` (e.g. with dressing.nvim). With
+  `toast.backend = 'notify'` the fallback is `vim.ui.select`. `:checkhealth perforated` shows
+  which one is used.
+
+### Statusline
 
 ```lua
 -- lualine: a built-in component
@@ -617,32 +642,6 @@ statusline = { format = '{client} {action} {modified} {diff} {rev} {stale} {unre
 It can also be a function that receives the status dict and returns the string. The raw data
 is in `vim.b.perforated_status_dict` (per buffer) and `vim.g.perforated_status` (workspace),
 and a `User PerforatedStatus` event fires whenever they change.
-
-## Pickers, icons, code actions
-
-Every plugin that changes how perforated looks or behaves, and what you get without it, is
-listed in [integrations.md](integrations.md).
-
-### Pickers
-
-Every list-picking step (e.g. choosing a changelist) and `:P4 pick {pending|opened|submitted|users}`
-use your fuzzy finder: **telescope**, **fzf-lua**, **snacks.picker** or **mini.pick**, detected
-in that order. Without one, the plugin uses **its own list**: a filter line, the list and a
-preview.
-
-- Lists of changelists preview what `K` shows: the header, the full description, the files and
-  the shelved files. (fzf-lua shows no preview.)
-- In the plugin's own list: `j` / `k` / arrows move (wrapping around), `<CR>` or a double-click
-  chooses, `q` / `<Esc>` cancel. `i` or `/` types in the filter line (fuzzy; arrows still move
-  the list, `<Esc>` goes back to it). `m` marks several where that's allowed. Leaving the pop-up
-  cancels it.
-- Pickers open in **normal mode**, even from insert mode; `picker_mode = 'insert'` starts in the
-  filter line instead. That applies to the plugin's list, telescope and snacks.picker (fzf-lua
-  and mini.pick have no normal mode).
-- `picker = 'telescope'` (etc.) chooses one explicitly, `'perforated'` forces the plugin's own
-  list and `'select'` uses `vim.ui.select` (e.g. with dressing.nvim). With
-  `toast.backend = 'notify'` the fallback is `vim.ui.select`. `:checkhealth perforated` shows
-  which one is used.
 
 ### Icons
 
