@@ -1,4 +1,4 @@
--- Performance budgets (docs/plan.md §2). `make bench` exits non-zero when a budget is exceeded.
+-- Performance budgets. `make bench` exits non-zero when a budget is exceeded.
 -- Timing metrics use the best of several runs: the budget is about the plugin's own cost, and
 -- the minimum filters out scheduler noise from whatever else the machine (or CI runner) is doing.
 local H = require('tests.helpers')

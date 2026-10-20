@@ -1840,8 +1840,6 @@ it with `make test FILE=tests/test_dbg.lua` and delete it afterwards.
   `tests/test_docs.lua` fails when it's stale.
 - `docs/migrating.md` — from vim-vp4 and vim-perforce.
 - `docs/developer_guide.md` — this file.
-- `docs/plan.md`, `docs/design-decisions.md`, `docs/research.md` — the original plan, the
-  agreed behaviour and prior-art research; useful history, not user documentation.
 
 ## 27. Continuous integration
 
