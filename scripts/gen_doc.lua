@@ -95,7 +95,8 @@ end
 add('*perforated.txt*  Perforce for Neovim: fast, light, asynchronous')
 add()
 add('This file is generated from the code by `make doc` (scripts/gen_doc.lua).')
-add('The README has the feature tour: https://github.com/gautambatra/perforated.nvim')
+add('The README has the overview and docs/user_guide.md the details:')
+add('https://github.com/gautambatra/perforated.nvim')
 
 header('CONTENTS', 'perforated-contents')
 for _, s in ipairs({
