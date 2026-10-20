@@ -49,6 +49,7 @@ local LINKS = {
   PerforatedFooter = 'PerforatedBar', -- the key footer under a view
   PerforatedLoading = 'Comment',
   PerforatedPreviewDelete = 'DiffDelete',
+  PerforatedPreviewText = 'DiffText', -- the words that changed in a changed line
 }
 
 M.LINKS = LINKS

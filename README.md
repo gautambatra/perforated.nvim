@@ -157,6 +157,9 @@ file you wrote, not the buffer's own file. `checkout.add_on_write = 'auto' | 'pr
 - The base text is fetched once per revision and cached in memory. Diffs run inside Neovim, and
   on a background thread for large files. Nothing calls `p4` while you type.
 - `]h` / `[h` jump between hunks; you can also preview a hunk or reset it to `#have` (undoable).
+- The hunk preview uses the diff views' colours. In a changed line, the words that changed are
+  highlighted (`DiffText`), as in diff mode. It follows `diff.syntax`, so by default it shows
+  plain text.
 
 #### Revert
 

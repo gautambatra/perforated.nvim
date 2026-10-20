@@ -996,7 +996,11 @@ blame and the LSP code-action server attach here.
 #### `signs.lua`
 `render(buf, hunks)` — one extmark per hunk with `end_row` spreading the sign over the
 range. `render_stale` puts a "stale" marker on line 1. `nav` (`]h`/`[h`), `preview` (a float
-with the hunk's unified diff; closed by moving, insert mode, or `<Esc>` — a temporary mapping
+with the hunk's unified diff: in a change hunk old and new lines are paired in order and
+`_word_diff` marks the changed words (`PerforatedPreviewText`); token-level `vim.text.diff` over
+word / whitespace / punctuation runs, nothing when only whitespace is in common; the file's
+filetype only with `diff.syntax`; the line colours are ranged `hl_eol` highlights, since a
+`line_hl_group` is drawn over ranged highlights whatever their priority; closed by moving, insert mode, or `<Esc>` — a temporary mapping
 in the file's buffer that gives back a buffer-local `<Esc>` the user had) and `reset` (replace the hunk with the base lines).
 
 #### `status.lua`

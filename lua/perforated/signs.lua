@@ -114,7 +114,68 @@ function M.nav(forward, count)
   vim.cmd('normal! zv')
 end
 
---- Floating preview of the hunk under the cursor (old lines `-`, new lines `+`).
+-- Tokens of a line for the word diff: runs of word characters (any non-ASCII byte counts, so
+-- a multibyte character stays whole), runs of whitespace, single other characters.
+---@param s string
+---@return integer[][] {first, last} byte positions (1-based, inclusive)
+local function tokens(s)
+  local t, pos = {}, 1
+  while pos <= #s do
+    local _, e = s:find('^[%w_\128-\255]+', pos)
+    if not e then
+      _, e = s:find('^%s+', pos)
+    end
+    e = e or pos
+    t[#t + 1] = { pos, e }
+    pos = e + 1
+  end
+  return t
+end
+
+--- The changed parts of a line pair, word by word: byte ranges `{start, end}` (0-based, end
+--- exclusive) in each. Nil when they have no word in common (the whole line is the change,
+--- and the line colour already says so).
+---@param a string old line
+---@param b string new line
+---@return integer[][]? old, integer[][]? new
+function M._word_diff(a, b)
+  local ta, tb = tokens(a), tokens(b)
+  if #ta == 0 or #tb == 0 then
+    return nil
+  end
+  local function text(s, t)
+    local out = {}
+    for i, r in ipairs(t) do
+      out[i] = s:sub(r[1], r[2])
+    end
+    return table.concat(out, '\n') .. '\n'
+  end
+  local difffn = (vim.text and vim.text.diff) or vim.diff -- vim.diff is deprecated in 0.12+
+  local hunks = difffn(text(a, ta), text(b, tb), { result_type = 'indices' }) --[[@as integer[][] ]]
+  local ra, rb, changed = {}, {}, {}
+  for _, h in ipairs(hunks) do
+    if h[2] > 0 then
+      ra[#ra + 1] = { ta[h[1]][1] - 1, ta[h[1] + h[2] - 1][2] }
+      for k = h[1], h[1] + h[2] - 1 do
+        changed[k] = true
+      end
+    end
+    if h[4] > 0 then
+      rb[#rb + 1] = { tb[h[3]][1] - 1, tb[h[3] + h[4] - 1][2] }
+    end
+  end
+  -- Only whitespace in common: no word kept, so no point.
+  for k, r in ipairs(ta) do
+    if not changed[k] and a:sub(r[1], r[2]):find('%S') then
+      return ra, rb
+    end
+  end
+  return nil
+end
+
+--- Floating preview of the hunk under the cursor (old lines `-`, new lines `+`). In a change
+--- hunk, old and new lines are paired in order and the words that changed get
+--- `PerforatedPreviewText` (diff mode's `DiffText`). Syntax colouring follows `diff.syntax`.
 function M.preview()
   local buf = vim.api.nvim_get_current_buf()
   local st = require('perforated.buffer').get(buf)
@@ -137,10 +198,33 @@ function M.preview()
   end
   local pbuf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(pbuf, 0, -1, false, lines)
+  -- The line colours as ranged highlights to the end of the line, not `line_hl_group`: that
+  -- one is drawn over ranged highlights whatever their priority, hiding the changed words.
   for i, hl in pairs(hls) do
-    vim.api.nvim_buf_set_extmark(pbuf, M.ns_preview, i - 1, 0, { line_hl_group = hl })
+    vim.api.nvim_buf_set_extmark(
+      pbuf,
+      M.ns_preview,
+      i - 1,
+      0,
+      { end_row = i, end_col = 0, hl_group = hl, hl_eol = true, priority = 4096 }
+    )
   end
-  vim.bo[pbuf].filetype = vim.bo[buf].filetype
+  for i = 1, math.min(h.a_count, #cur) do
+    local old_row, new_row = i - 1, h.a_count + i - 1
+    local ra, rb = M._word_diff(lines[old_row + 1]:sub(2), lines[new_row + 1]:sub(2))
+    for row, ranges in pairs({ [old_row] = ra, [new_row] = rb }) do
+      for _, r in ipairs(ranges or {}) do
+        vim.api.nvim_buf_set_extmark(pbuf, M.ns_preview, row, r[1] + 1, {
+          end_col = r[2] + 1,
+          hl_group = 'PerforatedPreviewText',
+          priority = 5000, -- over the line colour
+        })
+      end
+    end
+  end
+  if (require('perforated.config').get().diff or {}).syntax == true then
+    vim.bo[pbuf].filetype = vim.bo[buf].filetype
+  end
   vim.bo[pbuf].bufhidden = 'wipe'
   local width = 10
   for _, l in ipairs(lines) do

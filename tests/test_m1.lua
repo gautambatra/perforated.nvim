@@ -413,6 +413,64 @@ T['ops']['the hunk preview closes on <Esc>, and the buffer gets its own <Esc> ba
   H.eq(child.lua_get('_G.mine'), true) -- the user's mapping is back
 end
 
+T['ops']['hunk preview: changed words get DiffText, syntax follows diff.syntax'] = function()
+  child.bo.filetype = 'lua'
+  child.api.nvim_buf_set_lines(0, 3, 4, false, { 'four and a half' })
+  wait([[#require('perforated.buffer').get().hunks == 3]])
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  -- TWO and two have no word in common: line colours only
+  local function words(win)
+    local pbuf = child.api.nvim_win_get_buf(win)
+    local out = {}
+    for _, m in ipairs(child.api.nvim_buf_get_extmarks(pbuf, -1, 0, -1, { details = true })) do
+      if m[4].hl_group == 'PerforatedPreviewText' then
+        local line = child.api.nvim_buf_get_lines(pbuf, m[2], m[2] + 1, false)[1]
+        out[#out + 1] = line:sub(m[3] + 1, m[4].end_col)
+      end
+    end
+    return out, child.api.nvim_get_option_value('filetype', { buf = pbuf })
+  end
+  local win = child.lua([[return require('perforated.signs').preview()]])
+  H.eq({ words(win) }, { {}, '' }) -- default diff.syntax = false: plain text, like diff mode
+  child.type_keys('<Esc>')
+  child.lua([[require('perforated.config').set({ diff = { syntax = true } })]])
+  child.api.nvim_win_set_cursor(0, { 4, 0 })
+  win = child.lua([[return require('perforated.signs').preview()]])
+  H.eq(
+    child.api.nvim_buf_get_lines(child.api.nvim_win_get_buf(win), 0, -1, false),
+    { '-four', '+four and a half' }
+  )
+  H.eq({ words(win) }, { { ' and a half' }, 'lua' })
+  -- and on screen, over the line's DiffAdd (`line_hl_group` would hide them)
+  local shot, found = child.get_screenshot(), false
+  for r, line in ipairs(shot.text) do
+    local s = table.concat(line)
+    local c = s:find('+four and', 1, true)
+    if c then
+      found = true
+      local at = vim.fn.charidx(s, c - 1) + 1 -- screenshot cells are characters
+      -- identifiers only (`and` is a Lua keyword): 'f' of four vs 'a', and 'a' vs 'h' of half
+      H.neq(shot.attr[r][at + 1], shot.attr[r][at + 10])
+      H.eq(shot.attr[r][at + 10], shot.attr[r][at + 12])
+    end
+  end
+  H.eq(found, true)
+end
+
+T['ops']['word diff of a line pair'] = function()
+  local wd = function(a, b)
+    return child.lua('return { require("perforated.signs")._word_diff(...) }', { a, b })
+  end
+  H.eq(
+    wd('local x = foo(1)', 'local x = bar(1, 2)'),
+    { { { 10, 13 } }, { { 10, 13 }, { 15, 18 } } }
+  )
+  H.eq(wd('naïve café', 'naïve cafés'), { { { 7, 12 } }, { { 7, 13 } } }) -- whole characters
+  H.eq(wd('two', 'TWO'), {}) -- no word in common
+  H.eq(wd('  a b', 'x y'), {}) -- only whitespace in common
+  H.eq(wd('', 'x'), {})
+end
+
 T['ops'][':P4 diff opens a tab with the depot revision in diff mode; q closes it'] = function()
   child.cmd('P4 diff')
   wait('#vim.api.nvim_list_tabpages() == 2')

@@ -615,6 +615,7 @@ can override them:
   PerforatedPickerMatch        Special
   PerforatedPreviewAdd         DiffAdd
   PerforatedPreviewDelete      DiffDelete
+  PerforatedPreviewText        DiffText
   PerforatedRev                Comment
   PerforatedSection            Title
   PerforatedShelved            Constant
