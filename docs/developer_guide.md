@@ -1828,7 +1828,7 @@ opened file goes stale; `--reset` starts over.
 (`DEMO_DIR`): sixteen changelists over a year by gautam (you), aadya, ryan and mira, two
 pending changelists (one with an opened-but-unchanged file, one shelved), a stale file, an
 unresolved file that really conflicts, a file ryan has open (the check-out warning), and two
-files for reconcile. The server runs as a daemon on `localhost:1666` (`DEMO_PORT`), so the
+files for reconcile. A `compile_flags.txt` lets clangd find the headers in `include/`. The server runs as a daemon on `localhost:1666` (`DEMO_PORT`), so the
 client view shows a plain address rather than an rsh command line with your home directory.
 The history lives in `scripts/demo/`: `steps.txt` lists the changelists, and each line of
 the files under `files/` is tagged with the steps it exists in (the tag syntax is at the top
