@@ -195,7 +195,7 @@ Folds are kept across refreshes.
   opened in it); revert unchanged, revert, resolve (with unresolved files), move all files;
   shelve, unshelve, delete shelved files; new changelist, sync, switch client.
 - **On an opened file:** open, sync to the latest revision (when stale), get revision…; revert
-  if unchanged, revert, move, shelve; diff against the have revision, diff against revision…;
+  if unchanged, revert, resolve (when unresolved), move, shelve; diff against the have revision, diff against revision…;
   history, annotate, time-lapse; mark; new changelist, sync, switch client.
 - **On a shelved file:** diff against its base, diff against the workspace file; unshelve it,
   delete it from the shelf; history, time-lapse; mark; new changelist, sync, switch client.

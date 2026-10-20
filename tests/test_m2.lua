@@ -1165,6 +1165,28 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
     { 'Open file', 'Sync to latest revision', 'Get revision…' }
   )
   H.eq(vim.tbl_contains(menu_labels('a.txt'), 'Shelve'), true)
+  H.eq(vim.tbl_contains(menu_labels('c.txt'), 'Resolve'), false) -- stale, not unresolved
+  -- Resolve: only on an unresolved file, next to revert (as on a changelist)
+  server:p4({ 'sync', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  child.type_keys('<F5>')
+  wait(
+    ([[vim.iter((%s).data.opened or {}):any(function(f) return f.unresolved ~= nil end)]]):format(
+      view_expr(root)
+    )
+  )
+  goto_line('Pending')
+  local labels = menu_labels('c.txt')
+  local at
+  for i, l in ipairs(labels) do
+    if l == 'Resolve' then
+      at = i
+    end
+  end
+  H.neq(at, nil)
+  H.eq(
+    vim.list_slice(labels, at - 1, at + 1),
+    { 'Revert', 'Resolve', 'Move to another changelist' }
+  )
 end
 
 T['client view']['g@ syncs a file to a picked revision; gD diffs against one'] = function()

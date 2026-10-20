@@ -1702,6 +1702,7 @@ M.MENU_LAYOUT.opened_file = {
   '-',
   'revert_if_unchanged',
   'revert',
+  'resolve', -- only on an unresolved file (its `when`)
   { 'move', 'Move to another changelist' },
   'shelve',
   '-',
