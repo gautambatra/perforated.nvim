@@ -30,11 +30,17 @@ $(DEPS)/p4bin/%:
 	curl -fsSL -o $@ $(P4_URL)/$*
 	chmod +x $@
 
+# Scratch directories from the last run (tests/helpers H.tmp). Emptied at the start of each run,
+# not the end, so a failed run's files are still there to look at.
+TEST_TMP := tests/.tmp
+
 # Run the whole suite, or one file: make test FILE=tests/test_parse.lua
 test: deps
+	rm -rf $(TEST_TMP)
 	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "lua require('tests.run')('$(FILE)')"
 
 bench: deps
+	rm -rf $(TEST_TMP)
 	$(NVIM) --headless --noplugin -u tests/minimal_init.lua -c "lua local ok, err = pcall(dofile, 'bench/run.lua'); if not ok then io.stderr:write(tostring(err) .. '\\n'); vim.cmd('cquit 2') end"
 
 # Regenerate doc/perforated.txt (:h perforated) from the code.

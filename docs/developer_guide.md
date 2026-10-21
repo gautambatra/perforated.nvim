@@ -1690,6 +1690,12 @@ make bench                         # performance budgets
 `make deps` downloads the official `p4` and `p4d` binaries into `.deps/p4bin` (the release is
 pinned in the Makefile), plus mini.nvim.
 
+Tests and benchmarks make their scratch directories (child `HOME`s, p4d servers, workspaces)
+with `H.tmp()` under `tests/.tmp` (or `$PERFORATED_TEST_TMP`). `make test` and `make bench`
+empty `tests/.tmp` when they start, so after a failure the last run's files are still there to
+look at. A p4d directory is ~1MB, and a full run makes over a thousand of them. Don't run two
+suites in the same checkout at once: each would delete the other's files.
+
 ### 23.2 How the tests work
 
 - `tests/run.lua` runs mini.test over `tests/test_*.lua`. Under GitHub Actions each failure is
