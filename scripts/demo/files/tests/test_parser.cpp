@@ -13,6 +13,7 @@
 @5-|
 @5-|int main() {
 @5-|  assert(eval("1 + 2") == 3);
+@17-|  assert(eval("1 - 2") == -1);
 @5-|  assert(eval("2 * 3 + 4") == 10);
 @5-|  assert(eval("2 * (3 + 4)") == 14);
 @5-|  assert(eval("10 / 4") == 2.5);

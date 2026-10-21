@@ -17,3 +17,4 @@
 14|aadya|10|Docs: operator precedence table
 15|ryan|2|Lexer: scientific notation (1e-3)
 16|mira|0|Parser: report division by zero
+17|aadya|0|Tests: subtraction

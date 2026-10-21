@@ -1831,9 +1831,10 @@ opened file goes stale; `--reset` starts over.
 
 **A demo workspace, for screenshots and recordings.** `make demo-workspace` (or
 `scripts/demo-workspace.sh`) builds a small C++ calculator in `/tmp/perforated-demo`
-(`DEMO_DIR`): sixteen changelists over a year by gautam (you), aadya, ryan and mira, two
-pending changelists (one with an opened-but-unchanged file, one shelved), a stale file, an
-unresolved file that really conflicts, a file ryan has open (the check-out warning), and two
+(`DEMO_DIR`): seventeen changelists over a year by gautam (you), aadya, ryan and mira, two
+pending changelists (one with an opened-but-unchanged file, one shelved), a stale file, two
+unresolved files (one really conflicts, one merges cleanly without a merge tool), a file ryan
+has open (the check-out warning), and two
 files for reconcile. A `compile_flags.txt` lets clangd find the headers in `include/`. The server runs as a daemon on `localhost:1666` (`DEMO_PORT`), so the
 client view shows a plain address rather than an rsh command line with your home directory.
 The history lives in `scripts/demo/`: `steps.txt` lists the changelists, and each line of

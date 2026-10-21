@@ -234,9 +234,10 @@ pending docs/README.md
 pending src/format.cpp
 p4_as gautam add -t text src/format.cpp >/dev/null
 
-# Teammates carry on: lexer.cpp goes stale, and parser.cpp conflicts with your edit.
+# Teammates carry on: lexer.cpp goes stale, parser.cpp conflicts with your edit, and
+# test_parser.cpp merges cleanly (for resolving without a merge tool).
 run_steps $((BASE + 1)) 99
-p4_as gautam sync -q src/parser.cpp >/dev/null 2>&1 || true # now needs a resolve
+p4_as gautam sync -q src/parser.cpp tests/test_parser.cpp >/dev/null 2>&1 || true # now need a resolve
 
 # ryan has main.cpp open, so checking it out warns that someone else is working on it.
 r=$(new_change ryan "REPL: line editing with readline")
