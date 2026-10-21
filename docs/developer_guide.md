@@ -1845,12 +1845,16 @@ rebuilds it.
 
 To film it, `scripts/demo/nvim.sh` (run inside the workspace) starts a clean Neovim from
 `scripts/demo/init.lua`: this checkout, tokyonight, lualine and icons, with plugins and state
-in `.deps/demo-nvim`, so your own config is never involved. The README's GIF is a
-[VHS](https://github.com/charmbracelet/vhs) script: `vhs scripts/demo/hero.tape` (needs vhs,
+in `.deps/demo-nvim`, so your own config is never involved. GIFs are
+[VHS](https://github.com/charmbracelet/vhs) scripts: `vhs scripts/demo/hero.tape` (needs vhs,
 ttyd and ffmpeg) resets the workspace, records the same keystrokes every time and writes
 `.deps/demo/hero.gif` and `hero.mp4`; `gifsicle -O3 --lossy=80 --colors 128` roughly halves
 the GIF. VHS's default 50 fps is more than it can capture at that size, which makes the result
 play too fast, so the tape sets 20.
+The README's tour (`docs/media/tour.gif`, about a minute) was recorded the same way with the
+maintainer's own Neovim config: a copy of the tape that starts plain `nvim` with the demo's
+`P4CONFIG` and `.deps/p4bin` on `PATH`. Keep it under ~3MB (gifsicle) since every re-recording
+stays in the repository's history.
 
 **Reproducing bugs headlessly.** The fastest loop is a throw-away test file
 (`tests/test_dbg.lua`) that builds the scenario with `P.new()` and `H.child()`, then prints

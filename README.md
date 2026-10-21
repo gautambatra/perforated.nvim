@@ -13,10 +13,9 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
 
-> [!WARNING]
-> **Pre-release.** Every feature below is implemented and tested (including against a real
-> Helix Core server); 🧪 marks an experimental one. Commands, options and defaults may still
-> change until the first tagged release.
+<p align="center">
+  <img alt="A one-minute tour: the stale-file pop-up, history and a changelist description, checking out to a new changelist, gutter signs, annotate, a hunk preview, the client view, resolving, a changelist diff and time-lapse" src="docs/media/tour.gif" width="900">
+</p>
 
 ## Highlights
 
