@@ -76,6 +76,16 @@ stop_server() {
   if server_up; then
     p4_as gautam admin stop >/dev/null
   fi
+  # admin stop returns before p4d exits; --reset can't delete the server directory under it.
+  i=0
+  while pgrep -f "[p]4d -r $DEMO/.server" >/dev/null; do
+    i=$((i + 1))
+    if [ "$i" -gt 50 ]; then
+      echo "the server didn't stop" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
 }
 
 # A file's content at a step, or with your pending edits (pending = 1).
