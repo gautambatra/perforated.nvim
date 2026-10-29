@@ -1,6 +1,6 @@
 --- Go-to / lookup (`g/`, `<C-g>`, `:P4 lookup`): a changelist number opens its describe
 --- buffer, a path its history (a directory: its changelists), anything else a user's
---- submitted changelists.
+--- submitted changelists (all of them, not only those in the client's view).
 
 local M = {}
 
@@ -73,10 +73,8 @@ function M.run(ws, what)
     end
     return require('perforated.views.history').open(ws, path)
   end
-  require('perforated.views.changes').open(
-    ws,
-    { user = what, path = ws.mode == 'connection' and '//...' or nil }
-  )
+  -- All of the user's submits, from any client and anywhere in the depot.
+  require('perforated.views.changes').open(ws, { user = what, anywhere = true })
 end
 
 return M

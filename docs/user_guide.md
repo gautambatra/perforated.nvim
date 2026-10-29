@@ -375,9 +375,9 @@ cursor makes no p4 calls.
 ### Lookup and Swarm
 
 - **`:P4 lookup`** (`g/` / `<C-g>`) goes to a changelist number, a path's history or a user's
-  changelists. The keys work in every Perforce window: the client view, describe, history,
-  annotate, time-lapse, `:P4 changes`, diff views, the `K` pop-up, revision buffers and the
-  plugin's quickfix lists.
+  submitted changelists (all of them, from any client and anywhere in the depot). The keys
+  work in every Perforce window: the client view, describe, history, annotate, time-lapse,
+  `:P4 changes`, diff views, the `K` pop-up, revision buffers and the plugin's quickfix lists.
 - **`gX`** copies a changelist's Swarm review URL. The URL comes from `swarm.url` or the
   server's `P4.Swarm.URL` property.
 

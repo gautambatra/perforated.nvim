@@ -1245,7 +1245,8 @@ desktop session): `run` then calls back with code -1 instead of launching, and t
 diff reports it. The external diff (`diff/view.lua`) counts a GUI tool's exit 1 as "files
 differ" unless stderr has an error line (`error_line(text, true)`): Tk tools such as tkdiff
 also exit 1 when they can't open a window. `lookup` (`g/`) routes a number to describe, a path to history, a bare word to a
-user's changelists. `lookup.action(ws)` is the one registry action for it (`g/`, P4V `<C-g>`)
+user's changelists (`views/changes.lua` with `{ user, anywhere = true }`: every depot, not the
+client's view). `lookup.action(ws)` is the one registry action for it (`g/`, P4V `<C-g>`)
 that every view's key list includes (`base.nav` for describe and history; client, changes,
 annotate, time-lapse directly); `lookup.map(buf, ws, map?)` maps the same keys (user overrides
 and `keys.p4v` applied) in windows outside the registry: diff sides (scoped to the diff tab

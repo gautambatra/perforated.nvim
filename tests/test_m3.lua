@@ -425,6 +425,23 @@ T['m3']['lookup: number → describe, user → changes; Swarm URL from config'] 
   H.eq(text():find('alice changes', 1, true), nil)
 end
 
+T['m3']['lookup: a user lists all their submits, not only those in the client view'] = function()
+  -- A second depot, outside alice_ws's view (//depot/... only), where bob submits.
+  server:p4({ 'depot', '-i' }, { stdin = 'Depot: other\nType: local\nMap: other/...\n' })
+  local elsewhere = server.dir .. '/bob_other'
+  server:client('bob_other', elsewhere, 'bob')
+  server:submit_files(
+    'bob_other',
+    elsewhere,
+    { ['other/x.txt'] = 'x\n' },
+    'bob works elsewhere',
+    'bob'
+  )
+  child.cmd('P4 lookup bob')
+  wait_text('bob works elsewhere')
+  H.neq(text():find('bob fixes line 2', 1, true), nil)
+end
+
 T['m3']['client view: L history, gd describe on a CL'] = function()
   child.cmd('P4')
   wait_text('CL 4')
