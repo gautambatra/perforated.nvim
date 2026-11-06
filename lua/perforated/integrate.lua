@@ -100,7 +100,18 @@ local function go(ws, change, src, target, into, cb)
   local qf = require('perforated.ui.qf')
   local args = integ_args(src, change, target)
   local cl_args = into == 'default' and {} or { '-c', into }
-  ws:run(vim.list_extend(vim.list_extend({ 'integrate', '-n' }, cl_args), args), {}, function(res)
+  local jobs = require('perforated.jobs')
+  local preview = {
+    busy = 'Checking what to integrate…',
+    delay = 500,
+    verb = 'integrate preview',
+  }
+  local title = ('integrate preview CL %s'):format(change)
+  local cmd = vim.list_extend(vim.list_extend({ 'integrate', '-n' }, cl_args), args)
+  jobs.run(ws, title, cmd, preview, function(res)
+    if res.stopped then
+      return cb(false)
+    end
     local items = {}
     for _, r in ipairs(res.records) do
       if r.depotFile then
@@ -141,9 +152,14 @@ local function go(ws, change, src, target, into, cb)
     if not ok then
       return cb(false)
     end
-    local unbusy = require('perforated.ui.toast').busy(('Merging CL %s…'):format(change))
-    ws:run(vim.list_extend(vim.list_extend({ 'integrate' }, cl_args), args), {}, function(done)
-      unbusy()
+    local opts = { busy = ('Merging CL %s…'):format(change), effect = 'opened for integrate' }
+    title = ('integrate CL %s'):format(change)
+    cmd = vim.list_extend(vim.list_extend({ 'integrate' }, cl_args), args)
+    jobs.run(ws, title, cmd, opts, function(done)
+      if done.stopped then
+        require('perforated.checkout').changed(ws)
+        return cb(false)
+      end
       local targets = {}
       for _, r in ipairs(done.records) do
         if r.clientFile then

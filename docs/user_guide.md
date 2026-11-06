@@ -466,6 +466,16 @@ live progress (files so far, the last file, the time taken), and `x` there stops
 `:P4 cancel` stops them all. Stopping a sync midway is safe: p4 updates your have list file by
 file.
 
+Commands that change files (check out, add, revert, delete, move, shelve, unshelve, delete
+shelved, submit, resolve, integrate) have no time limit, because stopping one halfway leaves only some files
+done. They're jobs too. When a busy pop-up says **Ctrl+c to cancel**, pressing it in normal mode
+stops that command only; the key goes back to normal when the pop-up closes. With
+`toast.backend = 'notify'` there's no pop-up to press it on, so use `:P4 cancel`.
+
+However you stop a command, a warning tells you what may already have happened, for example
+`revert cancelled: some files may already be reverted`. A submit may still go through after you
+cancel it, so check the changelist.
+
 ### Resolve
 
 `R`, or `:P4 resolve [file…]`:

@@ -673,7 +673,7 @@ function M.scan_reconcile(view)
       jobs.finish(job, ('%d file(s) to reconcile'):format(#recs))
       view.reconcile = { state = 'done', recs = recs }
     elseif err == 'cancelled' then
-      jobs.finish(job, 'stopped', true)
+      jobs.finish(job, 'reconcile cancelled', 'warn')
       view.reconcile = { state = 'idle' }
     else
       jobs.finish(job, tostring(err), true)
@@ -1421,9 +1421,9 @@ local function actions(view)
             return
           end
           cls.reopen(ws, paths_of(items), cl, function(res)
-            if #res.errors > 0 then
+            if #res.errors > 0 and not res.stopped then
               notify('move failed: ' .. res.errors[1], vim.log.levels.ERROR)
-            else
+            elseif not res.stopped then
               notify(
                 ('moved %d file(s) to %s'):format(
                   #res.records,
@@ -1464,9 +1464,9 @@ local function actions(view)
             return
           end
           cls.reopen(ws, paths_of(files), cl, function(res)
-            if #res.errors > 0 then
+            if #res.errors > 0 and not res.stopped then
               notify('move failed: ' .. res.errors[1], vim.log.levels.ERROR)
-            else
+            elseif not res.stopped then
               notify(
                 ('moved %d file(s) from %s to %s'):format(
                   #res.records,
@@ -1564,7 +1564,15 @@ local function actions(view)
           co.edit(ws, by.edit, ws.sticky_cl)
         end
         if #by.delete > 0 then
-          ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = by.delete }, function()
+          local title = ('delete %d file(s)'):format(#by.delete)
+          require('perforated.jobs').run(ws, title, { 'delete' }, {
+            globals = { '-x', '-' },
+            stdin = by.delete,
+            busy = ('Opening %d file(s) for delete…'):format(#by.delete),
+            delay = 500,
+            effect = 'opened for delete',
+            single = #by.delete == 1,
+          }, function()
             co.changed(ws)
           end)
         end

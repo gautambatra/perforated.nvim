@@ -104,6 +104,9 @@ end
 M.changed = changed
 
 local function report(verb, res, count)
+  if res.stopped then
+    return -- `jobs.run` already said so
+  end
   dbg.log(
     (#res.errors > 0 or not res.ok) and 'warn' or 'info',
     'checkout',
@@ -122,7 +125,10 @@ local function report(verb, res, count)
     notify(('%s failed: %s'):format(verb, head), vim.log.levels.ERROR)
   elseif not res.ok then
     notify(
-      ('%s failed: %s'):format(verb, vim.trim(res.stderr ~= '' and res.stderr or 'unknown error')),
+      ('%s failed: %s'):format(
+        verb,
+        vim.trim(res.stderr ~= '' and res.stderr or ('p4 exited with code ' .. res.code))
+      ),
       vim.log.levels.ERROR
     )
   else
@@ -166,16 +172,15 @@ local function optimistic_writable(paths)
   end
 end
 
---- "Checking out a.c…" in the middle of the screen while p4 works (it can take a moment, and
---- nothing else shows that something is happening). Returns the closer.
+--- "Checking out a.c…", for the pop-up in the middle of the screen while p4 works (it can take
+--- a moment, and nothing else shows that something is happening).
 ---@param fmt_one string   e.g. 'Checking out %s…'
 ---@param fmt_many string  e.g. 'Checking out %d files…'
 ---@param paths string[]
----@return fun()
+---@return string
 local function busy(fmt_one, fmt_many, paths)
-  local msg = #paths == 1 and fmt_one:format(vim.fn.fnamemodify(paths[1], ':t'))
+  return #paths == 1 and fmt_one:format(vim.fn.fnamemodify(paths[1], ':t'))
     or fmt_many:format(#paths)
-  return require('perforated.ui.toast').busy(msg)
 end
 
 --- p4 edit files into a changelist (nil/'default' = default CL).
@@ -189,13 +194,11 @@ function M.edit(ws, paths, cl, cb)
     state(b).pending = true
   end
   local restore = optimistic_writable(paths)
-  local done = busy('Checking out %s…', 'Checking out %d files…', paths)
   p4.edit(ws, paths, cl, function(res)
-    done()
     for _, b in ipairs(bufs) do
       state(b).pending = false
     end
-    local ok = #res.records > 0 and #res.errors == 0
+    local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
     if not ok then
       -- Only the files p4 didn't open go back to read-only: after a partial failure the
       -- opened ones must stay writable.
@@ -225,7 +228,7 @@ function M.edit(ws, paths, cl, cb)
     if cb then
       cb(ok)
     end
-  end)
+  end, busy('Checking out %s…', 'Checking out %d files…', paths))
 end
 
 ---@param ws perforated.Workspace
@@ -234,10 +237,8 @@ end
 ---@param cb fun(ok: boolean)?
 function M.add(ws, paths, cl, cb)
   local bufs = bufs_for(ws, paths)
-  local done = busy('Opening %s for add…', 'Opening %d files for add…', paths)
   p4.add(ws, paths, cl, function(res)
-    done()
-    local ok = #res.records > 0 and #res.errors == 0
+    local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
     report('add', res, #res.records)
     changed(ws)
     for _, b in ipairs(bufs) do
@@ -246,7 +247,7 @@ function M.add(ws, paths, cl, cb)
     if cb then
       cb(ok)
     end
-  end)
+  end, busy('Opening %s for add…', 'Opening %d files for add…', paths))
 end
 
 --- Revert files (confirmation is the caller's job). `unchanged` = `revert -a`.
@@ -277,11 +278,10 @@ function M.revert(ws, paths, unchanged, cb)
     end
   end
   local bufs = bufs_for(ws, paths)
-  local done = unchanged
+  local msg = unchanged
       and busy('Reverting %s if unchanged…', 'Reverting unchanged files…', paths)
     or busy('Reverting %s…', 'Reverting %d files…', paths)
-  p4.revert(ws, paths, { unchanged = unchanged }, function(res)
-    done()
+  p4.revert(ws, paths, { unchanged = unchanged, busy = msg }, function(res)
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
     changed(ws)
     local reverted = {}

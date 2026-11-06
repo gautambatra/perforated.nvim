@@ -174,8 +174,8 @@ function H.record_busy(child)
     local toast = require('perforated.ui.toast')
     local busy = toast.busy
     _G.busy = {}
-    toast.busy = function(msg)
-      local close = busy(msg)
+    toast.busy = function(msg, opts)
+      local close = busy(msg, opts)
       local entry = { msg = msg, open = true }
       table.insert(_G.busy, entry)
       return function() entry.open = false; close() end
@@ -195,8 +195,8 @@ function H.record_timeline(child)
     local open = 0
     local toast = require('perforated.ui.toast')
     local busy = toast.busy
-    toast.busy = function(msg)
-      local close = busy(msg)
+    toast.busy = function(msg, opts)
+      local close = busy(msg, opts)
       open = open + 1
       table.insert(_G.events, 'show ' .. msg)
       return function() open = open - 1; table.insert(_G.events, 'hide'); close() end

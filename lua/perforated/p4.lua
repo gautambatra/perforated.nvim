@@ -278,17 +278,29 @@ end
 ---@param cmd string[]  e.g. { 'edit', '-c', '12' }
 ---@param paths string[]
 ---@param cb fun(res: perforated.RunResult)
+---@param effect string  for the warning when it's stopped, e.g. 'reverted'
+---@param busy string?  the pop-up
 -- `escape = false` for `add`, which takes file names literally.
-local function file_cmd(ws, cmd, paths, cb, escape)
+local function file_cmd(ws, cmd, paths, cb, effect, busy, escape)
   local stdin = escape == false and paths or M.escape_all(paths)
-  ws:run(cmd, { globals = { '-x', '-' }, stdin = stdin }, cb)
+  local title = ('%s %s'):format(
+    cmd[1],
+    #paths == 1 and vim.fs.basename(paths[1]) or (#paths .. ' files')
+  )
+  require('perforated.jobs').run(ws, title, cmd, {
+    globals = { '-x', '-' },
+    stdin = stdin,
+    busy = busy,
+    effect = effect,
+    single = #paths == 1,
+  }, cb)
 end
 
-function M.edit(ws, paths, change, cb)
-  file_cmd(ws, vim.list_extend({ 'edit' }, change_args(change)), paths, cb)
+function M.edit(ws, paths, change, cb, busy)
+  file_cmd(ws, vim.list_extend({ 'edit' }, change_args(change)), paths, cb, 'opened', busy)
 end
 
-function M.add(ws, paths, change, cb)
+function M.add(ws, paths, change, cb, busy)
   local cmd = { 'add' }
   for _, p in ipairs(paths) do
     if p:find('[@#%%*]') then
@@ -296,16 +308,16 @@ function M.add(ws, paths, change, cb)
       break
     end
   end
-  file_cmd(ws, vim.list_extend(cmd, change_args(change)), paths, cb, false)
+  file_cmd(ws, vim.list_extend(cmd, change_args(change)), paths, cb, 'opened', busy, false)
 end
 
----@param opts { unchanged: boolean? }?
+---@param opts { unchanged: boolean?, busy: string? }?
 function M.revert(ws, paths, opts, cb)
   local cmd = { 'revert' }
   if opts and opts.unchanged then
     cmd[#cmd + 1] = '-a'
   end
-  file_cmd(ws, cmd, paths, cb)
+  file_cmd(ws, cmd, paths, cb, 'reverted', opts and opts.busy)
 end
 
 --- Newest submitted change touching any of the given depot files (one call).

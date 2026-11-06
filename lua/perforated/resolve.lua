@@ -121,7 +121,17 @@ local function merge_one(ws, rec, tool, cb)
       if table.concat(result, '\n') == before then
         return cb(false, 'merge result unchanged (merge cancelled?)')
       end
-      ws:run({ 'resolve', '-af', p4.escape(path) }, {}, function(res)
+      local args = { 'resolve', '-af', p4.escape(path) }
+      local opts = {
+        busy = ('Saving the merge of %s…'):format(name),
+        delay = 500,
+        effect = 'resolved',
+        single = true,
+      }
+      require('perforated.jobs').run(ws, 'resolve ' .. name, args, opts, function(res)
+        if res.stopped then
+          return cb(false, 'merge not saved: resolve cancelled')
+        end
         if #res.errors > 0 then
           return cb(false, res.errors[1])
         end
@@ -192,7 +202,12 @@ function M.run(ws, paths, cb)
   local toast = require('perforated.ui.toast')
   local unbusy = toast.busy(
     paths and ('Resolving %s…'):format(#paths == 1 and what or (#paths .. ' file(s)'))
-      or 'Resolving every file that needs it…'
+      or 'Resolving every file that needs it…',
+    {
+      cancel = function()
+        jobs.cancel(job)
+      end,
+    }
   )
   local function rel(path)
     if ws.root and path:sub(1, #ws.root + 1) == ws.root .. '/' then
@@ -203,8 +218,9 @@ function M.run(ws, paths, cb)
   ws:run({ 'resolve', '-am' }, vim.tbl_extend('force', opts, run_opts), function(res)
     if res.cancelled then
       unbusy()
-      jobs.finish(job, 'resolve stopped', 'warn')
-      toast.notify('[perforated] resolve stopped', vim.log.levels.WARN)
+      local msg = 'resolve cancelled: some files may already be resolved'
+      jobs.finish(job, msg, 'warn')
+      toast.notify('[perforated] ' .. msg, vim.log.levels.WARN)
       co.changed(ws)
       return cb(0, 0)
     end

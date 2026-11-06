@@ -28,10 +28,13 @@ local key_ns = vim.api.nvim_create_namespace('perforated.toast.keys')
 ---@field counting boolean?
 ---@field place 'center'|'action'|'background'|nil  default 'action'
 ---@field busy boolean?
+---@field cancel fun()?  stops what the busy pop-up is waiting for (Ctrl+c)
 
 local shown = {} ---@type perforated.Toast[]
 local queued = {} ---@type perforated.Toast[]
 local history = {} ---@type perforated.Toast[]
+local cancellable = {} ---@type perforated.Toast[] visible pop-ups Ctrl+c can stop, oldest first
+local cancel_key = nil ---@type { user: table? }?  set while Ctrl+c is ours; `user`: their mapping
 M.focused = true
 local did_setup = false
 
@@ -65,7 +68,65 @@ local function setup()
   vim.api.nvim_create_autocmd('VimResized', { group = group, callback = M._restack })
 end
 
+--- The user's global normal-mode `<C-c>`, if any (a buffer-local one keeps working by itself).
+---@return table?
+local function user_cancel_map()
+  for _, map in ipairs(vim.api.nvim_get_keymap('n')) do
+    if map.lhs:upper() == '<C-C>' then
+      return map
+    end
+  end
+end
+
+--- Give `<C-c>` back when no pop-up can use it.
+local function release_cancel_key()
+  if not cancel_key or #cancellable > 0 then
+    return
+  end
+  pcall(vim.keymap.del, 'n', '<C-c>')
+  if cancel_key.user then
+    vim.fn.mapset('n', false, cancel_key.user)
+  end
+  cancel_key = nil
+end
+
+--- `<C-c>` stops the newest cancellable pop-up, only while one is on screen. It's a global
+--- normal-mode mapping, so prompts and pickers keep their own buffer-local `<C-c>`.
+local function hold_cancel_key()
+  if cancel_key then
+    return
+  end
+  cancel_key = { user = user_cancel_map() }
+  vim.keymap.set('n', '<C-c>', function()
+    local t = table.remove(cancellable)
+    if t then
+      local cancel = t.cancel
+      t.cancel = nil
+      release_cancel_key()
+      cancel()
+    end
+  end, { desc = 'perforated: cancel the running operation' })
+end
+
+--- Offer Ctrl+c on a busy pop-up.
+---@param t perforated.Toast
+---@param cancel fun()
+local function offer_cancel(t, cancel)
+  if not t.cancel then
+    cancellable[#cancellable + 1] = t
+  end
+  t.cancel, t.lines[2], t.detail = cancel, 'Ctrl+c to cancel', true
+  hold_cancel_key()
+end
+
 local function close(t)
+  for i, c in ipairs(cancellable) do
+    if c == t then
+      table.remove(cancellable, i)
+      release_cancel_key()
+      break
+    end
+  end
   if t.timer then
     t.timer:stop()
     if not t.timer:is_closing() then
@@ -235,6 +296,22 @@ function M._render(t)
   arm_activity()
 end
 
+--- Show a visible toast's new content.
+---@param t perforated.Toast
+function M._redraw(t)
+  if t.win and vim.api.nvim_win_is_valid(t.win) then
+    vim.api.nvim_win_close(t.win, true)
+    for i, s in ipairs(shown) do
+      if s == t then
+        table.remove(shown, i)
+        break
+      end
+    end
+    M._render(t)
+    vim.cmd.redraw()
+  end
+end
+
 --- Show a toast (or queue it until focus returns).
 ---@param title string
 ---@param lines string[]
@@ -309,8 +386,10 @@ end
 --- shown at once, no countdown, not in the history. Returns the function that closes it; call
 --- it on every outcome. With `toast.backend = 'notify'` it's a plain vim.notify.
 ---@param msg string
+---@param opts { cancel: fun()?, toast: perforated.Toast? }?  cancel: Ctrl+c runs it while the
+--- pop-up is on screen; toast is set to the pop-up
 ---@return fun() close
-function M.busy(msg)
+function M.busy(msg, opts)
   if cfg().backend == 'notify' then
     vim.notify('[perforated] ' .. msg, vim.log.levels.INFO)
     return function() end
@@ -323,6 +402,12 @@ function M.busy(msg)
     busy = true,
     place = 'center',
   }
+  if opts then
+    opts.toast = t
+    if opts.cancel then
+      offer_cancel(t, opts.cancel)
+    end
+  end
   M._render(t)
   vim.cmd.redraw() -- now: the work that follows may keep the main loop busy for a while
   return function()
@@ -332,11 +417,13 @@ end
 
 --- A busy pop-up for an action that also asks questions (a confirmation, a picker): shown at
 --- once, `pause()` hides it while the question is up, `resume()` shows it again, `done()` closes
---- it. With `toast.backend = 'notify'` the message is sent once.
+--- it. `resume(cancel)` also offers Ctrl+c, once there's something to stop. With
+--- `toast.backend = 'notify'` the message is sent once.
 ---@param msg string
----@return { pause: fun(), resume: fun(), done: fun() }
+---@return { pause: fun(), resume: fun(cancel: fun()?), done: fun() }
 function M.task(msg)
-  local closer = M.busy(msg)
+  local opts = {}
+  local closer = M.busy(msg, opts)
   local function hide()
     if closer then
       closer()
@@ -345,9 +432,13 @@ function M.task(msg)
   end
   return {
     pause = hide,
-    resume = function()
+    resume = function(on_cancel)
+      opts.cancel = on_cancel or opts.cancel
       if not closer then
-        closer = cfg().backend == 'notify' and function() end or M.busy(msg)
+        closer = cfg().backend == 'notify' and function() end or M.busy(msg, opts)
+      elseif on_cancel and opts.toast then
+        offer_cancel(opts.toast, on_cancel)
+        M._redraw(opts.toast)
       end
     end,
     done = hide,

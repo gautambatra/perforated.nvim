@@ -160,9 +160,23 @@ function M.change_status(ws, change, cb)
 end
 
 --- Move opened files to another changelist.
-function M.reopen(ws, paths, change, cb)
+---@param opts { quiet: boolean? }?  quiet: the caller already shows a pop-up
+function M.reopen(ws, paths, change, cb, opts)
   local stdin = require('perforated.p4').escape_all(paths) -- `icon@2x.png` is a file, not a rev
-  ws:run({ 'reopen', '-c', change or 'default' }, { globals = { '-x', '-' }, stdin = stdin }, cb)
+  require('perforated.jobs').run(
+    ws,
+    ('reopen %d file(s)'):format(#paths),
+    { 'reopen', '-c', change or 'default' },
+    {
+      globals = { '-x', '-' },
+      stdin = stdin,
+      busy = not (opts and opts.quiet) and ('Moving %d file(s)…'):format(#paths) or nil,
+      delay = 500,
+      effect = 'moved',
+      single = #paths == 1,
+    },
+    cb
+  )
 end
 
 --- Workspace reconcile preview (`p4 status`): files to add / edit / delete. Can be slow on large

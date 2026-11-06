@@ -3,7 +3,8 @@
 ---   * a progress message that updates while the job runs (file count, last file, elapsed);
 ---   * `:P4 jobs`: a float listing running jobs, refreshed live; `x` stops the one under the
 ---     cursor, `q` closes;
----   * `:P4 cancel`: stops every running job (SIGTERM, then SIGKILL after 2 s).
+---   * `:P4 cancel`: stops every running job (SIGTERM, then SIGKILL after 2 s);
+---   * Ctrl+c on a job's busy pop-up: stops that job.
 ---
 --- Stopping a sync midway is safe: p4 updates the have list file by file.
 
@@ -112,6 +113,65 @@ function M.start(ws, title, opts)
     end,
   }
   return job, run_opts
+end
+
+--- Run a command that changes files as a quiet job: it has no call timeout, because killing it
+--- would leave the work half done, and the user can stop it instead. Every way of stopping it
+--- ends the same way: a warning here and `res.stopped` for the caller, which reports nothing
+--- more but still refreshes (part of the work may be done).
+---@param ws perforated.Workspace
+---@param title string  for `:P4 jobs`
+---@param args string[]
+---@param opts table?  `ws:run` options, plus:
+---  * busy string?: the pop-up; delay integer?: wait this many ms before showing it, so that a
+---    quick command doesn't flash one
+---  * task table?: the caller's `toast.task` instead (which the caller closes)
+---  * effect string?: past participle for the warning, e.g. 'reverted'; single boolean?: one file
+---  * verb string?: names the command in the warning (default: `args[1]`)
+---@param cb fun(res: perforated.RunResult)
+function M.run(ws, title, args, opts, cb)
+  opts = opts or {}
+  local toast = require('perforated.ui.toast')
+  local job, run_opts = M.start(ws, title, { quiet = true })
+  local function cancel()
+    M.cancel(job)
+  end
+  local close = function() end
+  local finished = false
+  local function show()
+    if not finished then
+      close = toast.busy(opts.busy, { cancel = cancel })
+    end
+  end
+  if opts.task then
+    opts.task.resume(cancel)
+  elseif opts.busy and opts.delay then
+    vim.defer_fn(show, opts.delay)
+  elseif opts.busy then
+    show()
+  end
+  local run = { stdin = opts.stdin, globals = opts.globals, priority = opts.priority }
+  ws:run(args, vim.tbl_extend('force', run, run_opts), function(res)
+    finished = true
+    close()
+    res.stopped = res.cancelled or res.timed_out
+    M.finish(job, title)
+    if res.stopped then
+      local msg = ('%s %s'):format(
+        opts.verb or args[1],
+        res.cancelled and 'cancelled' or 'timed out'
+      )
+      if opts.effect then
+        msg = ('%s: %s may already be %s'):format(
+          msg,
+          opts.single and 'the file' or 'some files',
+          opts.effect
+        )
+      end
+      toast.notify('[perforated] ' .. msg, vim.log.levels.WARN)
+    end
+    cb(res)
+  end)
 end
 
 --- Mark a job finished (and report through its progress item).

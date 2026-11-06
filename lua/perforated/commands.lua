@@ -479,15 +479,17 @@ M.commands = {
       end
       local function go(target)
         require('perforated.changelists').reopen(ws, files, target, function(res)
-          if #res.errors > 0 then
+          if #res.errors > 0 and not res.stopped then
             return notify('reopen failed: ' .. res.errors[1], vim.log.levels.ERROR)
           end
-          notify(
-            ('moved %d file(s) to %s'):format(
-              #res.records,
-              target == 'default' and 'the default changelist' or ('CL ' .. target)
+          if not res.stopped then
+            notify(
+              ('moved %d file(s) to %s'):format(
+                #res.records,
+                target == 'default' and 'the default changelist' or ('CL ' .. target)
+              )
             )
-          )
+          end
           local co = require('perforated.checkout')
           co.changed(ws)
           for _, b in ipairs(co.bufs_for(ws, files)) do

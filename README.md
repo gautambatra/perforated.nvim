@@ -199,6 +199,7 @@ More: [time-lapse](docs/user_guide.md#time-lapse).
   conflict.
 - **Integrate** cherry-picks a submitted changelist into your workspace.
 - Syncs, submits and resolves run as jobs: `:P4 jobs` shows their progress and `:P4 cancel`
+  stops them. Commands that change files have no time limit, and `Ctrl+c` on their busy pop-up
   stops them.
 
 More: [shelve, submit, sync, resolve, integrate](docs/user_guide.md#shelve-submit-sync-resolve-integrate).

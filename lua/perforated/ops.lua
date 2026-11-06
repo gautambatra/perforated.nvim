@@ -91,13 +91,6 @@ local function refresh(ws, paths)
   end
 end
 
---- A centred busy pop-up while p4 works; returns the closer.
----@param msg string
----@return fun()
-local function busy(msg)
-  return require('perforated.ui.toast').busy(msg)
-end
-
 local function confirm(msg, choices, default)
   return require('perforated.ui.prompt').confirm(msg, choices or '&Yes\n&No', default or 2) == 1
 end
@@ -131,17 +124,17 @@ function M.shelve(ws, change, paths, cb)
   local function run(replace_all)
     local args = replace_all and { 'shelve', '-r', '-c', change }
       or { 'shelve', '-f', '-c', change }
-    -- No call timeout: shelving uploads every file's content.
-    local opts = { timeout = 0 }
+    -- A job: shelving uploads every file's content.
+    local opts = { task = task, effect = 'shelved' }
     if paths then
-      opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths), timeout = 0 }
+      opts.globals, opts.stdin = { '-x', '-' }, p4.escape_all(paths)
     end
-    task.resume()
-    ws:run(args, opts, function(res)
+    local title = ('shelve CL %s'):format(change)
+    require('perforated.jobs').run(ws, title, args, opts, function(res)
       task.done()
       co.report('shelve', res, #res.records)
       co.changed(ws)
-      cb(#res.errors == 0 and #res.records > 0)
+      cb(#res.errors == 0 and #res.records > 0 and not res.stopped)
     end)
   end
 
@@ -217,9 +210,17 @@ function M.delete_shelved(ws, change, depot_files, cb)
     return cb(false)
   end
   local args = vim.list_extend({ 'shelve', '-d', '-c', change }, depot_files or {})
-  local done = busy(('Deleting shelved files of CL %s…'):format(change))
-  ws:run(args, {}, function(res)
-    done()
+  local opts = {
+    busy = ('Deleting shelved files of CL %s…'):format(change),
+    effect = 'deleted from the shelf',
+    single = depot_files and #depot_files == 1,
+  }
+  local title = ('delete shelved CL %s'):format(change)
+  require('perforated.jobs').run(ws, title, args, opts, function(res)
+    if res.stopped then
+      co.changed(ws)
+      return cb(false)
+    end
     if #res.errors > 0 then
       notify('delete shelved failed: ' .. res.errors[1], vim.log.levels.ERROR)
     else
@@ -247,12 +248,12 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       table.insert(args, 2, '-f')
     end
     vim.list_extend(args, depot_files or {})
-    task.resume()
-    -- No call timeout: unshelving downloads every file's content.
-    ws:run(args, { timeout = 0 }, function(res)
+    -- A job: unshelving downloads every file's content.
+    local opts = { task = task, effect = 'unshelved' }
+    require('perforated.jobs').run(ws, 'unshelve CL ' .. shelf, args, opts, function(res)
       task.done()
       local texts = messages(res)
-      if #clobbered(res.errors) > 0 and not force then
+      if #clobbered(res.errors) > 0 and not force and not res.stopped then
         if
           confirm(
             'Some workspace files are writable but not opened. Overwrite them with the shelved versions?',
@@ -270,7 +271,9 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       end
       unshelved = math.max(unshelved, #res.records)
       local resolve = file_items(ws, texts, 'must resolve', 'unresolved')
-      if #res.errors > 0 and unshelved == 0 then
+      if res.stopped then
+        unshelved = 0
+      elseif #res.errors > 0 and unshelved == 0 then
         notify('unshelve failed: ' .. res.errors[1], vim.log.levels.ERROR)
       else
         notify(
@@ -452,15 +455,25 @@ function M.delete_change(ws, change, cb)
               return cb(false)
             end
             refresh(ws, paths)
+            if res.stopped then
+              return cb(false)
+            end
             delete()
-          end)
+          end, { quiet = true })
         end
         if nshelved == 0 then
           return empty_files()
         end
         local args = force and { 'shelve', '-d', '-f', '-c', change }
           or { 'shelve', '-d', '-c', change }
-        ws:run(args, {}, function(res)
+        -- No Ctrl+c: the busy pop-up outlives this step (`:P4 cancel` stops it).
+        local opts = { effect = 'deleted from the shelf' }
+        local job = ('delete shelved CL %s'):format(change)
+        require('perforated.jobs').run(ws, job, args, opts, function(res)
+          if res.stopped then
+            co.changed(ws)
+            return cb(false)
+          end
           if #res.errors > 0 then
             notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
             co.changed(ws)
@@ -504,6 +517,9 @@ function M.run_submit(ws, change, desc, cb, files, task)
     end
     -- A job (`:P4 jobs`, `:P4 cancel`) without its own pop-ups: the busy one says it's running.
     local job, run_opts = jobs.start(ws, 'submit ' .. label, { quiet = true })
+    task.resume(function()
+      jobs.cancel(job)
+    end)
     ws:run(args, run_opts, function(res)
       task.done()
       local submitted
@@ -524,8 +540,10 @@ function M.run_submit(ws, change, desc, cb, files, task)
           renumbered = renumbered or t:match('p4 submit %-c (%d+)')
         end
         local first = res.errors[1] or texts[1] or 'submit failed'
-        local msg = res.cancelled and 'submit stopped' or ('submit failed: ' .. first)
-        jobs.finish(job, msg, true)
+        local msg = res.cancelled
+            and ('submit cancelled: it may still have gone through, check %s'):format(label)
+          or ('submit failed: ' .. first)
+        jobs.finish(job, msg, res.cancelled and 'warn' or true)
         notify(msg, res.cancelled and vim.log.levels.WARN or vim.log.levels.ERROR)
         local items = file_items(ws, texts, nil, 'submit_error')
         if #items > 0 then
@@ -784,7 +802,7 @@ function M.preview_sync(ws, args, cb)
   local job, run_opts = jobs.start(ws, 'sync preview')
   ws:run(vim.list_extend({ 'sync', '-n' }, args), run_opts, function(res)
     if res.cancelled then
-      jobs.finish(job, 'stopped', true)
+      jobs.finish(job, 'sync preview cancelled', 'warn')
       return cb(nil)
     end
     local counts, order = {}, {}
@@ -875,7 +893,7 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
       or (failed and res.errors[1])
       or 'nothing to sync'
     if res.cancelled then
-      summary = ('stopped after %d file(s)'):format(#changed_paths)
+      summary = ('sync cancelled after %d file(s)'):format(#changed_paths)
     end
     local notes = {}
     if #problems.clobbered > 0 then
@@ -890,7 +908,7 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
     jobs.finish(
       job,
       summary .. (#notes > 0 and (' · ' .. table.concat(notes, ' · ')) or ''),
-      failed or res.cancelled
+      failed or (res.cancelled and 'warn')
     )
     M.reload(ws, changed_paths)
     co.changed(ws)
@@ -1046,7 +1064,16 @@ function M.delete(ws, paths, cb)
     return cb(false)
   end
   local bufs = co.bufs_for(ws, paths)
-  ws:run({ 'delete' }, { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }, function(res)
+  local opts = {
+    globals = { '-x', '-' },
+    stdin = p4.escape_all(paths),
+    busy = ('Opening %d file(s) for delete…'):format(#paths),
+    delay = 500,
+    effect = 'opened for delete',
+    single = #paths == 1,
+  }
+  local title = ('delete %d file(s)'):format(#paths)
+  require('perforated.jobs').run(ws, title, { 'delete' }, opts, function(res)
     local deleted = {}
     for _, r in ipairs(res.records) do
       if r.clientFile and r.action == 'delete' then
@@ -1059,7 +1086,7 @@ function M.delete(ws, paths, cb)
         problems[#problems + 1] = t
       end
     end
-    if next(deleted) then
+    if next(deleted) and not res.stopped then
       notify(('opened %d file(s) for delete'):format(vim.tbl_count(deleted)))
     end
     if #problems > 0 then
@@ -1103,9 +1130,21 @@ function M.move(buf, new, cb)
     return cb(false)
   end
   local function move()
-    ws:run({ 'move', p4.escape(old), p4.escape(new) }, {}, function(res)
+    local args = { 'move', p4.escape(old), p4.escape(new) }
+    local opts = {
+      busy = ('Moving %s…'):format(vim.fs.basename(old)),
+      delay = 500,
+      effect = 'moved',
+      single = true,
+    }
+    local title = 'move ' .. vim.fs.basename(old)
+    require('perforated.jobs').run(ws, title, args, opts, function(res)
       -- A file opened for add comes back as action "add", not "move/add".
       local ok = #res.errors == 0 and #res.records > 0
+      if not ok and res.stopped then
+        co.changed(ws)
+        return cb(false)
+      end
       if not ok then
         notify('move failed: ' .. (res.errors[1] or res.warnings[1] or '?'), vim.log.levels.ERROR)
         return cb(false)

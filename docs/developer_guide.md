@@ -756,7 +756,9 @@ why keys, menus and help never disagree.
    background probe (`p4 -ztag info -s`) runs with exponential backoff (5 s → 5 min). A call
    that only *timed out* (no connection error in its output) isn't proof: `observe` probes at
    once instead (`conn.checking` while it runs) and only a failed probe goes offline. Heavy
-   commands (sync, submit, resolve, reconcile) run as jobs, without the call timeout.
+   commands (sync, submit, resolve, reconcile) and commands that change files run as jobs,
+   without the call timeout; a hung one stays until it's cancelled, and the probes still find a
+   dead connection.
 2. While offline, `ws:run` refuses new calls immediately with a clear message, instead of
    letting each one wait for a timeout.
 3. When a probe succeeds the state returns to `online`.
@@ -1174,7 +1176,8 @@ all" runs `shelve -r` and the prompt lists those files), delete shelved files, u
 shelf's own changelist when it's yours, else a picked one; `-f` only after confirming) — each
 with a centred busy pop-up; shelve and unshelve show theirs from the start (`toast.task`), while
 they check the shelf or find the target, hidden while the confirmation or picker is up and shown
-again for p4's work; they move file content, so they have no call timeout;
+again for p4's work; they move file content, so they run through `jobs.run`, like every command
+that changes files;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
 quickfix; "Submitting CL N…" from the command on like shelve's, hidden for the float, the
 description editor or input; a quiet job, so the busy pop-up and the result replace the job's
@@ -1234,6 +1237,21 @@ progress messages (with `source`) while running. `start(ws, title, { quiet = tru
 has no progress item at all (`job.prog = false`): the caller shows its own pop-ups, and the
 twice-a-second tick and `finish` skip it. A test keeps a quiet job alive across ticks: the
 resolve tests finish before the first tick, which once let a crash there through.
+
+`jobs.run(ws, title, args, opts, cb)` runs a command that changes files as a quiet job. These
+never use the call timeout: killing one leaves the work half done, so the user stops it instead.
+It shows the pop-up (`busy`, after `delay` ms for commands that are usually quick, or the
+caller's `task`) and handles every way of stopping the command in one place: a warning built from
+`verb` and `effect`, then `res.stopped` for the caller, which reports nothing more but still
+refreshes, because part of the work may be done.
+
+`toast.busy(msg, { cancel = fn })` adds the `Ctrl+c to cancel` line, and `task.resume(fn)` adds it
+to a pop-up that's already open. While such a pop-up is visible, `<C-c>` is a global normal-mode
+mapping that stops the newest one (a pop-up that outlives the command doesn't offer it: deleting
+a changelist's shelf is stopped with `:P4 cancel`); `user_cancel_map` saves the user's global mapping and
+`mapset` restores it when the last pop-up closes. Being global, it loses to the buffer-local
+`<C-c>` of prompts and pickers. Insert mode is left alone on purpose: `<C-c>` is a common way to
+leave it, and auto-checkout shows its pop-up while you type.
 
 #### `tools.lua`, `lookup.lua`
 `tools` reads settings like `P4MERGE` the way p4 does (`p4 set -q`) and launches the user's
