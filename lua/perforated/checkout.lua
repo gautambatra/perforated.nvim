@@ -187,7 +187,7 @@ end
 ---@param ws perforated.Workspace
 ---@param paths string[]
 ---@param cl string?
----@param cb fun(ok: boolean)?
+---@param cb fun(ok: boolean, res: perforated.RunResult)?
 function M.edit(ws, paths, cl, cb)
   local bufs = bufs_for(ws, paths)
   for _, b in ipairs(bufs) do
@@ -226,7 +226,7 @@ function M.edit(ws, paths, cl, cb)
       require('perforated.buffer').refresh(b)
     end
     if cb then
-      cb(ok)
+      cb(ok, res)
     end
   end, busy('Checking out %s…', 'Checking out %d files…', paths))
 end
@@ -234,7 +234,7 @@ end
 ---@param ws perforated.Workspace
 ---@param paths string[]
 ---@param cl string?
----@param cb fun(ok: boolean)?
+---@param cb fun(ok: boolean, res: perforated.RunResult)?
 function M.add(ws, paths, cl, cb)
   local bufs = bufs_for(ws, paths)
   p4.add(ws, paths, cl, function(res)
@@ -245,7 +245,7 @@ function M.add(ws, paths, cl, cb)
       require('perforated.buffer').refresh(b)
     end
     if cb then
-      cb(ok)
+      cb(ok, res)
     end
   end, busy('Opening %s for add…', 'Opening %d files for add…', paths))
 end

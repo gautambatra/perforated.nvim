@@ -2019,6 +2019,52 @@ T['client view']['reconcile scans on expand; a opens found files'] = function()
   H.eq(opened()['//depot/new.txt'], 'default')
 end
 
+T['client view']['reconcile deletes names p4 reads as revisions; a refused file stays listed'] = function()
+  local names = { 'del@2x.txt', 'a#b.txt', 'plain.txt', 'gone.txt' }
+  for _, n in ipairs(names) do
+    H.write(root .. '/rec/' .. n, 'x\n')
+  end
+  server:p4({
+    'add',
+    '-f',
+    root .. '/rec/del@2x.txt',
+    root .. '/rec/a#b.txt',
+    root .. '/rec/plain.txt',
+    root .. '/rec/gone.txt',
+  }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'submit', '-d', 'to delete', '//depot/rec/...' }, { client = 'alice_ws', cwd = root })
+  for _, n in ipairs(names) do
+    vim.fn.delete(root .. '/rec/' .. n)
+  end
+  open_view()
+  goto_line('Workspace reconcile')
+  child.type_keys('l')
+  local shown = function(name)
+    return ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find(%q, 1, true) ~= nil'):format(
+      view_expr(root),
+      name
+    )
+  end
+  wait(shown('gone.txt'))
+  -- No longer on the client when `a` runs: p4 refuses it.
+  server:p4({ 'sync', root .. '/rec/gone.txt#0' }, { client = 'alice_ws', cwd = root })
+  for _, n in ipairs(names) do
+    goto_line(n)
+    child.type_keys('a')
+    if n ~= 'gone.txt' then
+      wait('not ' .. shown(n))
+    end
+  end
+  H.eq(H.wait_message(child, 'not on client', 5000), true)
+  H.wait_idle(child)
+  H.eq(child.lua_get(shown('gone.txt')), true)
+  local open = opened()
+  H.eq(open['//depot/rec/del%402x.txt'], 'default')
+  H.eq(open['//depot/rec/a%23b.txt'], 'default')
+  H.eq(open['//depot/rec/plain.txt'], 'default')
+  H.eq(open['//depot/rec/gone.txt'], nil)
+end
+
 T['client view']['multi-key actions (gS) can be chosen from the action menu'] = function()
   open_view()
   child.lua(

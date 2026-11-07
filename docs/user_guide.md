@@ -210,6 +210,8 @@ Folds are kept across refreshes.
 Scanning for files changed outside Perforce is expensive on a large workspace, so the section
 only scans when you expand it (`l`).
 
+- `a` opens the files under the cursor (or selected) for add, edit or delete. A file leaves the
+  section once p4 opens it; one p4 refuses stays listed, and the message says why.
 - `x` stops a running scan, as do `:P4 jobs` and `:P4 cancel`.
 - `r` scans again.
 - To scan only the parts you work on, set `client_view.reconcile.paths`, e.g.

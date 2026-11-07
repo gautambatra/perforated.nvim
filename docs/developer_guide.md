@@ -798,7 +798,8 @@ why keys, menus and help never disagree.
 2. Each section is drawn as soon as its own query answers (`build()` turns the data into tree
    nodes; the tree renders with one `set_lines`), so a slow query never holds back the rest.
    Until then a section shows what the previous refresh found, or "loading…" the first time.
-3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop.
+3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop. `a`
+   removes a file from it only once p4's records confirm it was opened.
 4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background

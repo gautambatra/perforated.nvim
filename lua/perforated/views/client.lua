@@ -1557,33 +1557,47 @@ local function actions(view)
         end
         -- Each op announces PerforatedChanged, which refreshes the view (once, coalesced).
         local co = require('perforated.checkout')
+        -- The files p4 opened leave the section; the ones it refused and the rest of the scan
+        -- stay.
+        local function applied(res)
+          local opened = {}
+          for _, r in ipairs(res.records) do
+            if r.clientFile then
+              opened[p4.key(ws, r.clientFile)] = true
+            end
+          end
+          view.reconcile.recs = vim.tbl_filter(function(r)
+            return not opened[p4.key(ws, r.clientFile)]
+          end, view.reconcile.recs or {})
+          if vim.api.nvim_buf_is_valid(view.buf) and view.data then
+            view.tree:set(build(view, view.data))
+          end
+        end
         if #by.add > 0 then
-          co.add(ws, by.add, ws.sticky_cl)
+          co.add(ws, by.add, ws.sticky_cl, function(_, res)
+            applied(res)
+          end)
         end
         if #by.edit > 0 then
-          co.edit(ws, by.edit, ws.sticky_cl)
+          co.edit(ws, by.edit, ws.sticky_cl, function(_, res)
+            applied(res)
+          end)
         end
         if #by.delete > 0 then
           local title = ('delete %d file(s)'):format(#by.delete)
           require('perforated.jobs').run(ws, title, { 'delete' }, {
             globals = { '-x', '-' },
-            stdin = by.delete,
+            stdin = p4.escape_all(by.delete), -- `icon@2x.png` is a file, not a rev
             busy = ('Opening %d file(s) for delete…'):format(#by.delete),
             delay = 500,
             effect = 'opened for delete',
             single = #by.delete == 1,
-          }, function()
+          }, function(res)
+            co.report('delete', res, #res.records)
             co.changed(ws)
+            applied(res)
           end)
         end
-        -- The applied files leave the section; the rest of the scan stays.
-        local applied = {}
-        for _, it in ipairs(items) do
-          applied[it.clientFile] = true
-        end
-        view.reconcile.recs = vim.tbl_filter(function(r)
-          return not applied[r.clientFile]
-        end, view.reconcile.recs or {})
         view.tree.marks = {}
       end,
     },
