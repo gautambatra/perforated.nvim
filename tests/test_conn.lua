@@ -110,6 +110,7 @@ T['offline']['a file opened while logged out recovers after the login'] = functi
   setup(server_up())
   open('a.c')
   H.eq(H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'clean']]), true)
+  H.wait_idle(child) -- a late success would set the state back to online
   child.lua([[_G.ws.conn:_set('offline_auth', 'login cancelled')]])
   open('b.c')
   H.wait_idle(child)
