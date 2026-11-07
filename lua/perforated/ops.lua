@@ -867,13 +867,32 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
     local texts = messages(res)
     -- p4 still reports a record ("updated") for a file it couldn't clobber: it didn't change.
-    local skipped = {}
+    -- p4 names a file the same way in its record and its message, so an exact lookup finds it.
+    -- Only if one isn't found is every path normalised (most of a second at 100k files).
+    local skipped, norm = {}, nil
     for _, path in ipairs(clobbered(texts)) do
-      skipped[vim.fs.normalize(path)] = true
+      skipped[path] = true
+    end
+    if next(skipped) then
+      local left = vim.deepcopy(skipped)
+      for _, r in ipairs(res.records) do
+        if r.clientFile then
+          left[r.clientFile] = nil
+        end
+      end
+      if next(left) then
+        norm = {}
+        for path in pairs(skipped) do
+          norm[vim.fs.normalize(path)] = true
+        end
+      end
+    end
+    local function was_skipped(path)
+      return skipped[path] or (norm and norm[vim.fs.normalize(path)])
     end
     local changed_paths, counts = {}, {}
     for _, r in ipairs(res.records) do
-      if r.clientFile and not skipped[vim.fs.normalize(r.clientFile)] then
+      if r.clientFile and not was_skipped(r.clientFile) then
         changed_paths[#changed_paths + 1] = r.clientFile
         counts[r.action or '?'] = (counts[r.action or '?'] or 0) + 1
       end

@@ -866,6 +866,38 @@ T['m4']["sync: a writable file p4 can't clobber: quickfix, a centred pop-up, the
   H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b1')
 end
 
+T['m4']["sync: a file p4 couldn't clobber isn't counted, however its path is spelled"] = function()
+  setup()
+  child.lua(
+    [[require('perforated.ui.float').menu = function(opts) return opts.items[1], '' end
+    local root = ...
+    local ws = require('perforated').workspace()
+    local run = ws.run
+    ws.run = function(self, args, opts, cb)
+      if args[1] ~= 'sync' then
+        return run(self, args, opts, cb)
+      end
+      local recs = {
+        { clientFile = root .. '/main/a.txt', action = 'updated' },
+        { clientFile = root .. '/main/b.txt', action = 'updated' },
+      }
+      cb({ ok = false, records = recs, all = recs, warnings = {},
+        errors = { "Can't clobber writable file " .. root .. '/main/./b.txt' } })
+    end
+    _G.r = nil
+    require('perforated.ops')._run_sync(ws, {}, 'workspace', nil, true, function(ok) _G.r = ok end)]],
+    { root }
+  )
+  wait('_G.r ~= nil')
+  local said = table.concat(
+    child.lua_get(
+      [[vim.tbl_map(function(t) return t.title .. ' ' .. table.concat(t.lines, ' ') end, require('perforated.ui.toast').history())]]
+    ),
+    '\n'
+  )
+  H.neq(said:find('1 updated · 1 not updated (writable, not opened)', 1, true), nil)
+end
+
 T['m4']['file arguments: globs expand to every match; p4 wildcards in names are escaped'] = function()
   setup()
   H.eq(

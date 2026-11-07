@@ -1828,6 +1828,7 @@ fstat cache — the first time it ran.
 | Stacked pop-ups: build the dim namespace, ~1300 groups | 10 ms |
 | Picker: open 500 items (with preview) | 16 ms |
 | Picker: slowest keystroke typing a filter into 5000 items that all match (worst case; the C matcher alone takes 7–10 ms) | 25 ms |
+| Sync results, 100k files: none / one that p4 couldn't overwrite (summary, changed files, buffers to reload) | 100 / 120 ms |
 
 Timings take the **best of several runs** (and, for pure-Lua loops, the best of three fresh
 Neovim processes) to filter out machine noise; budgets are about the plugin's cost, not the

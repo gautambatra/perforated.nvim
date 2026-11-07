@@ -523,6 +523,65 @@ do
   record('picker: typing a filter, 5000 items', ms[2], 'ms', 25)
 end
 
+-- 11. Handling a sync's results: 100k synced files, all on the main thread (the summary, which
+--     files changed, which open buffers to reload). Once with nothing p4 couldn't overwrite (the
+--     usual case), once with one such file. Best of 3 runs each.
+do
+  local root = H.tmp()
+  H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')
+  H.write(root .. '/a.c', 'x')
+  local c = H.child({
+    fake = {
+      rules = {
+        {
+          match = '^info',
+          records = { { clientName = 'ws1', clientRoot = root, userName = 'alice' } },
+        },
+        { match = '^set', stdout = 'P4CLIENT=ws1\n' },
+        { match = '.', records = {} },
+      },
+    },
+    env = { P4CONFIG = '.p4config' },
+    config = { p4 = H.fake_p4, poll = { interval = 0 }, startup_check = false },
+  })
+  c.cmd('edit ' .. root .. '/a.c')
+  H.wait(c, [[(require('perforated.core.workspace').list()[1] or {}).settings ~= nil]], 10000)
+  local ms = c.lua(
+    [[
+    local root = ...
+    local ws = require('perforated').workspace()
+    local recs = {}
+    for i = 1, 100000 do
+      recs[i] = { clientFile = ('%s/src/m%d/file%d.cpp'):format(root, i % 500, i),
+        depotFile = ('//depot/src/m%d/file%d.cpp'):format(i % 500, i), action = 'updated', rev = '2' }
+    end
+    local function handle(errors)
+      local best = math.huge
+      local run = ws.run
+      for _ = 1, 3 do
+        local t
+        ws.run = function(self, args, opts, cb)
+          if args[1] ~= 'sync' then
+            return run(self, args, opts, cb)
+          end
+          t = vim.uv.hrtime()
+          cb({ ok = #errors == 0, records = recs, errors = errors, warnings = {}, all = recs })
+          best = math.min(best, (vim.uv.hrtime() - t) / 1e6)
+        end
+        require('perforated.ops')._run_sync(ws, {}, 'workspace', nil, true, function() end)
+      end
+      ws.run = run
+      return best
+    end
+    return { handle({}), handle({ "Can't clobber writable file " .. root .. '/src/m1/file1.cpp' }) }
+  ]],
+    { root }
+  )
+  c.stop()
+  record('sync: results of 100k files', ms[1], 'ms', 100)
+  record('sync: 100k files, one not overwritten', ms[2], 'ms', 120)
+end
+
 -- Report.
 local failed = false
 print(('%-40s %10s %10s'):format('metric', 'value', 'budget'))
