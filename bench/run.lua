@@ -555,6 +555,8 @@ do
       recs[i] = { clientFile = ('%s/src/m%d/file%d.cpp'):format(root, i % 500, i),
         depotFile = ('//depot/src/m%d/file%d.cpp'):format(i % 500, i), action = 'updated', rev = '2' }
     end
+    -- What follows the measured part (the pop-up about a file not overwritten waits for a key).
+    require('perforated.ops').after_sync = function() end
     local function handle(errors)
       local best = math.huge
       local run = ws.run

@@ -55,4 +55,5 @@ jobs:
         run: mkdir -p "$RUNNER_TEMP/MixedCase/Tmp" && echo "PERFORATED_TEST_TMP=$RUNNER_TEMP/MixedCase/Tmp" >> "$GITHUB_ENV"
       - run: make test
       - name: Performance budgets
+        timeout-minutes: 10
         run: make bench
