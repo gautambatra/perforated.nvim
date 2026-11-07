@@ -57,6 +57,83 @@ T['offline']['connection failure → offline, fail fast, probe recovers'] = func
   H.eq(r.ok, true)
 end
 
+--- p4 answering normally: every file exists in the depot, `opened` is empty.
+local function server_up()
+  return {
+    { match = '^fstat', records = { { depotFile = '//d/f', headRev = '1', haveRev = '1' } } },
+    { match = '.', records = { { serverVersion = 'x' } } },
+  }
+end
+
+local function open(name)
+  H.write(root .. '/' .. name, 'x')
+  child.cmd('edit ' .. root .. '/' .. name)
+end
+
+local function status(name)
+  return child.lua_get(
+    ([[require('perforated.buffer').get(vim.fn.bufnr(%q)).status]]):format(root .. '/' .. name)
+  )
+end
+
+local function fstats()
+  return #H.calls_matching(child.fake.log, 'fstat')
+end
+
+T['offline']['files opened while offline recover in one batch when the server returns'] = function()
+  setup(server_up())
+  open('a.c')
+  H.eq(H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'clean']]), true)
+  H.wait_idle(child)
+  H.rules(child.fake.rules, { vim.tbl_extend('force', { match = '.' }, CONNECT_FAIL) })
+  run({ 'opened' })
+  H.eq(child.lua_get('_G.ws.conn.state'), 'offline')
+
+  open('b.c')
+  open('c.c')
+  H.wait_idle(child)
+  H.eq(status('b.c'), 'pending')
+  H.eq(status('c.c'), 'pending')
+
+  H.rules(child.fake.rules, server_up())
+  local before = fstats()
+  child.lua('_G.ws.conn:probe(function() end)')
+  H.eq(H.wait(child, [[_G.ws.conn.state == 'online']]), true)
+  H.wait_idle(child)
+  H.neq(status('b.c'), 'pending')
+  H.neq(status('c.c'), 'pending')
+  H.eq(status('a.c'), 'clean')
+  H.eq(fstats() - before, 1)
+end
+
+T['offline']['a file opened while logged out recovers after the login'] = function()
+  setup(server_up())
+  open('a.c')
+  H.eq(H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'clean']]), true)
+  child.lua([[_G.ws.conn:_set('offline_auth', 'login cancelled')]])
+  open('b.c')
+  H.wait_idle(child)
+  H.eq(status('b.c'), 'pending')
+  child.lua([[
+    vim.fn.inputsecret = function() return 's3cret' end
+    _G.ws.conn:login(function(ok) _G.logged_in = ok end)
+  ]])
+  H.eq(H.wait(child, '_G.logged_in == true'), true)
+  H.wait_idle(child)
+  H.neq(status('b.c'), 'pending')
+end
+
+T['offline']['coming online asks nothing when no buffer is waiting'] = function()
+  setup(server_up())
+  open('a.c')
+  H.eq(H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'clean']]), true)
+  H.wait_idle(child)
+  H.eq(fstats(), 1) -- the first connection (`unknown` → online) retries nothing
+  child.lua([[_G.ws.conn:_set('offline', 'gone'); _G.ws.conn:_set('online')]])
+  H.wait_idle(child)
+  H.eq(fstats(), 1)
+end
+
 T['offline']['a slow command that times out probes first: online if the server answers'] = function()
   root = H.tmp()
   H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')

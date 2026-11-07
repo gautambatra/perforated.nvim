@@ -761,7 +761,9 @@ why keys, menus and help never disagree.
    dead connection.
 2. While offline, `ws:run` refuses new calls immediately with a clear message, instead of
    letting each one wait for a timeout.
-3. When a probe succeeds the state returns to `online`.
+3. When a probe succeeds the state returns to `online`. Coming back from `offline` or
+   `offline_auth`, `buffer.retry_pending` asks again for the buffers whose first fstat was
+   refused, in one batch.
 4. An authentication error pauses the workspace's queue group, shows **one** password prompt,
    runs `p4 login` with the password on stdin (never logged), resumes the group and retries
    the waiting calls. A `login_pending` flag and a login epoch make sure concurrent failures

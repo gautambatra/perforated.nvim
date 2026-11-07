@@ -417,6 +417,17 @@ function M.find(path)
   end
 end
 
+--- Ask again for the buffers whose first fstat was refused: the connection is back, and nothing
+--- else would until the user re-enters them.
+---@param ws perforated.Workspace
+function M.retry_pending(ws)
+  for buf, st in pairs(states) do
+    if st.ws == ws and st.status == 'pending' then
+      M.refresh(buf)
+    end
+  end
+end
+
 --- All states (for workspace-wide operations such as polling).
 ---@return table<integer, perforated.BufState>
 function M.all()

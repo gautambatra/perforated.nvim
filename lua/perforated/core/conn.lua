@@ -93,12 +93,19 @@ function Conn:_set(state, err)
     state,
     err and (' (' .. err .. ')') or ''
   )
+  local refused = self.state == 'offline' or self.state == 'offline_auth'
   self.state = state
   self.last_error = err
   events.emit('Status', { ws = self.ws.key, conn = state })
   local status = package.loaded['perforated.status']
   if status then
     status.update_ws(self.ws)
+  end
+  if refused and state == 'online' then
+    local buffer = package.loaded['perforated.buffer']
+    if buffer then
+      buffer.retry_pending(self.ws)
+    end
   end
 end
 
