@@ -497,6 +497,65 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   )
 end
 
+T['m4']['problem lists keep paths with spaces and " - ", and leave p4\'s sentences out'] = function()
+  setup()
+  local paths = child.lua([[
+    local ws = require('perforated').workspace()
+    local items = require('perforated.ops')._file_items(ws, {
+      '//depot/plain.txt - must resolve //depot/plain.txt@=5 before submitting',
+      '//depot/my dir/a b.txt - must resolve //depot/my dir/a b.txt@=5 before submitting',
+      '//depot/my - dir/c - d.txt - must resolve //depot/my - dir/c - d.txt@=5 before submitting',
+      '//depot/rev - dir/e f.txt#3 - must resolve #4',
+      '//depot/rev dir/g.txt#3 - is opened - and more',
+      '//depot/other.txt - can only be opened - by one user',
+    }, 'must resolve', 'unresolved')
+    local all = require('perforated.ops')._file_items(ws, {
+      'Submit aborted - fix the problems, then try again',
+      '//depot/rev dir/g.txt#3 - is opened - and more',
+    }, nil, 'submit_error')
+    return {
+      vim.tbl_map(function(i) return i.user_data.depotFile end, items),
+      vim.tbl_map(function(i) return { i.user_data.depotFile, i.text } end, all),
+    }
+  ]])
+  H.eq(paths[1], {
+    '//depot/plain.txt',
+    '//depot/my dir/a b.txt',
+    '//depot/my - dir/c - d.txt',
+    '//depot/rev - dir/e f.txt',
+  })
+  H.eq(#paths[2], 1)
+  H.eq(paths[2][1][1], '//depot/rev dir/g.txt')
+  H.neq(paths[2][1][2]:find('is opened - and more', 1, true), nil)
+end
+
+T['m4']['unshelve: a file with spaces that must be resolved reaches quickfix'] = function()
+  setup()
+  local file = root .. '/main/my dir/a - b.txt'
+  H.write(file, 'one\n')
+  p4({ 'add', file })
+  p4({ 'submit', '-d', 'spaced' })
+  local cl = new_change('spaced shelf')
+  p4({ 'edit', '-c', cl, file })
+  H.write(file, 'shelved\n')
+  p4({ 'shelve', '-c', cl })
+  p4({ 'revert', file })
+  p4({ 'edit', file }) -- opened again: unshelving it needs a resolve
+  child.lua(([[
+      local qf = require('perforated.ui.qf')
+      local set = qf.set
+      qf.set = function(spec)
+        _G.listed = vim.tbl_map(function(i) return i.filename end, spec.items)
+        return set(spec)
+      end
+      require('perforated.ops').unshelve(
+        require('perforated').workspace(), %q, nil, 'default', function(ok) _G.r = ok end
+      )
+    ]]):format(cl))
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.listed'), { '//depot/main/my dir/a - b.txt' })
+end
+
 T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = function()
   setup()
   -- b.txt: already unresolved before this sync (synced outside the plugin)

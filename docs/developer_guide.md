@@ -1190,7 +1190,8 @@ job's result message counts each kind), sync to a changelist and its picker, del
 buffer), move (renames the buffer and keeps unsaved edits), delete a pending changelist
 (moving or reverting its files and deleting its shelf first; "Deleting CL N…" from the command
 on, hidden for the confirmation). Messages of the form
-`<file> - <reason>` become quickfix items (`file_items`).
+`<file> - <reason>` become quickfix items (`file_items`; paths may hold spaces and ` - `, so it
+splits before the wanted reason, then after the revision, then at the last ` - `).
 
 #### `resolve.lua`
 `run(ws, paths)`: `resolve -am` (p4 takes clean merges), then `resolve -n -o` to find the

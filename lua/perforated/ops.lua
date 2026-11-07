@@ -29,8 +29,19 @@ local function file_items(ws, texts, pattern, kind)
   local qf = require('perforated.ui.qf')
   local items = {}
   for _, t in ipairs(texts) do
-    local path, reason = t:match('^(%S+) %- (.+)$')
-    if path and (not pattern or reason:find(pattern)) then
+    -- Paths can hold spaces and " - ", and "must resolve" repeats the path after the reason, so
+    -- the separator is the one before the reason we want; failing that, the one after the
+    -- revision, else the last. Only a path counts: p4's sentences stay out of the list.
+    local path, reason
+    if pattern then
+      path, reason = t:match('^(/.-) %- (' .. pattern .. '.*)$')
+    else
+      path, reason = t:match('^(/.-#%d+) %- (.+)$')
+      if not path then
+        path, reason = t:match('^(/.+) %- (.+)$')
+      end
+    end
+    if path then
       local depot = path:gsub('#.*$', '')
       local local_path = depot
       if depot:match('^//') and ws.root then
