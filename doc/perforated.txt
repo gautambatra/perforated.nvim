@@ -124,7 +124,8 @@ bang goes on the subcommand: `:P4 revert!`.
     Picker: :P4 pick {pending|opened|submitted|users}
 
 :P4 refresh                                                      *:P4-refresh*
-    Refresh cached state (! also forgets workspace detection and settings)
+    Refresh cached state and re-check open buffers (! also forgets workspace
+    detection and settings)
 
 :P4 reopen                                                        *:P4-reopen*
     Move opened files to another changelist: :P4 reopen [-c CL] [file…] (no

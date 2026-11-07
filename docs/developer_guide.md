@@ -803,7 +803,9 @@ why keys, menus and help never disagree.
 4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background
-   news reaches the view and the quickfix resolve lists without a timer of their own.
+   news reaches the view and the quickfix resolve lists without a timer of their own. `:P4 refresh`
+   emits one (`source = 'refresh'`) after re-checking every open buffer (`buffer.refresh_all`,
+   one batched fstat) and the opened files (`poll.refresh`).
 
 ### 18.8 You step through a time-lapse
 

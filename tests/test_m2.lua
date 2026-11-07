@@ -2232,6 +2232,16 @@ T['client view']['P4V keys are mapped; keys.p4v = false removes them'] = functio
   H.eq(child.lua_get([[vim.fn.maparg('d', 'n', false, true).buffer]]), 1)
 end
 
+T['client view'][':P4 refresh re-checks open buffers and says it ran'] = function()
+  -- Opened outside Neovim; with polling off nothing else would notice.
+  server:p4({ 'edit', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  vim.uv.sleep(200)
+  H.eq(child.lua_get([[require('perforated.buffer').get().status]]), 'clean')
+  child.cmd('P4 refresh')
+  wait([[require('perforated.buffer').get().status == 'opened']])
+  H.eq(H.wait_message(child, 'refreshed (1 buffer)', 5000), true)
+end
+
 T['change command'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

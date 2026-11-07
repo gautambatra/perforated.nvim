@@ -58,18 +58,19 @@ local batches = {} ---@type table<string, { paths: table<string, true>, timer: b
 M.BATCH_MS = 30
 
 ---@param ws perforated.Workspace
-local function flush(ws)
+---@param cb fun(ok: boolean)?  after the results are applied (false: p4 couldn't answer)
+local function flush(ws, cb)
   local b = batches[ws.key]
   batches[ws.key] = nil
   if not b then
-    return
+    return cb and cb(true)
   end
   local paths = vim.tbl_keys(b.paths)
   table.sort(paths)
   dbg.debug('buffer', 'fstat batch of %d path(s) for %s', #paths, ws.key)
   p4.fstat(ws, paths, { priority = 2 }, function(r)
     if not r.res.ok and next(r.files) == nil and next(r.missing) == nil then
-      return -- connection trouble; conn state/statusline already reflect it
+      return cb and cb(false) -- connection trouble; conn state/statusline already reflect it
     end
     for i, path in ipairs(paths) do
       local k = p4.key(ws, path)
@@ -90,6 +91,9 @@ local function flush(ws)
       else
         ws.fstat[k] = nil
       end
+    end
+    if cb then
+      cb(true)
     end
   end)
 end
@@ -426,6 +430,22 @@ function M.retry_pending(ws)
       M.refresh(buf)
     end
   end
+end
+
+--- Re-check every buffer of a workspace now, in one batch (`:P4 refresh`).
+---@param ws perforated.Workspace
+---@param cb fun(ok: boolean, n: integer)  n = buffers checked
+function M.refresh_all(ws, cb)
+  local n = 0
+  for buf, st in pairs(states) do
+    if st.ws == ws then
+      M.refresh(buf)
+      n = n + 1
+    end
+  end
+  flush(ws, function(ok)
+    cb(ok, n)
+  end)
 end
 
 --- All states (for workspace-wide operations such as polling).

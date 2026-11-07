@@ -736,7 +736,7 @@ M.commands = {
 
   refresh = {
     scope = 'connection',
-    desc = 'Refresh cached state (! also forgets workspace detection and settings)',
+    desc = 'Refresh cached state and re-check open buffers (! also forgets workspace detection and settings)',
     run = function(ctx, o)
       ---@cast ctx perforated.Workspace
       if o.bang then
@@ -746,18 +746,40 @@ M.commands = {
       ctx.fstat = {}
       ctx.clmemo = {}
       ctx.info, ctx.settings = nil, nil
+      -- Open buffers and opened files are asked again (nothing else would with polling off).
+      local function recheck()
+        local todo, ok_all, n = 2, true, 0
+        local function done()
+          todo = todo - 1
+          if todo > 0 then
+            return
+          end
+          if not ok_all then
+            return notify('refresh: p4 did not answer', vim.log.levels.WARN)
+          end
+          notify(('refreshed (%d buffer%s)'):format(n, n == 1 and '' or 's'))
+          require('perforated.core.events').emit('Changed', { ws = ctx.key, source = 'refresh' })
+        end
+        require('perforated.buffer').refresh_all(ctx, function(ok, count)
+          ok_all, n = ok_all and ok, count
+          done()
+        end)
+        require('perforated.poll').refresh(ctx, {}, done)
+      end
       local function reinfo()
         ctx:ensure_info(function(_, err)
           if err then
-            notify('refresh: ' .. err, vim.log.levels.WARN)
+            return notify('refresh: ' .. err, vim.log.levels.WARN)
           end
+          recheck()
         end)
       end
       if ctx.conn.state == 'offline' then
         ctx.conn:probe(function(ok)
-          if ok then
-            reinfo()
+          if not ok then
+            return notify('refresh: still offline', vim.log.levels.WARN)
           end
+          reinfo()
         end)
       else
         reinfo()
