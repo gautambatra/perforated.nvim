@@ -722,7 +722,10 @@ end
 ---@param opts { rev: integer?, line: integer? }?  start revision (default: newest) and line
 function M.open(ws, path, opts)
   opts = opts or {}
-  path = path:gsub('[#@].*$', '')
+  -- A local name can hold @ or # (`icon@2x.png`): only cut a revision it doesn't name.
+  if path:match('^//') or not vim.uv.fs_stat(path) then
+    path = path:gsub('[#@].*$', '')
+  end
   require('perforated.hl').setup()
   vim.cmd('tabnew')
   local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()

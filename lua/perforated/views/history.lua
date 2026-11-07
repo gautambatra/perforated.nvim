@@ -380,7 +380,10 @@ end
 ---@param opts { presenter: string?, local_path: string? }?
 function M.open(ws, path, opts)
   opts = opts or {}
-  path = path:gsub('[#@].*$', '')
+  -- A local name can hold @ or # (`icon@2x.png`): only cut a revision it doesn't name.
+  if path:match('^//') or not vim.uv.fs_stat(path) then
+    path = path:gsub('[#@].*$', '')
+  end
   local is_dir = path:match('/%.%.%.$') or path:match('/$') or vim.fn.isdirectory(path) == 1
   if is_dir then
     local dir = path:gsub('/%.%.%.$', ''):gsub('/$', '')

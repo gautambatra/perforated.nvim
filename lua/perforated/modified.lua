@@ -23,7 +23,8 @@ local ALWAYS = {
 ---@param paths string[]?  limit to these files (nil = every opened file)
 ---@param cb fun(set: table<string, true>?)  nil when the query failed
 function M.query(ws, paths, cb)
-  local opts = paths and { globals = { '-x', '-' }, stdin = paths, priority = 2 }
+  -- Escaped, or p4 reads `icon@2x.png` as a revision and the whole batch fails.
+  local opts = paths and { globals = { '-x', '-' }, stdin = p4.escape_all(paths), priority = 2 }
     or { priority = 2 }
   if paths and #paths == 0 then
     return vim.schedule(function()

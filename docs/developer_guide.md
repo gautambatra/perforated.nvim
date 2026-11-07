@@ -976,7 +976,8 @@ case-insensitive servers). `fstat(ws, paths)` batches local paths through `-x -`
 records by key plus "missing" reasons (not in view / no such file) per path.
 `fstat_opened(ws)` is `fstat -Ro //client/...`. Local paths passed as p4 file arguments are
 escaped with `escape` (`@ # % *` → `%40 %23 %25 %2A`; `add` takes names literally, with `-f`
-when they contain wildcards). `base_spec(rec)` decides the diff base (`#have`,
+when they contain wildcards). A `#rev`/`@CL` suffix is cut only from depot paths, or from a
+local name that isn't an existing file, so `icon@2x.png` keeps its name. `base_spec(rec)` decides the diff base (`#have`,
 or the moved-from file). `print(ws, spec)` returns lines, cached when immutable;
 `print_many` prints several specs in one call. `pending_changes`, `new_change`, `edit`, `add`,
 `revert` (all through `-x -`) and `latest_changes` (the poll probe).

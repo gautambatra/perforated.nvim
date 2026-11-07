@@ -76,7 +76,9 @@ local deleted = require('perforated.history').deleted
 ---@param path string  depot or local path (no revision)
 ---@param cb fun(tl: perforated.Timelapse?, err: string?)
 function M.load(ws, path, cb)
-  ws:run({ 'filelog', '-l', path }, {}, function(res)
+  -- A local name is escaped (`@` and `#` are literal there); a depot path already is.
+  local arg = path:match('^//') and path or require('perforated.p4').escape(path)
+  ws:run({ 'filelog', '-l', arg }, {}, function(res)
     local rec = res.records[1]
     if not rec or not rec.depotFile then
       return cb(nil, res.errors[1] or ('no history for ' .. path))

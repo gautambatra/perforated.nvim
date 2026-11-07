@@ -126,7 +126,8 @@ function M.check(ws, list, cb)
   local paths = vim.tbl_keys(sr_paths)
   if #paths > 0 then
     todo = todo + 1
-    ws:run({ 'diff', '-sr' }, { globals = { '-x', '-' }, stdin = paths }, function(res)
+    local opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
+    ws:run({ 'diff', '-sr' }, opts, function(res)
       local same = {}
       for _, rec in ipairs(res.records) do
         if rec.clientFile then

@@ -64,6 +64,9 @@ function M.filelog(ws, path, opts, cb)
     args[#args + 1] = '-i'
   end
   vim.list_extend(args, { '-m', tostring(opts.max or 100) })
+  if not path:match('^//') then
+    path = require('perforated.p4').escape(path) -- a local name: `@` and `#` are literal
+  end
   args[#args + 1] = opts.before and ('%s#1,#%d'):format(path, opts.before) or path
   ws:run(args, {}, function(res)
     if not res.ok and #res.records == 0 then

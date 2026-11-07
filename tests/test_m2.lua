@@ -2065,6 +2065,98 @@ T['client view']['reconcile deletes names p4 reads as revisions; a refused file 
   H.eq(open['//depot/rec/gone.txt'], nil)
 end
 
+-- Names p4 would read as revisions or wildcards, opened for edit; `odd/changed@2x.txt` edited.
+local ODD = { 'icon@2x.png', 'a#b.txt', '100%.txt', 'star*.txt', 'changed@2x.txt', 'plain.txt' }
+
+local function open_odd()
+  local files = {}
+  for _, n in ipairs(ODD) do
+    files[root .. '/odd/' .. n] = 'x\n'
+    H.write(root .. '/odd/' .. n, 'x\n')
+  end
+  local paths = vim.tbl_keys(files)
+  server:p4(vim.list_extend({ 'add', '-f' }, paths), { client = 'alice_ws', cwd = root })
+  server:p4({ 'submit', '-d', 'odd names', '//depot/odd/...' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'edit', '//depot/odd/...' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/odd/changed@2x.txt', 'y\n')
+end
+
+T['client view']['changed markers: one batch with names p4 reads as revisions'] = function()
+  open_odd()
+  child.lua(
+    [=[
+    local root, names = ...
+    local p4 = require('perforated.p4')
+    local ws = require('perforated').workspace(vim.fn.bufnr(root .. '/d.txt'))
+    local paths = vim.tbl_map(function(n) return root .. '/odd/' .. n end, names)
+    require('perforated.modified').query(ws, paths, function(set)
+      local out = {}
+      for i, p in ipairs(paths) do
+        out[names[i]] = set and set[p4.key(ws, p)] or false
+      end
+      _G.marks = set and out or 'failed'
+    end)
+  ]=],
+    { root, ODD }
+  )
+  wait('_G.marks ~= nil')
+  H.eq(child.lua_get('_G.marks'), {
+    ['icon@2x.png'] = false,
+    ['a#b.txt'] = false,
+    ['100%.txt'] = false,
+    ['star*.txt'] = false,
+    ['changed@2x.txt'] = true,
+    ['plain.txt'] = false,
+  })
+end
+
+T['client view']['identical-files check: saved files with odd names against their base'] = function()
+  open_odd()
+  child.lua(
+    [=[
+    local root, names = ...
+    local p4 = require('perforated.p4')
+    local ws = require('perforated').workspace(vim.fn.bufnr(root .. '/d.txt'))
+    local paths = vim.tbl_map(function(n) return root .. '/odd/' .. n end, names)
+    p4.fstat(ws, paths, {}, function(r)
+      local list = {}
+      for _, path in ipairs(paths) do
+        local rec = assert(r.files[p4.key(ws, path)], path)
+        ws.fstat[p4.key(ws, path)] = rec
+        list[#list + 1] = { left = { spec = p4.base_spec(rec) }, right = { path = path } }
+      end
+      require('perforated.same').check(ws, list, function(same)
+        local out = {}
+        for i, n in ipairs(names) do out[n] = same[i] end
+        _G.same = out
+      end)
+    end)
+  ]=],
+    { root, ODD }
+  )
+  wait('_G.same ~= nil')
+  H.eq(child.lua_get('_G.same'), {
+    ['icon@2x.png'] = true,
+    ['a#b.txt'] = true,
+    ['100%.txt'] = true,
+    ['star*.txt'] = true,
+    ['changed@2x.txt'] = false,
+    ['plain.txt'] = true,
+  })
+end
+
+T['client view'][':P4 filelog and :P4 timelapse take a local name with @ in it'] = function()
+  open_odd()
+  local file = root .. '/odd/icon@2x.png'
+  child.cmd('P4 filelog ' .. file)
+  wait(('table.concat(%s or {}, "\\n"):find("odd names", 1, true) ~= nil'):format(FLOAT_LINES))
+  child.type_keys('q')
+  child.cmd('P4 timelapse ' .. file)
+  local TL = [[require('perforated.views.timelapse')._last]]
+  wait(TL .. ' ~= nil and ' .. TL .. '.tl ~= nil')
+  H.eq(child.lua_get(TL .. '.tl.depotFile'), '//depot/odd/icon%402x.png')
+end
+
 T['client view']['multi-key actions (gS) can be chosen from the action menu'] = function()
   open_view()
   child.lua(
