@@ -10,7 +10,7 @@ if vim.g.loaded_perforated then
 end
 vim.g.loaded_perforated = true
 
-if vim.fn.has('nvim-0.11') == 0 then
+if vim.fn.has('nvim-0.11.3') == 0 then
   return
 end
 

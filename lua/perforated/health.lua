@@ -14,10 +14,10 @@ end
 
 local function check_nvim()
   h.start('Neovim')
-  if vim.fn.has('nvim-0.11') == 1 then
+  if vim.fn.has('nvim-0.11.3') == 1 then
     h.ok('Neovim ' .. tostring(vim.version()))
   else
-    h.error('Neovim 0.11+ is required')
+    h.error('Neovim 0.11.3+ is required')
   end
 end
 

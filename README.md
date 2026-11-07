@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/gautambatra/perforated.nvim/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Neovim 0.11+" src="https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white">
+  <img alt="Neovim 0.11.3+" src="https://img.shields.io/badge/Neovim-0.11.3%2B-57A143?logo=neovim&logoColor=white">
   <img alt="Pure Lua, zero dependencies" src="https://img.shields.io/badge/dependencies-none-blue">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
@@ -41,7 +41,7 @@ setting.
 
 ## Quick start
 
-**1. Install** (Neovim 0.11+, `p4` on your `$PATH`; Linux, macOS or WSL). With
+**1. Install** (Neovim 0.11.3+, `p4` on your `$PATH`; Linux, macOS or WSL). With
 [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua

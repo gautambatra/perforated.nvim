@@ -25,15 +25,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        nvim: [v0.11.4, v0.12.5, nightly]
+        nvim: [v0.11.3, v0.12.6, nightly]
         case: [default]
         include:
           # macOS-like server on Linux: case-insensitive p4d + mixed-case paths.
           - os: ubuntu-latest
-            nvim: v0.12.5
+            nvim: v0.12.6
             case: insensitive
     name: test (${{ matrix.os }}, ${{ matrix.nvim }}${{ matrix.case == 'insensitive' && ', case-insensitive' || '' }})
     runs-on: ${{ matrix.os }}
+    # An upstream break in nightly shows as a warning: it doesn't fail the run.
+    continue-on-error: ${{ matrix.nvim == 'nightly' }}
     env:
       PERFORATED_P4D_CASE: ${{ matrix.case }}
     steps:

@@ -10,7 +10,9 @@ This guide has two parts:
   debugging tools.
 
 It assumes you can read Lua and know roughly what Perforce is (a [glossary](#29-perforce-glossary)
-is at the end). Neovim 0.11 is the minimum version; features from 0.12 are used when present.
+is at the end). Neovim 0.11.3 is the minimum version (`vim.system` ignores `env` with
+`clear_env` before that, so p4 would start with an empty environment); features from 0.12 are
+used when present.
 
 ---
 
@@ -118,7 +120,7 @@ files may already be open. `plugin/perforated.lua` handles that: if `vim.v.vim_d
 1, it runs the handler for every loaded buffer.
 
 **Guard against double loading** with a global flag (`vim.g.loaded_perforated`), and check the
-Neovim version up front (`vim.fn.has('nvim-0.11')`), returning quietly on older versions.
+Neovim version up front (`vim.fn.has('nvim-0.11.3')`), returning quietly on older versions.
 
 ## 3. The Lua API in one tour
 
@@ -1950,9 +1952,10 @@ autoplay.
 `.github/workflows/ci.yml` runs on every push to `main` and on pull requests:
 
 - **lint** — stylua `--check` and selene.
-- **test** — Ubuntu and macOS × Neovim 0.11.4, 0.12.5 and nightly, plus a Linux leg with a
+- **test** — Ubuntu and macOS × Neovim 0.11.3, 0.12.6 and nightly, plus a Linux leg with a
   case-insensitive server and a mixed-case temp path. Each leg runs `make deps` (cached),
-  `make test`, then `make bench`.
+  `make test`, then `make bench`. The nightly legs can fail without failing the run, so an
+  upstream break shows as a warning.
 
 A green `main` matters: the plugin is installed straight from `main` by lazy.nvim.
 
