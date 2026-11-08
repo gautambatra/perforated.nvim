@@ -238,6 +238,7 @@ on_qf_buf = function(buf)
     require('perforated.checkout').pick_change(ws, function(cl)
       if cl then
         require('perforated.changelists').reopen(ws, { path }, cl, function()
+          require('perforated.checkout').changed(ws)
           refresh()
         end)
       end

@@ -805,7 +805,8 @@ why keys, menus and help never disagree.
    revision, action, changelist, unresolved) differs from its previous refresh, so background
    news reaches the view and the quickfix resolve lists without a timer of their own. `:P4 refresh`
    emits one (`source = 'refresh'`) after re-checking every open buffer (`buffer.refresh_all`,
-   one batched fstat) and the opened files (`poll.refresh`).
+   one batched fstat) and the opened files (`poll.refresh`). Other events also make `poll.lua` run one
+   `poll.refresh` once they settle, for the counts and statuslines (see `poll.lua` below).
 
 ### 18.8 You step through a time-lapse
 
@@ -1042,7 +1043,12 @@ Stale/unresolved detection ([§18.6](#186-stale-files)). It tracks focus itself
 (`M.focused`, from `FocusLost`/`FocusGained`), so polling pauses in an unfocused Neovim from
 the start and the toast module isn't loaded on the activation path. `refresh(ws)` also keeps the fstat
 cache honest (drops entries of files no longer opened) and pushes fresh records into loaded
-buffers. The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
+buffers; a buffer whose file is no longer opened gets its own fstat. It also follows the
+plugin's own changes: one `User PerforatedChanged` listener waits `FOLLOW_MS` (300 ms) for a
+burst to settle, then runs one `refresh(ws)`, so counts and statuslines don't wait for the next
+poll (which never comes with `poll.interval = 0`). It ignores `poll` and `refresh` events, skips
+when a refresh already started after the newest event (a sync runs its own), and while one
+runs, later events only owe one more. The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
 test finding).
 
 #### `modified.lua`

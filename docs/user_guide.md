@@ -574,6 +574,10 @@ Only when one of the answers is yes does the full status query run and the clien
 refresh. Re-shelving new versions into an existing shelf isn't visible this way; `<F5>` shows
 it.
 
+Changes you make from the plugin don't wait for that check: after a check-out, a revert or a
+move to another changelist, the statusline and the opened-file counts update within a moment,
+even with `poll.interval = 0`.
+
 **`:P4 refresh`** asks everything again at once: the status of every open buffer, your opened
 files, and the server details. It says `refreshed (N buffers)` when done, or warns if p4
 didn't answer. Use it with `poll.interval = 0`, or after changing files outside Neovim.

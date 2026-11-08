@@ -2242,6 +2242,47 @@ T['client view'][':P4 refresh re-checks open buffers and says it ran'] = functio
   H.eq(H.wait_message(child, 'refreshed (1 buffer)', 5000), true)
 end
 
+-- With polling off, nothing but the plugin's own Changed events can bring buffers up to date.
+local BUF_REC = [[((require('perforated.buffer').get(vim.fn.bufnr(%q)) or {}).rec or {})]]
+
+T['client view']['gm: an open buffer of the moved file shows its new changelist'] = function()
+  child.cmd('edit ' .. root .. '/b.txt')
+  wait(BUF_REC:format(root .. '/b.txt') .. ".change == 'default'")
+  open_view()
+  child.lua([[vim.ui.select = function(items, _, cb)
+    for _, it in ipairs(items) do if it.change == '2' then return cb(it) end end
+  end]])
+  goto_line('b.txt')
+  child.type_keys('gm')
+  wait(BUF_REC:format(root .. '/b.txt') .. ".change == '2'", 5000)
+  H.eq(opened()['//depot/b.txt'], '2')
+end
+
+T['client view']['the opened-file count follows edits made from the plugin'] = function()
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  wait([[require('perforated').workspace().opened_count == 4]], 5000) -- a, b, c and d
+end
+
+T['client view']['a full refresh re-checks a buffer whose file is no longer opened'] = function()
+  child.cmd('edit ' .. root .. '/b.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  server:p4({ 'revert', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  child.lua([[require('perforated.poll').refresh(require('perforated').workspace())]])
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']], 5000)
+end
+
+T['client view']['a burst of Changed events runs one fstat -Ro'] = function()
+  H.wait_idle(child)
+  local FULL = [[#vim.tbl_filter(function(e) return vim.tbl_contains(e.argv, '-Ro') end,
+    require('perforated.core.log').entries())]]
+  local before = child.lua_get(FULL)
+  child.lua([[local ws = require('perforated').workspace()
+    for _ = 1, 5 do require('perforated.checkout').changed(ws) end]])
+  wait(FULL .. ' == ' .. (before + 1), 5000)
+  H.eq(H.wait(child, FULL .. ' > ' .. (before + 1), 1000), false)
+end
+
 T['change command'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

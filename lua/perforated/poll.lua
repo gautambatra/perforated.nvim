@@ -22,6 +22,12 @@ local timer ---@type uv.uv_timer_t?
 local started = {} ---@type table<string, boolean>
 local last_focus_probe = 0
 local last_enter = {} ---@type table<integer, integer>
+-- Following the plugin's own changes, per workspace key: the settle timer, whether a refresh
+-- is running or owed, when the newest event came, and when the last refresh started.
+local follow = {} ---@type table<string, { timer: uv.uv_timer_t, running: boolean, again: boolean, event: integer, started: integer }>
+
+--- How long a burst of `Changed` events may last before the opened files are asked again.
+M.FOLLOW_MS = 300
 
 local function cfg()
   return require('perforated.config').get().poll
@@ -127,6 +133,10 @@ end
 ---@param cb fun()?
 function M.refresh(ws, opts, cb)
   opts = opts or {}
+  local f = follow[ws.key]
+  if f then
+    f.started = vim.uv.hrtime() -- answers every event before this moment
+  end
   p4.fstat_opened(ws, { priority = 3 }, function(recs)
     if not recs then
       return cb and cb()
@@ -182,6 +192,8 @@ function M.refresh(ws, opts, cb)
           st.rec = r
           require('perforated.status').update(buf)
         end
+      elseif st.ws == ws and st.rec and st.rec.action then
+        require('perforated.buffer').refresh(buf) -- no longer opened (reverted, submitted)
       end
     end
     require('perforated.status').update_ws(ws)
@@ -331,6 +343,56 @@ local function ensure_timer()
   end)
 end
 
+--- After the plugin changed something (`User PerforatedChanged`), one `fstat -Ro` brings the
+--- opened-file counts, buffers and statuslines up to date, once the burst has settled. Skipped
+--- when a refresh already started after the newest event (a sync runs its own).
+---@param ws perforated.Workspace
+local function follow_up(ws)
+  local f = follow[ws.key]
+  if f.running then
+    f.again = true
+    return
+  end
+  if f.started >= f.event then
+    return
+  end
+  f.running = true
+  M.refresh(ws, {}, function()
+    f.running = false
+    if f.again then
+      f.again = false
+      follow_up(ws)
+    end
+  end)
+end
+
+---@param data { ws: string?, source: string? }?
+local function on_changed(data)
+  data = data or {}
+  -- `poll` and `refresh` events come from a full refresh that just ran.
+  if not data.ws or data.source == 'poll' or data.source == 'refresh' or not started[data.ws] then
+    return
+  end
+  local ws = require('perforated.core.workspace').get(data.ws)
+  if not ws then
+    return
+  end
+  local f = follow[ws.key]
+  if not f then
+    f = { timer = vim.uv.new_timer(), running = false, again = false, event = 0, started = 0 }
+    follow[ws.key] = f
+  end
+  f.event = vim.uv.hrtime()
+  f.timer:stop()
+  f.timer:start(
+    M.FOLLOW_MS,
+    0,
+    vim.schedule_wrap(function()
+      follow_up(ws)
+    end)
+  )
+end
+
 --- Whether Neovim has focus: polling runs only while it does. Tracked here from the first
 --- workspace on (the toast module tracks it only once a toast has been shown).
 M.focused = true
@@ -374,6 +436,13 @@ local function ensure_autocmds()
       end
     end,
   })
+  vim.api.nvim_create_autocmd('User', {
+    group = group,
+    pattern = 'PerforatedChanged',
+    callback = function(ev)
+      on_changed(ev.data)
+    end,
+  })
   vim.api.nvim_create_autocmd('BufWipeout', {
     group = group,
     callback = function(ev)
@@ -408,7 +477,11 @@ function M._reset()
     timer:close()
     timer = nil
   end
-  started, last_enter, last_focus_probe = {}, {}, 0
+  for _, f in pairs(follow) do
+    f.timer:stop()
+    f.timer:close()
+  end
+  started, last_enter, last_focus_probe, follow = {}, {}, 0, {}
 end
 
 return M

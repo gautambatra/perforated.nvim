@@ -1432,6 +1432,7 @@ local function actions(view)
               )
             end
             view.tree.marks = {}
+            require('perforated.checkout').changed(ws)
             M.refresh(view)
           end)
         end)
