@@ -38,7 +38,7 @@ flat alias, `:P4<sub>` (e.g. `:P4edit`), defined the first time you use it. A
 bang goes on the subcommand: `:P4 revert!`.
 
 :P4 add                                                              *:P4-add*
-    Open files for add: :P4 add [-c CL] [file…]
+    Open files for add: :P4 add [-c CL] [file|dir…]
 
 :P4 annotate                                                    *:P4-annotate*
     Annotate the current file (or a depot revision): :P4 annotate
@@ -63,7 +63,7 @@ bang goes on the subcommand: `:P4 revert!`.
     args: status)
 
 :P4 delete                                                        *:P4-delete*
-    Open files for delete (with a confirmation): :P4 delete [file…]
+    Open files for delete (with a confirmation): :P4 delete [file|dir…]
 
 :P4 describe                                                    *:P4-describe*
     Describe a changelist: :P4 describe [N|default] (no N = the current file's
@@ -77,7 +77,7 @@ bang goes on the subcommand: `:P4 revert!`.
     Dismiss visible messages
 
 :P4 edit                                                            *:P4-edit*
-    Open files for edit: :P4 edit [-c CL] [file…] (default: sticky CL or
+    Open files for edit: :P4 edit [-c CL] [file|dir…] (default: sticky CL or
     default)
 
 :P4 filelog                                                      *:P4-filelog*
@@ -128,20 +128,20 @@ bang goes on the subcommand: `:P4 revert!`.
     detection and settings)
 
 :P4 reopen                                                        *:P4-reopen*
-    Move opened files to another changelist: :P4 reopen [-c CL] [file…] (no
-    -c: pick one)
+    Move opened files to another changelist: :P4 reopen [-c CL] [file|dir…]
+    (no -c: pick one)
 
 :P4 resolve                                                      *:P4-resolve*
-    Resolve: :P4 resolve [file…] (-am first, then $P4MERGE for conflicts; no
-    args: all files)
+    Resolve: :P4 resolve [file|dir…] (-am first, then $P4MERGE for
+    conflicts; no args: all files)
 
 :P4 revert                                                        *:P4-revert*
-    Revert files: :P4 revert[!] [-a] [file…] (! = no confirmation, -a = only
-    unchanged)
+    Revert files: :P4 revert[!] [-a] [file|dir…] (! = no confirmation, -a =
+    only unchanged)
 
 :P4 shelve                                                        *:P4-shelve*
-    Shelve: :P4 shelve [-c CL] [file…] (default: the current file's CL, all
-    its files; -d deletes the shelf)
+    Shelve: :P4 shelve [-c CL] [file|dir…] (default: the current file's CL,
+    all its files; -d deletes the shelf)
 
 :P4 status                                                        *:P4-status*
     Stale and unresolved opened files in the quickfix list

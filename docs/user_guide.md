@@ -77,6 +77,19 @@ reopen it. `:w other.c` offers to add `other.c`, the file you wrote, not the buf
   text by default. `<Esc>` or moving the cursor closes it.
 - **Reset** puts the hunk back to the have revision. It's undoable.
 
+### Directories and wildcards
+
+The file commands (`:P4 edit`, `add`, `revert`, `reopen`, `shelve`, `resolve`, `delete`)
+take files, directories and p4 wildcards.
+
+- A wildcard you type runs as given: `:P4 edit src/...` checks out everything under `src`.
+- A directory asks first, because it can cover thousands of files. `:P4 edit src` offers
+  **All under it** (runs on `src/...`), **Directory as given** (passes `src` to p4 as typed,
+  which p4 answers with "not on client"), or **Cancel**, the default.
+- `:P4 add src` with **All under it** runs `p4 reconcile -a src/...`: it opens for add only
+  the files under `src` that aren't in the depot yet (p4 add takes no wildcards).
+- `:P4 revert! src` skips the "local changes will be lost" question, not the directory one.
+
 ### Revert
 
 - `:P4 revert` asks for confirmation; `:P4 revert!` doesn't.

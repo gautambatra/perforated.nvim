@@ -1698,6 +1698,12 @@ on (`res.errors[1]`, which for a refused call is the connection's own message) a
 it: the list builders in `lists.lua` call `cb(items, err)`, and `qf.set{ err = … }` (or a
 producer's `err`) warns and keeps the list on screen.
 
+**Never widen a path without asking.** A wildcard the user typed is run as given; when the
+plugin would turn a directory into `<dir>/...` it asks first (`widen_dirs` in
+`commands.lua`), offering the path as given too. Code that takes paths must accept
+`<dir>/...` entries: `checkout.bufs_for` matches the buffers under one, and
+`checkout.changed` turns one into a full refresh.
+
 **Async safety.** Callbacks check buffer/window validity; long operations are jobs (stoppable);
 no synchronous waits except one bounded `vim.wait` (a write waits for an in-flight `p4 edit`).
 

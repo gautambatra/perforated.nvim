@@ -828,6 +828,129 @@ T['ops']['offline: the opened-files diff tab and picker say why, nothing opens']
   H.eq(child.lua_get([[vim.bo.filetype]]) ~= 'TelescopePrompt', true)
 end
 
+-- A directory argument means everything under it only after asking (`<dir>/...` is added
+-- by the plugin); a wildcard the user typed runs as given.
+T['dirs'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      if not P.available() then
+        MiniTest.skip('p4/p4d not available (make deps)')
+      end
+      setup()
+      server:submit_files('alice_ws', root, { ['src/d.txt'] = 'dee\n' }, 'more')
+      edit('src/c.txt')
+      wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+    end,
+    post_case = function()
+      child.stop()
+    end,
+  },
+})
+
+--- Answer every confirmation with `choice`, recording `{ msg, choices }` in `_G.asked`.
+local function answer(choice)
+  child.lua(([[_G.asked = {}
+    require('perforated.ui.prompt').confirm = function(msg, choices)
+      table.insert(_G.asked, { msg, choices }); return %d end]]):format(choice))
+end
+
+local function asked()
+  return child.lua_get('_G.asked')
+end
+
+T['dirs'][':P4 edit <dir> asks, then checks out everything under it'] = function()
+  answer(1)
+  H.record_busy(child)
+  child.cmd('P4 edit ' .. root .. '/src')
+  local deadline = vim.wait(10000, function()
+    local o = opened()
+    return o['//depot/src/c.txt'] ~= nil and o['//depot/src/d.txt'] ~= nil
+  end, 50)
+  H.eq(deadline, true)
+  H.eq(opened()['//depot/a.txt'], nil)
+  local q = asked()
+  H.eq(#q, 1)
+  H.eq(q[1][1]:find('/src/ is a directory', 1, true) ~= nil, true)
+  H.eq(q[1][1]:find('/src/...)?', 1, true) ~= nil, true)
+  H.eq(q[1][2], '&All under it\n&Directory as given\n&Cancel')
+  H.eq(child.lua_get('_G.busy[1].msg'), 'Checking out src/...…')
+  -- The open buffer under it follows: checked out, writable.
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(child.bo.readonly, false)
+end
+
+T['dirs']['cancel runs nothing on the server; "directory as given" passes it through'] = function()
+  for _, choice in ipairs({ 3, 0 }) do
+    answer(choice)
+    child.lua([[require('perforated.core.log').clear()]])
+    child.cmd('P4 edit ' .. root .. '/src')
+    H.wait_idle(child)
+    H.eq(#asked(), 1)
+    H.eq(vim.tbl_contains(H.p4_subcommands(child), 'edit'), false)
+  end
+  answer(2)
+  child.lua([[require('perforated.core.log').clear()]])
+  child.cmd('P4 edit ' .. root .. '/src')
+  H.wait_idle(child)
+  H.eq(vim.tbl_contains(H.p4_subcommands(child), 'edit'), true)
+  -- p4 got the bare directory: it isn't a file, so nothing is opened.
+  H.eq(H.wait_message(child, '/src - file(s) not on client'), true)
+  H.eq(opened(), {})
+end
+
+T['dirs']['a typed wildcard runs as given, without asking'] = function()
+  answer(1)
+  child.cmd('P4 edit ' .. root .. '/src/...')
+  H.eq(
+    vim.wait(10000, function()
+      return opened()['//depot/src/d.txt'] ~= nil
+    end, 50),
+    true
+  )
+  H.eq(asked(), {})
+end
+
+T['dirs'][':P4 revert! <dir> still asks about the directory'] = function()
+  server:p4({ 'edit', root .. '/src/...' }, { client = 'alice_ws', cwd = root })
+  answer(1)
+  child.cmd('P4 revert! ' .. root .. '/src')
+  H.eq(
+    vim.wait(10000, function()
+      return next(opened()) == nil
+    end, 50),
+    true
+  )
+  local q = asked()
+  H.eq(#q, 1)
+  H.eq(q[1][1]:find('Revert everything opened under it') ~= nil, true)
+end
+
+T['dirs'][':P4 add <dir> opens only the new files under it'] = function()
+  H.write(root .. '/src/new.txt', 'new\n')
+  answer(1)
+  child.cmd('P4 add ' .. root .. '/src')
+  H.eq(
+    vim.wait(10000, function()
+      return opened()['//depot/src/new.txt'] ~= nil
+    end, 50),
+    true
+  )
+  H.eq(opened(), { ['//depot/src/new.txt'] = 'default' })
+  H.eq(asked()[1][1]:find('Add every new file under it') ~= nil, true)
+end
+
+T['dirs']['a file argument is not asked about'] = function()
+  answer(3)
+  child.cmd('P4 edit ' .. root .. '/b.txt')
+  H.eq(
+    vim.wait(10000, function()
+      return opened()['//depot/b.txt'] ~= nil
+    end, 50),
+    true
+  )
+  H.eq(asked(), {})
+end
+
 T['modes'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

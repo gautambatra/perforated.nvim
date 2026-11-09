@@ -78,17 +78,34 @@ local function allowed(path)
   return false
 end
 
+--- The directory a `<dir>/...` path covers (nil for any other path).
+---@param path string
+---@return string?
+local function tree(path)
+  return path:sub(-4) == '/...' and path:sub(1, -5) or nil -- (a pattern is slow on 100k paths)
+end
+
+--- Buffers of the given paths; a `<dir>/...` path takes every buffer under the directory.
 ---@param ws perforated.Workspace
 ---@param paths string[]
 ---@return integer[]
 local function bufs_for(ws, paths)
-  local want = {}
+  local want, dirs = {}, {}
   for _, p in ipairs(paths) do
-    want[p4.key(ws, p)] = true
+    local dir = tree(p)
+    if dir then
+      dirs[#dirs + 1] = p4.key(ws, dir) .. '/'
+    else
+      want[p4.key(ws, p)] = true
+    end
   end
   local out = {}
   for b, st in pairs(require('perforated.buffer').all()) do
-    if st.ws == ws and want[st.key] then
+    local hit = st.ws == ws and want[st.key]
+    for _, d in ipairs(st.ws == ws and not hit and dirs or {}) do
+      hit = hit or st.key:sub(1, #d) == d
+    end
+    if hit then
       out[#out + 1] = b
     end
   end
@@ -110,7 +127,7 @@ local function changed(ws, what)
     data.changes = what.changes
     local files = what.files and #what.files <= M.CHANGED_FILES_MAX and {} or nil
     for _, f in ipairs(what.files or {}) do
-      local local_path = f
+      local local_path = not f:find('...', 1, true) and f or nil -- a wildcard: refresh all
       if f:match('^//') then
         local rec = (ws.opened or {})[f]
         local_path = rec and rec.clientFile
@@ -208,7 +225,9 @@ end
 ---@param paths string[]
 ---@return string
 local function busy(fmt_one, fmt_many, paths)
-  return #paths == 1 and fmt_one:format(vim.fn.fnamemodify(paths[1], ':t'))
+  local dir = #paths == 1 and tree(paths[1])
+  return dir and fmt_one:format(vim.fn.fnamemodify(dir, ':t') .. '/...')
+    or #paths == 1 and fmt_one:format(vim.fn.fnamemodify(paths[1], ':t'))
     or fmt_many:format(#paths)
 end
 
@@ -222,7 +241,14 @@ function M.edit(ws, paths, cl, cb)
   for _, b in ipairs(bufs) do
     state(b).pending = true
   end
-  local restore = optimistic_writable(paths)
+  local concrete = vim.tbl_filter(function(p)
+    return not tree(p)
+  end, paths)
+  for _, b in ipairs(bufs) do
+    local st = require('perforated.buffer').get(b)
+    concrete[#concrete + 1] = st and st.path or nil
+  end
+  local restore = optimistic_writable(concrete)
   p4.edit(ws, paths, cl, function(res)
     for _, b in ipairs(bufs) do
       state(b).pending = false
@@ -239,7 +265,7 @@ function M.edit(ws, paths, cl, cb)
         end
       end
       dbg.warn('checkout', 'edit failed; restoring file modes for unopened path(s)')
-      for _, p in ipairs(paths) do
+      for _, p in ipairs(concrete) do
         if opened[vim.fs.normalize(p)] then
           keep[p] = true
         end
@@ -269,13 +295,17 @@ function M.edit(ws, paths, cl, cb)
   end, busy('Checking out %s…', 'Checking out %d files…', paths))
 end
 
+--- p4 add files into a changelist. `reconcile`: `paths` are `<dir>/...` paths, added by
+--- `reconcile -a` (p4 add takes no wildcards): just the files under them not in the depot yet.
 ---@param ws perforated.Workspace
 ---@param paths string[]
 ---@param cl string?
 ---@param cb fun(ok: boolean, res: perforated.RunResult)?
-function M.add(ws, paths, cl, cb)
+---@param reconcile boolean?
+function M.add(ws, paths, cl, cb, reconcile)
   local bufs = bufs_for(ws, paths)
-  p4.add(ws, paths, cl, function(res)
+  local add = reconcile and p4.reconcile_add or p4.add
+  add(ws, paths, cl, function(res)
     local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
     report('add', res, #res.records)
     changed(ws, { files = paths })

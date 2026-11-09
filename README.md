@@ -402,6 +402,9 @@ list.
 Every command also has a flat alias (`:P4edit`, `:P4diff`, …), and a bang goes on the
 subcommand (`:P4 revert!`).
 
+The file commands take files, directories and p4 wildcards. A typed wildcard (`src/...`)
+runs as given; a directory asks first whether you meant everything under it.
+
 ## Troubleshooting
 
 - **Nothing happens when I open a file.** Run `:checkhealth perforated`, then `:P4 info`. The

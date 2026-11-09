@@ -76,6 +76,54 @@ local function parse_file_args(args)
   return cl, files, flags
 end
 
+--- Directory arguments mean everything under them (`<dir>/...`), but only after asking: the
+--- plugin never widens a path on its own. A wildcard the user typed isn't a directory, so it
+--- runs as given. `doing` completes "… under it", e.g. 'Check out everything'.
+--- Returns the files (nil = cancelled) and the `<dir>/...` paths it made.
+---@param files string[]
+---@param doing string
+---@return string[]? files, string[] widened
+local function widen_dirs(files, doing)
+  local dirs = {}
+  for _, f in ipairs(files) do
+    if vim.fn.isdirectory(f) == 1 then
+      local name = vim.fn.fnamemodify(f, ':~:.')
+      dirs[#dirs + 1] = (name == '' and '.' or name):gsub('/+$', '') .. '/'
+    end
+  end
+  if #dirs == 0 then
+    return files, {}
+  end
+  local msg = #dirs == 1
+      and ('%s is a directory. %s under it (%s...)?'):format(dirs[1], doing, dirs[1])
+    or ('%s are directories. %s under them (%s...)?'):format(
+      table.concat(dirs, ', '),
+      doing,
+      table.concat(dirs, '..., ')
+    )
+  local choice = require('perforated.ui.prompt').confirm(
+    msg,
+    #dirs == 1 and '&All under it\n&Directory as given\n&Cancel'
+      or '&All under them\n&Directories as given\n&Cancel',
+    3
+  )
+  if choice ~= 1 and choice ~= 2 then
+    return nil, {}
+  end
+  local out, widened = {}, {}
+  for _, f in ipairs(files) do
+    if vim.fn.isdirectory(f) == 1 then
+      f = f:gsub('/+$', '')
+      if choice == 1 then
+        f = f .. '/...'
+        widened[#widened + 1] = f
+      end
+    end
+    out[#out + 1] = f
+  end
+  return out, widened
+end
+
 local function need_files(files)
   if #files == 0 then
     notify('no file (open a file or pass paths)', vim.log.levels.WARN)
@@ -146,11 +194,15 @@ M.commands = {
 
   edit = {
     scope = 'workspace',
-    desc = 'Open files for edit: :P4 edit [-c CL] [file…] (default: sticky CL or default)',
+    desc = 'Open files for edit: :P4 edit [-c CL] [file|dir…] (default: sticky CL or default)',
     complete = complete_files,
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
-      if need_files(files) then
+      if not need_files(files) then
+        return
+      end
+      files = widen_dirs(files, 'Check out everything')
+      if files then
         require('perforated.checkout').edit(ws, files, cl or ws.sticky_cl)
       end
     end,
@@ -158,23 +210,45 @@ M.commands = {
 
   add = {
     scope = 'workspace',
-    desc = 'Open files for add: :P4 add [-c CL] [file…]',
+    desc = 'Open files for add: :P4 add [-c CL] [file|dir…]',
     complete = complete_files,
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
-      if need_files(files) then
-        require('perforated.checkout').add(ws, files, cl or ws.sticky_cl)
+      if not need_files(files) then
+        return
+      end
+      local widened
+      files, widened = widen_dirs(files, 'Add every new file')
+      if not files then
+        return
+      end
+      local co, tree = require('perforated.checkout'), {}
+      for _, t in ipairs(widened) do
+        tree[t] = true
+      end
+      files = vim.tbl_filter(function(f)
+        return not tree[f]
+      end, files)
+      if #widened > 0 then
+        co.add(ws, widened, cl or ws.sticky_cl, nil, true)
+      end
+      if #files > 0 then
+        co.add(ws, files, cl or ws.sticky_cl)
       end
     end,
   },
 
   revert = {
     scope = 'workspace',
-    desc = 'Revert files: :P4 revert[!] [-a] [file…] (! = no confirmation, -a = only unchanged)',
+    desc = 'Revert files: :P4 revert[!] [-a] [file|dir…] (! = no confirmation, -a = only unchanged)',
     complete = complete_files,
     run = function(ws, o, args)
       local _, files, flags = parse_file_args(args)
       if not need_files(files) then
+        return
+      end
+      files = widen_dirs(files, 'Revert everything opened')
+      if not files then
         return
       end
       local unchanged = flags['-a']
@@ -473,11 +547,15 @@ M.commands = {
 
   reopen = {
     scope = 'workspace',
-    desc = 'Move opened files to another changelist: :P4 reopen [-c CL] [file…]  (no -c: pick one)',
+    desc = 'Move opened files to another changelist: :P4 reopen [-c CL] [file|dir…]  (no -c: pick one)',
     complete = complete_files,
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
       if not need_files(files) then
+        return
+      end
+      files = widen_dirs(files, 'Move everything opened')
+      if not files then
         return
       end
       local function go(target)
@@ -513,7 +591,7 @@ M.commands = {
 
   shelve = {
     scope = 'workspace',
-    desc = "Shelve: :P4 shelve [-c CL] [file…]  (default: the current file's CL, all its files; -d deletes the shelf)",
+    desc = "Shelve: :P4 shelve [-c CL] [file|dir…]  (default: the current file's CL, all its files; -d deletes the shelf)",
     complete = complete_files,
     run = function(ws, _, args)
       local ops = require('perforated.ops')
@@ -528,6 +606,12 @@ M.commands = {
       end
       if flags['-d'] then
         return ops.delete_shelved(ws, cl, nil)
+      end
+      if explicit then
+        files = widen_dirs(files, 'Shelve everything opened')
+        if not files then
+          return
+        end
       end
       ops.shelve(ws, cl, explicit and files or nil)
     end,
@@ -605,12 +689,18 @@ M.commands = {
 
   resolve = {
     scope = 'workspace',
-    desc = 'Resolve: :P4 resolve [file…]  (-am first, then $P4MERGE for conflicts; no args: all files)',
+    desc = 'Resolve: :P4 resolve [file|dir…]  (-am first, then $P4MERGE for conflicts; no args: all files)',
     complete = complete_files,
     run = function(ws, _, args)
       local files = {}
       for _, a in ipairs(args) do
         vim.list_extend(files, expand_paths(a))
+      end
+      if #files > 0 then
+        files = widen_dirs(files, 'Resolve everything')
+        if not files then
+          return
+        end
       end
       require('perforated.resolve').run(ws, #files > 0 and files or nil)
     end,
@@ -618,11 +708,15 @@ M.commands = {
 
   delete = {
     scope = 'workspace',
-    desc = 'Open files for delete (with a confirmation): :P4 delete [file…]',
+    desc = 'Open files for delete (with a confirmation): :P4 delete [file|dir…]',
     complete = complete_files,
     run = function(ws, _, args)
       local _, files = parse_file_args(args)
-      if need_files(files) then
+      if not need_files(files) then
+        return
+      end
+      files = widen_dirs(files, 'Delete everything')
+      if files then
         require('perforated.ops').delete(ws, files)
       end
     end,

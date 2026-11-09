@@ -285,7 +285,8 @@ local function file_cmd(ws, cmd, paths, cb, effect, busy, escape)
   local stdin = escape == false and paths or M.escape_all(paths)
   local title = ('%s %s'):format(
     cmd[1],
-    #paths == 1 and vim.fs.basename(paths[1]) or (#paths .. ' files')
+    #paths == 1 and (paths[1]:match('[^/]+/%.%.%.$') or vim.fs.basename(paths[1]))
+      or (#paths .. ' files')
   )
   require('perforated.jobs').run(ws, title, cmd, {
     globals = { '-x', '-' },
@@ -309,6 +310,18 @@ function M.add(ws, paths, change, cb, busy)
     end
   end
   file_cmd(ws, vim.list_extend(cmd, change_args(change)), paths, cb, 'opened', busy, false)
+end
+
+--- Open for add the files under `paths` (wildcards) that aren't in the depot yet.
+function M.reconcile_add(ws, paths, change, cb, busy)
+  file_cmd(
+    ws,
+    vim.list_extend({ 'reconcile', '-a' }, change_args(change)),
+    paths,
+    cb,
+    'opened',
+    busy
+  )
 end
 
 ---@param opts { unchanged: boolean?, busy: string? }?
