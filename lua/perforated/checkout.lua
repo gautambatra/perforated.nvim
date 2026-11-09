@@ -483,12 +483,13 @@ local function before_write(buf, ev)
   if c.pending then
     local t0 = vim.uv.hrtime()
     local name = vim.fn.fnamemodify(st.path, ':t')
+    -- Drawn now: nothing else redraws during the wait (after a redraw, which would clear it).
+    vim.cmd.redraw()
     vim.api.nvim_echo(
       { { ('Waiting for p4 edit of %s before writing… (Ctrl-C to stop)'):format(name) } },
       false,
       {}
     )
-    vim.cmd.redraw()
     local got = vim.wait(M.WRITE_WAIT_MS or config.get().runner.timeout, function()
       return not c.pending
     end, 10)

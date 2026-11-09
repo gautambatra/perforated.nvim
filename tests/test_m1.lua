@@ -270,9 +270,19 @@ T['checkout']['Ctrl-C stops the wait; the file is left as it was'] = function()
   child.type_keys('x')
   wait_prompt()
   child.type_keys('<CR>')
+  -- What the wait echoes (headless nightly's screen doesn't show it, a real TUI does).
+  child.lua([[_G.echoed = {}
+    local echo = vim.api.nvim_echo
+    vim.api.nvim_echo = function(chunks, ...)
+      table.insert(_G.echoed, chunks[1] and chunks[1][1] or '')
+      return echo(chunks, ...)
+    end]])
   child.type_keys(':w<CR>')
   vim.uv.sleep(300)
-  H.neq(tostring(child.get_screenshot()):find('Waiting for p4 edit of a.txt', 1, true), nil)
+  H.eq(
+    child.lua_get('_G.echoed')[1],
+    'Waiting for p4 edit of a.txt before writing… (Ctrl-C to stop)'
+  )
   -- The refused write is Neovim's E505 (raised here by type_keys).
   local ok, err = pcall(child.type_keys, '<C-c>')
   H.eq(ok, false)
