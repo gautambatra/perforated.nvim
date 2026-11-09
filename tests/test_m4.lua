@@ -729,6 +729,85 @@ T['m4']['resolve: a cancelled merge leaves the file unresolved in quickfix'] = f
   H.eq(menu.keys, { '<CR>', 'c' })
 end
 
+--- Alice edits line 1 of each file (opened, not submitted), bob submits another line 1, and
+--- alice syncs: each file then needs a resolve that conflicts.
+local function conflicts(rels)
+  for _, rel in ipairs(rels) do
+    p4({ 'edit', root .. '/' .. rel })
+    H.write(root .. '/' .. rel, 'mine1\n')
+    bob_submits(rel, 'bob1\n')
+  end
+  p4({ 'sync' })
+end
+
+local function run_resolve()
+  child.lua([[_G.r = nil
+    require('perforated.resolve').run(require('perforated').workspace(), nil,
+      function(n, left) _G.r = { n, left } end)]])
+  wait('_G.r ~= nil')
+  return child.lua_get('_G.r')
+end
+
+T['m4']['resolve: :P4 cancel during the merge loop stops it after the open tool'] = function()
+  setup()
+  conflicts({ 'main/a.txt', 'main/b.txt' })
+  local log = server.dir .. '/merges.log'
+  local tool = server.dir .. '/slow-merge'
+  H.write(tool, ('#!/bin/sh\necho "$3" >> %s\nsleep 1\nexit 1\n'):format(log))
+  vim.uv.fs_chmod(tool, tonumber('755', 8))
+  child.lua(('require("perforated.config").set({ merge = { tool = %q } })'):format(tool))
+  H.stub_menu(child)
+  child.lua([[_G.r = nil
+    require('perforated.resolve').run(require('perforated').workspace(), nil,
+      function(n, left) _G.r = { n, left } end)]])
+  -- While the first file's tool is open:
+  H.eq(
+    vim.wait(10000, function()
+      return vim.uv.fs_stat(log) ~= nil
+    end, 20),
+    true
+  )
+  child.cmd('P4 cancel')
+  wait('_G.r ~= nil')
+  H.eq(#vim.fn.readfile(log), 1) -- the tool wasn't opened for the second file
+  H.eq(child.lua_get('_G.r'), { 0, 2 })
+  local texts = vim.tbl_map(function(i)
+    return i.text
+  end, child.fn.getqflist())
+  table.sort(texts)
+  H.eq(#texts, 2)
+  H.neq(table.concat(texts, '\n'):find('resolve cancelled', 1, true), nil)
+  H.neq(
+    table.concat(child.lua_get('_G.menus[#_G.menus].header'), '\n'):find('cancelled', 1, true),
+    nil
+  )
+end
+
+T['m4']['resolve: a failed check of what\'s left is an error, not "merged"'] = function()
+  setup()
+  conflicts({ 'main/a.txt' })
+  local wrapper = server.dir .. '/failing-p4'
+  H.write(
+    wrapper,
+    ('#!/bin/sh\ncase "$*" in *"resolve -n -o"*) echo "Connect to server failed" >&2; exit 1;; esac\nexec %s "$@"\n'):format(
+      P.p4
+    )
+  )
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  child.lua(
+    'vim.g.perforated = vim.tbl_extend("force", vim.g.perforated, { p4 = ... })',
+    { wrapper }
+  )
+  child.lua([[require('perforated.config').reload()]])
+  H.stub_menu(child)
+  H.eq(run_resolve(), { 0, 0 })
+  local header = table.concat(child.lua_get('_G.menus[#_G.menus].header'), '\n')
+  H.eq(header:find('merged automatically', 1, true), nil)
+  H.neq(header:find("checking what's left failed", 1, true), nil)
+  H.neq(header:find('Connect to server failed', 1, true), nil)
+  H.neq(p4({ '-ztag', 'fstat', '-Ru', root .. '/main/a.txt' }), '') -- still unresolved
+end
+
 T['m4']["resolve: a GUI merge tool that can't open says why"] = function()
   -- What the tool printed (here: a GUI tool's display error) is the reason.
   local log = root .. '/merge.log'

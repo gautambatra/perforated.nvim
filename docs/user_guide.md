@@ -521,6 +521,12 @@ either it isn't launched, and the pop-up says so.
 Resolve runs as a job (`:P4 jobs`, `:P4 cancel`) without the usual time limit, since merging
 happens on your machine and can take a while. The plugin has no merge logic of its own.
 
+`:P4 cancel` stops a resolve between files: a merge tool that's already open stays open (you
+may be in the middle of a merge), and the files after it are left unresolved in the quickfix
+list, where `R` resumes. If p4 can't say which files are still unresolved after `resolve -am`
+(the server went away, say), the pop-up says so instead of counting them as merged;
+`:P4 status` lists them once p4 answers again.
+
 ### Delete and move
 
 - `:P4 delete [file…]` opens files for delete, after a confirmation, and closes the buffer.

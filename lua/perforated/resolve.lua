@@ -240,6 +240,23 @@ function M.run(ws, paths, cb)
       { 'resolve', '-n', '-o' },
       vim.tbl_extend('force', opts, { timeout = 0 }),
       function(pending)
+        if not pending.ok or pending.stopped then
+          -- Without the list, nothing can be said about which files -am resolved.
+          unbusy()
+          local why = pending.errors[1] or vim.trim(pending.stderr or '')
+          jobs.finish(job, "resolve: checking what's left failed: " .. why, true)
+          co.changed(ws, paths and { files = paths } or nil)
+          require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
+          for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do
+            require('perforated.buffer').refresh(b)
+          end
+          report({
+            "resolve -am ran, but checking what's left failed:",
+            '  ' .. why,
+            ':P4 status shows the files still unresolved.',
+          }, false, vim.log.levels.ERROR)
+          return cb(0, 0)
+        end
         local conflicts = {}
         for _, r in ipairs(pending.records) do
           if r.clientFile then
@@ -249,6 +266,7 @@ function M.run(ws, paths, cb)
         local auto = vim.tbl_count(attempted) - #conflicts
         local left = {} ---@type { path: string, reason: string, rec: table }[]
         local merged = 0
+        local cancelled = false
         local function finish()
           unbusy()
           local parts = {}
@@ -276,6 +294,9 @@ function M.run(ws, paths, cb)
           end
           if merged > 0 then
             lines[#lines + 1] = ('%d file(s) merged with your merge tool'):format(merged)
+          end
+          if cancelled then
+            lines[#lines + 1] = 'Resolve cancelled.'
           end
           if #left > 0 then
             lines[#lines + 1] = ('%d file(s) left unresolved:'):format(#left)
@@ -325,6 +346,19 @@ function M.run(ws, paths, cb)
             i = i + 1
             local rec = conflicts[i]
             if not rec then
+              return finish()
+            end
+            -- `:P4 cancel` stops the loop between files (a tool already open isn't killed:
+            -- the user may be mid-merge); the rest stay unresolved, for `R` to resume.
+            if job.cancel_requested then
+              cancelled = true
+              for k = i, #conflicts do
+                left[#left + 1] = {
+                  path = conflicts[k].clientFile,
+                  reason = 'resolve cancelled',
+                  rec = conflicts[k],
+                }
+              end
               return finish()
             end
             if rec.resolveType ~= 'content' then

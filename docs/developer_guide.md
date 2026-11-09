@@ -1242,7 +1242,10 @@ resolve"). A
 failing tool's error line (`tools.error_line`: the first output line with an error word, else
 the last, skipping the shell's "Aborted (core dumped)"; stderr for a GUI tool, the terminal
 screen for a terminal one) is added to the reason.
-Everything else goes to quickfix, where `R` retries. It runs as a quiet job
+Everything else goes to quickfix, where `R` retries. The loop checks the job's
+`cancel_requested` before each file (`:P4 cancel`); an open tool isn't killed, and the files after
+it go to quickfix as "resolve cancelled". A failed `resolve -n -o` is reported as an error, never
+read as "no conflicts" (which counted every attempted file as merged). It runs as a quiet job
 (`jobs.start(ws, title, { quiet = true })`: listed in `:P4 jobs`, stoppable, but without the
 start and result notices; `resolve -am` has no call timeout: it fetches revisions and merges
 locally). Instead a centred `toast.busy` pop-up shows while p4 works (closed before the merge
