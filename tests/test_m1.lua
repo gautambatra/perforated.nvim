@@ -742,6 +742,25 @@ T['ops'][':P4 opened and :P4 hunks fill the quickfix list'] = function()
   H.eq(#child.fn.getloclist(0), 2)
 end
 
+-- Code only a user action runs loads on first use, not with every workspace (the memory
+-- bench's active-workspace budget).
+T['ops']['preview, check-out operations and the message history load on first use'] = function()
+  local function loaded()
+    return child.lua_get(
+      [[vim.tbl_map(function(m) return package.loaded[m] ~= nil end,
+      { 'perforated.signs_preview', 'perforated.checkout_ops', 'perforated.ui.toast_history' })]]
+    )
+  end
+  H.eq(loaded(), { false, false, false })
+  child.lua([[require('perforated.signs').preview()]])
+  H.eq(loaded(), { true, false, false })
+  child.cmd('P4 revert!')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  H.eq(loaded(), { true, true, false })
+  child.cmd('P4 messages')
+  H.eq(loaded(), { true, true, true })
+end
+
 T['ops']['perforated:// URIs load depot revisions'] = function()
   child.cmd('edit ' .. vim.fn.fnameescape('perforated:////depot/b.txt#1'))
   wait('vim.b.perforated_loaded == true')

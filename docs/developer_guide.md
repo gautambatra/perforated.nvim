@@ -528,9 +528,11 @@ lua/perforated/
     events.lua               User autocmd events
   p4.lua                     typed p4 wrappers: fstat, print, pending changes, edit/add/revert
   buffer.lua                 per-buffer state, attach pipeline, base text, diff, signs
-  signs.lua                  gutter signs, hunk navigation, preview, reset
+  signs.lua                  gutter signs, hunk navigation, reset
+  signs_preview.lua          the hunk preview float and its word diff (loaded on first use)
   status.lua                 statusline variables (never calls p4)
-  checkout.lua               check-out on first change, add on write, edit/add/revert
+  checkout.lua               check-out on first change, add on write
+  checkout_ops.lua           the edit/add/revert operations (loaded on first use)
   checkout_prompt.lua        the check-out menu and changelist picker (loaded on first use)
   poll.lua                   stale/unresolved detection (cheap probe, full refresh on news)
   changelists.lua            changelist queries: describe, shelved files, submitted, reopen…
@@ -564,6 +566,7 @@ lua/perforated/
     scrollsync.lua           scroll-bound windows follow a mouse-wheel scroll of a non-current one
     qf.lua                   quickfix/location-list sink and qf-window keys
     toast.lua                pop-up notifications (placed by kind; activity- and focus-gated)
+    toast_history.lua        :P4 messages, the history window (loaded on first use)
     prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
     icons.lua                file icons (mini.icons/devicons) and status glyphs
     progress.lua             progress messages (0.12) + final notification
@@ -1024,7 +1027,8 @@ blame and the LSP code-action server attach here.
 
 #### `signs.lua`
 `render(buf, hunks)` — one extmark per hunk with `end_row` spreading the sign over the
-range. `render_stale` puts a "stale" marker on line 1. `nav` (`]h`/`[h`), `preview` (a float
+range. `render_stale` puts a "stale" marker on line 1. `nav` (`]h`/`[h`), `preview` (in
+`signs_preview.lua`, loaded on first use; a float
 with the hunk's unified diff: in a change hunk old and new lines are paired in order and
 `_word_diff` marks the changed words (`PerforatedPreviewText`); token-level `vim.text.diff` over
 word / whitespace / punctuation runs, nothing when only whitespace is in common; the file's
@@ -1041,10 +1045,12 @@ change nothing; `update_ws` fills `vim.g.perforated_status` (workspace markers: 
 unresolved counts, offline or login needed). Changes are coalesced into one
 `User PerforatedStatus` event and a statusline redraw. `is_stale(rec)` is used everywhere.
 
-#### `checkout.lua` and `checkout_prompt.lua`
+#### `checkout.lua`, `checkout_ops.lua` and `checkout_prompt.lua`
 The check-out flow in [§18.4](#184-you-start-typing-in-an-unopened-file), add-on-write
 (`checkout.add_on_write`), and the `edit`/`add`/`revert` operations used by every view and
-command (each reports errors, refreshes affected buffers and emits `Changed`). Global hooks
+command (each reports errors, refreshes affected buffers and emits `Changed`). The operations
+live in `checkout_ops.lua`, behind forwarders in `checkout.lua` (`checkout.edit` etc.): nothing
+runs them until a file is changed or a command is given. Global hooks
 are installed once and look up tracked buffers. `checkout.dirs` restricts automatic
 behaviour to some directories. `edit` and `add` show a centred `toast.busy` pop-up while p4
 runs. The write hooks compare the file written (`ev.match`) with the buffer's path: `:w
@@ -1674,7 +1680,11 @@ describing its role; keep it current.
 
 **Requires.** Core modules may be required at the top of a file; feature and UI modules are
 required inside functions when they aren't needed on the activation path. The memory benchmark
-("Lua memory: active workspace") catches accidental eager loading.
+("Lua memory: active workspace") catches accidental eager loading. Code in a module that loads
+with every workspace (`checkout`, `signs`, `toast`, `poll`, `buffer`, `p4`…) but runs only on a
+user action belongs in a module loaded on first use, behind a one-line forwarder:
+`checkout_prompt`, `checkout_ops`, `signs_preview`, `ui/toast_history`. A test in `test_m1.lua`
+checks that these stay unloaded until used.
 
 **User messages.** `require('perforated.ui.toast').notify(msg, level)` (a pop-up, or
 `vim.notify` with `toast.backend = 'notify'`), never `vim.notify` directly; short, plain
