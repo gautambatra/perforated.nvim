@@ -675,11 +675,17 @@ EVENTS                                                     *perforated-events*
 `User` autocmds you can hook (the event data is in `ev.data`):
 
   PerforatedStatus        workspace / buffer state changed (statuslines)
-  PerforatedChanged       files were opened, reverted, submitted, ... { ws }
+  PerforatedChanged       files were opened, reverted, submitted, ...
+                          { ws, files?, changes?, source? }
   PerforatedWorkspaceActivated   a workspace became active { ws }
   PerforatedWorkspaceIdle        a workspace went idle (no buffers left) { ws }
   PerforatedDiffOpen      a diff tab opened { tab, wins, bufs, spec, path }
   PerforatedDiffClose     it closed (same data)
+
+PerforatedChanged: `files` (local paths) names the files an action touched,
+`changes` is true when it changed changelists (descriptions, shelves), and
+`source` is "poll" or "refresh" for news found by a poll or `:P4 refresh`.
+With none of them, anything may have changed.
 
 ==============================================================================
 LICENSE                                                   *perforated-license*

@@ -139,7 +139,12 @@ After that it refreshes itself:
   wherever in Neovim you started it;
 - when the background check finds news, such as a file becoming stale or someone resolving one.
 
-There's no timer. `<F5>`, or `:P4` again, refreshes on demand.
+After an action it asks again only for what the action can change: checking out or reverting
+a file re-reads your changelists, opened files and that file's changed marker, and editing a
+description re-reads the changelists and shelves. The Sync CL and Recent submitted are asked
+again after a submit or sync.
+
+There's no timer. `<F5>`, or `:P4` again, refreshes every section on demand.
 
 ### Keys and the action menu
 

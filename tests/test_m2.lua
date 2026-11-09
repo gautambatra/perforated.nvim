@@ -2283,6 +2283,138 @@ T['client view']['a burst of Changed events runs one fstat -Ro'] = function()
   H.eq(H.wait(child, FULL .. ' > ' .. (before + 1), 1000), false)
 end
 
+--- Record the p4 commands run from now on, each as "subcommand args…" (global flags left out).
+--- Calling it again starts a new record.
+local function track_calls()
+  child.lua([=[_G.CALLS = {}
+    if _G.CALLS_HOOKED then return end
+    _G.CALLS_HOOKED = true
+    local VALUE = { ['-c'] = true, ['-u'] = true, ['-p'] = true, ['-x'] = true, ['-H'] = true,
+      ['-d'] = true, ['-P'] = true, ['-C'] = true }
+    local log = require('perforated.core.log')
+    local add = log.add
+    log.add = function(e)
+      local i = 2
+      while e.argv[i] and e.argv[i]:sub(1, 1) == '-' do
+        i = i + (VALUE[e.argv[i]] and 2 or 1)
+      end
+      table.insert(_G.CALLS, table.concat(vim.list_slice(e.argv, i), ' '))
+      add(e)
+    end]=])
+end
+
+--- How many recorded commands start with each prefix.
+local function count_calls(prefixes)
+  local out = {}
+  for _, c in ipairs(child.lua_get('_G.CALLS')) do
+    for _, p in ipairs(prefixes) do
+      if c:sub(1, #p) == p then
+        out[p] = (out[p] or 0) + 1
+      end
+    end
+  end
+  return out
+end
+
+local SECTIONS = {
+  'changes -s pending',
+  'fstat -Ro',
+  'diff -sa',
+  'describe -S',
+  'changes -m1 -s submitted -l #have',
+  'changes -s submitted -l -m',
+}
+
+--- Open the view and let every startup query finish before counting.
+local function open_view_quiet()
+  open_view()
+  H.wait_idle(child)
+  vim.uv.sleep(500)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  track_calls()
+end
+
+local function row_of(text)
+  for _, l in ipairs(lines()) do
+    if l:find(text, 1, true) then
+      return l
+    end
+  end
+end
+
+T['client view']['after an edit the view asks for pending CLs, opened files and that file only'] = function()
+  open_view_quiet()
+  child.lua(
+    ("require('perforated.checkout').edit(require('perforated').workspace(), { %q })"):format(
+      root .. '/d.txt'
+    )
+  )
+  wait(([[(function() local d = (%s).data
+    for _, r in ipairs(d.opened or {}) do if r.depotFile == '//depot/d.txt' then return true end end
+  end)()]]):format(view_expr(root)))
+  vim.uv.sleep(800) -- room for anything else that would run
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1 })
+  H.eq(row_of('d.txt'):find('●', 1, true), nil)
+  H.neq(row_of('a.txt'):find('●', 1, true), nil) -- markers of other files stay
+end
+
+T['client view']['a changed file gets its marker; the others keep theirs'] = function()
+  open_view_quiet()
+  H.eq(row_of('b.txt'):find('●', 1, true), nil)
+  H.write(root .. '/b.txt', 'b changed\n')
+  child.lua(
+    ("require('perforated.checkout').changed(require('perforated').workspace(), { files = { %q } })"):format(
+      root .. '/b.txt'
+    )
+  )
+  wait([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+    if l:find('b.txt', 1, true) then return l:find('●', 1, true) ~= nil end end end)()]])
+  H.neq(row_of('a.txt'):find('●', 1, true), nil)
+  H.eq(row_of('c.txt'):find('●', 1, true), nil)
+  H.eq(count_calls({ 'diff -sa' }), { ['diff -sa'] = 1 })
+end
+
+T['client view']['a changelist change re-reads pending CLs and shelves, not files'] = function()
+  open_view_quiet()
+  local spec = server:p4(
+    { '--field', 'Description=Fix the parser', 'change', '-o', '2' },
+    { client = 'alice_ws', cwd = root }
+  ).stdout
+  server:p4({ 'change', '-i' }, { client = 'alice_ws', cwd = root, stdin = spec })
+  child.lua(
+    [[require('perforated.checkout').changed(require('perforated').workspace(), { changes = true })]]
+  )
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('Fix the parser', 1, true) then return true end end end)()]]):format(
+      view_expr(root)
+    )
+  )
+  vim.uv.sleep(800)
+  H.eq(
+    count_calls(SECTIONS),
+    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['describe -S'] = 1 }
+  )
+  H.neq(row_of('a.txt'):find('●', 1, true), nil)
+end
+
+T['client view']['<F5> and events that name nothing re-run every section'] = function()
+  open_view_quiet()
+  child.type_keys('<F5>')
+  vim.uv.sleep(300)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  local all = {}
+  for _, p in ipairs(SECTIONS) do
+    all[p] = 1
+  end
+  H.eq(count_calls(SECTIONS), all)
+  track_calls()
+  child.lua([[require('perforated.checkout').changed(require('perforated').workspace())]])
+  vim.uv.sleep(400)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(count_calls(SECTIONS), all)
+end
+
 T['change command'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

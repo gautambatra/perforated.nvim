@@ -221,7 +221,7 @@ function M.run(ws, paths, cb)
       local msg = 'resolve cancelled: some files may already be resolved'
       jobs.finish(job, msg, 'warn')
       toast.notify('[perforated] ' .. msg, vim.log.levels.WARN)
-      co.changed(ws)
+      co.changed(ws, paths and { files = paths } or nil)
       return cb(0, 0)
     end
     if not res.ok and #res.records == 0 and #res.errors > 0 then
@@ -306,7 +306,7 @@ function M.run(ws, paths, cb)
               items = items,
             })
           end
-          co.changed(ws)
+          co.changed(ws, paths and { files = paths } or nil)
           -- p4 wrote merged content into the files: reload their (unmodified) buffers.
           require('perforated.ops').reload(ws, vim.tbl_keys(attempted))
           for _, b in ipairs(co.bufs_for(ws, vim.tbl_keys(attempted))) do

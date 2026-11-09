@@ -491,7 +491,7 @@ M.commands = {
             )
           end
           local co = require('perforated.checkout')
-          co.changed(ws)
+          co.changed(ws, { files = files })
           for _, b in ipairs(co.bufs_for(ws, files)) do
             require('perforated.buffer').refresh(b)
           end

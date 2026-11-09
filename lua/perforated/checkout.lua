@@ -93,16 +93,43 @@ local function bufs_for(ws, paths)
   return out
 end
 
+--- Most files a `Changed` event names; a bigger change asks listeners for a full refresh.
+M.CHANGED_FILES_MAX = 500
+
+--- Announce a change made from the plugin (`User PerforatedChanged`). `what` says what it
+--- touched, so listeners can re-query only that: `files` (paths: their opened state and
+--- content), `changes` (changelists: descriptions, shelves). Without it, anything may have
+--- changed. Depot paths are named by their local path, or dropped (full refresh) when unknown.
+---@param ws perforated.Workspace
+---@param what { files: string[]?, changes: boolean? }?
+local function changed(ws, what)
+  local data = { ws = ws.key }
+  if what then
+    data.changes = what.changes
+    local files = what.files and #what.files <= M.CHANGED_FILES_MAX and {} or nil
+    for _, f in ipairs(what.files or {}) do
+      local local_path = f
+      if f:match('^//') then
+        local rec = (ws.opened or {})[f]
+        local_path = rec and rec.clientFile
+      end
+      if not (files and local_path) then
+        files = nil
+        break
+      end
+      files[#files + 1] = local_path
+    end
+    data.files = files
+  end
+  require('perforated.core.events').emit('Changed', data)
+end
+M.changed = changed
+
 --- Report the outcome of a file command: short message on success, errors (with file names)
 --- as a notification — lists go to quickfix once M2's qf sink exists.
 ---@param verb string
 ---@param res perforated.RunResult
 ---@param count integer
-local function changed(ws)
-  require('perforated.core.events').emit('Changed', { ws = ws.key })
-end
-M.changed = changed
-
 local function report(verb, res, count)
   if res.stopped then
     return -- `jobs.run` already said so
@@ -218,7 +245,7 @@ function M.edit(ws, paths, cl, cb)
       restore(keep)
     end
     report('edit', res, #res.records)
-    changed(ws)
+    changed(ws, { files = paths })
     for _, b in ipairs(bufs) do
       if ok and vim.api.nvim_buf_is_valid(b) then
         vim.bo[b].readonly = false
@@ -240,7 +267,7 @@ function M.add(ws, paths, cl, cb)
   p4.add(ws, paths, cl, function(res)
     local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
     report('add', res, #res.records)
-    changed(ws)
+    changed(ws, { files = paths })
     for _, b in ipairs(bufs) do
       require('perforated.buffer').refresh(b)
     end
@@ -283,7 +310,7 @@ function M.revert(ws, paths, unchanged, cb)
     or busy('Reverting %s…', 'Reverting %d files…', paths)
   p4.revert(ws, paths, { unchanged = unchanged, busy = msg }, function(res)
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
-    changed(ws)
+    changed(ws, { files = paths })
     local reverted = {}
     for _, rec in ipairs(res.records) do
       if rec.clientFile then

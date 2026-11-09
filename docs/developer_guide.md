@@ -800,7 +800,19 @@ why keys, menus and help never disagree.
    Until then a section shows what the previous refresh found, or "loading…" the first time.
 3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop. `a`
    removes a file from it only once p4's records confirm it was opened.
-4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view.
+4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view,
+   150 ms after the first of a burst (the burst's events are merged). Only what the events
+   name is asked again: `files` re-runs the pending changelists, the opened files and
+   `diff -sa` of those files (`merge_modified` keeps the other files' markers and drops files
+   no longer opened); `changes` re-runs the pending changelists, the opened files and the
+   shelves. The Sync CL and Recent submitted keep their answers. An event naming neither, a
+   `poll` or `refresh` event, `<F5>`, the scope toggle and the first refresh re-run
+   everything. `checkout.changed(ws, what)` turns depot paths into local ones and sends no
+   `files` (a full refresh) for more than `CHANGED_FILES_MAX` (500) files or an unknown depot
+   path. Unshelve, submit, sync and integrate send nothing (they can change any section).
+   The view takes its opened files from `poll.refresh` (no toast: the view shows stale files
+   itself), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
+   poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background
    news reaches the view and the quickfix resolve lists without a timer of their own. `:P4 refresh`
@@ -1048,7 +1060,9 @@ plugin's own changes: one `User PerforatedChanged` listener waits `FOLLOW_MS` (3
 burst to settle, then runs one `refresh(ws)`, so counts and statuslines don't wait for the next
 poll (which never comes with `poll.interval = 0`). It ignores `poll` and `refresh` events, skips
 when a refresh already started after the newest event (a sync runs its own), and while one
-runs, later events only owe one more. The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
+runs, later events only owe one more. A refresh that follows a plugin event emits no `poll`
+news for what it finds: the event's listeners already heard of it (else the client view would
+refresh twice). `refresh(ws, opts, cb)` passes the opened records to `cb` (nil on failure). The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
 test finding).
 
 #### `modified.lua`
@@ -1508,8 +1522,9 @@ Sync CL, Pending (per changelist, with shelves), Needs attention, Workspace reco
 scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted (the latest
 `client_view.submitted_limit`, then a `submitted_all` row: `<CR>` there or `gn` in the section
 opens `views/changes.lua` with `{ user, anywhere = true }`), with blank spacer rows between
-sections. `refresh(view)` runs the queries in parallel and redraws as each
-answers (coalescing refreshes: one in flight, one queued). `switch_client(view)` (`W`) picks
+sections. `refresh(view, what)` runs the queries in parallel and redraws as each
+answers (coalescing refreshes: one in flight, the rest merged into one more); `what` limits
+it to what an event named ([§18.7](#187-you-open-the-client-view-p4)). `switch_client(view)` (`W`) picks
 another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's message on
 failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view, and `M.MENU_LAYOUT` the order and grouping
 of the `.` menu on changelists and opened files. A `BufWritePost`
@@ -1662,8 +1677,10 @@ delete shelved, replacing a shelf) with `require('perforated.ui.prompt').confirm
 default) or a float menu; text questions use `ui.prompt.input`. Never `vim.fn.confirm` or
 `vim.ui.input` directly: they'd bypass `toast.backend`.
 
-**State after operations.** Operations call `checkout.changed(ws)` (fires `User
-PerforatedChanged`, which refreshes visible views) and refresh affected buffers.
+**State after operations.** Operations call `checkout.changed(ws, what)` (fires `User
+PerforatedChanged`, which refreshes visible views) and refresh affected buffers. Pass `what`
+when the operation touched only some files (`files`) or only changelists (`changes`), so the
+client view re-runs only those queries; leave it out when anything may have changed.
 
 **Async safety.** Callbacks check buffer/window validity; long operations are jobs (stoppable);
 no synchronous waits except bounded `vim.wait` in a few deliberate places.

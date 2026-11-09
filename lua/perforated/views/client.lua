@@ -450,25 +450,82 @@ end
 -- Data
 -- -------------------------------------------------------------------------------------------
 
---- Re-query everything (coalesced: one refresh in flight, at most one queued). Each section
---- is drawn as soon as its own query answers, so a slow query (the Sync CL's
+--- A refresh of every section.
+local FULL = { full = true }
+
+--- What two refreshes owe together.
+---@param a table  a `what` (see M.refresh), or FULL
+---@param b table
+---@return table
+local function merge_what(a, b)
+  if a.full or b.full then
+    return FULL
+  end
+  local files
+  if a.files or b.files then
+    files = vim.list_extend(vim.list_extend({}, a.files or {}), b.files or {})
+  end
+  return { files = files, changes = a.changes or b.changes }
+end
+M._merge_what = merge_what
+
+--- Changed markers after re-checking `files` (local paths): their keys take the new answer,
+--- other opened files keep the old one, and files no longer opened drop out.
+---@param ws perforated.Workspace
+---@param old table<string, true>
+---@param files string[]
+---@param set table<string, true>  `modified.query` for `files`
+---@param opened table[]  opened records
+---@return table<string, true>
+local function merge_modified(ws, old, files, set, opened)
+  local asked = {}
+  for _, f in ipairs(files) do
+    asked[p4.key(ws, f)] = true
+  end
+  local out = {}
+  for _, r in ipairs(opened) do
+    local k = r.clientFile and p4.key(ws, r.clientFile)
+    if k then
+      if set[k] then
+        out[k] = true
+      elseif not asked[k] then
+        out[k] = old[k]
+      end
+    end
+  end
+  return out
+end
+
+--- Re-query the sections (coalesced: one refresh in flight, the rest owed by one more). Each
+--- section is drawn as soon as its own query answers, so a slow query (the Sync CL's
 --- `changes -m1 #have` on a large workspace) never holds back the rest. Until then
 --- a section shows what the previous refresh found, or "loading…" the first time.
+---
+--- `what` (from a `Changed` event) limits it to what a plugin action can have changed:
+--- pending changelists and opened files always, changed markers of `files` only, shelves
+--- only with `changes`. The Sync CL and Recent submitted keep their answers. nil = everything.
 ---@param view table
-function M.refresh(view)
+---@param what { files: string[]?, changes: boolean? }?
+function M.refresh(view, what)
   if not vim.api.nvim_buf_is_valid(view.buf) then
     return
   end
+  what = what or FULL
   if view.loading then
-    view.again = true
+    view.again = view.again and merge_what(view.again, what) or what
     return
   end
   view.loading = true
   local ws = view.ws
   local t0 = vim.uv.hrtime()
   local prev = view.data or {}
+  -- The first refresh fills every section.
+  local full = what.full or not view.data
+  -- Markers of some files only: needs the full set from before.
+  local some = not full and type(prev.modified) == 'table' and what.files or nil
   ws:ensure_info(function()
-    local data, got, left = {}, {}, 6
+    local data, got = {}, {}
+    local left = full and 6 or 2 + (what.changes and 1 or 0) + (what.files and 1 or 0)
     local function set(k, v)
       data[k], got[k] = v, true
     end
@@ -490,7 +547,14 @@ function M.refresh(view)
         shown.pending, shown.opened = prev.pending, prev.opened
       end
       shown.have, shown.submitted = field('have'), field('submitted')
-      shown.shelved, shown.modified = field('shelved'), field('modified')
+      shown.shelved = field('shelved')
+      if some and got.modified and got.opened then
+        shown.modified = merge_modified(ws, prev.modified, some, data.modified, data.opened)
+      elseif some then
+        shown.modified = prev.modified
+      else
+        shown.modified = field('modified')
+      end
       shown.overlay = require('perforated.modified').overlay(ws)
       view.data = shown
       local t1 = vim.uv.hrtime()
@@ -519,22 +583,27 @@ function M.refresh(view)
       dbg.timing('client view: refresh', (vim.uv.hrtime() - t0) / 1e6)
       dbg.debug(
         'client',
-        'refresh %s: %d pending, %d opened, %d submitted in %.0fms',
+        'refresh %s (%s): %d pending, %d opened, %d submitted in %.0fms',
         ws.key,
+        full and 'all' or some and ('%d file(s)'):format(#some) or 'changelists',
         #(data.pending or {}),
         #(data.opened or {}),
-        #(data.submitted or {}),
+        #(data.submitted or prev.submitted or {}),
         (vim.uv.hrtime() - t0) / 1e6
       )
       if view.again then
-        view.again = false
-        M.refresh(view)
+        local again = view.again
+        view.again = nil
+        M.refresh(view, again)
       end
     end
     p4.pending_changes(ws, function(changes, err)
       set('pending', changes or {})
       data.err = data.err or err
       done()
+      if not (full or what.changes) then
+        return
+      end
       -- Shelved files, only for CLs that have any.
       local with_shelves = {}
       for _, c in ipairs(changes or {}) do
@@ -550,14 +619,29 @@ function M.refresh(view)
     local function failed(res)
       data.err = data.err or res.errors[1] or vim.trim(res.stderr or '')
     end
-    cls.have_change(ws, function(c)
-      set('have', c or false)
-      done()
-    end)
-    require('perforated.modified').query(ws, nil, function(changed)
-      set('modified', changed or false) -- false: unknown (no markers)
-      done()
-    end)
+    if full then
+      cls.have_change(ws, function(c)
+        set('have', c or false)
+        done()
+      end)
+    end
+    if full or what.files then
+      require('perforated.modified').query(ws, some, function(changed)
+        set('modified', changed or false) -- false: unknown (no markers)
+        done()
+      end)
+    end
+    -- The opened files come from the poll's refresh, so buffers, counts and statuslines
+    -- update from the same `fstat -Ro` (and its follow-up to this change is not needed).
+    local function fstat_opened(cb)
+      -- No toast for stale files: the view shows them.
+      require('perforated.poll').refresh(ws, { notify = false }, function(recs, res)
+        if not recs then
+          failed(res)
+        end
+        cb(recs)
+      end)
+    end
     if view.scope == 'user' then
       -- Current client with full fstat detail, other clients from `opened -a -u`.
       local recs, others, n = nil, nil, 2
@@ -566,7 +650,7 @@ function M.refresh(view)
         if n > 0 then
           return
         end
-        local opened = recs or {}
+        local opened = vim.list_extend({}, recs or {})
         for _, o in ipairs(others or {}) do
           if o.client ~= ws:client() then
             opened[#opened + 1] = o
@@ -575,11 +659,8 @@ function M.refresh(view)
         set('opened', opened)
         done()
       end
-      p4.fstat_opened(ws, {}, function(r, res)
+      fstat_opened(function(r)
         recs = r
-        if not r then
-          failed(res)
-        end
         merged()
       end)
       cls.opened_by_user(ws, function(r)
@@ -587,23 +668,22 @@ function M.refresh(view)
         merged()
       end)
     else
-      p4.fstat_opened(ws, {}, function(recs, res)
+      fstat_opened(function(recs)
         set('opened', recs or {})
-        if not recs then
-          failed(res)
-        end
         done()
       end)
     end
-    cls.submitted_changes(ws, {
-      user = ws:user(),
-      anywhere = true, -- all of the user's submits, not only those in this client's view
-      max = require('perforated.config').get().client_view.submitted_limit,
-    }, function(changes, err)
-      set('submitted', changes or {})
-      data.err = data.err or err
-      done()
-    end)
+    if full then
+      cls.submitted_changes(ws, {
+        user = ws:user(),
+        anywhere = true, -- all of the user's submits, not only those in this client's view
+        max = require('perforated.config').get().client_view.submitted_limit,
+      }, function(changes, err)
+        set('submitted', changes or {})
+        data.err = data.err or err
+        done()
+      end)
+    end
   end)
 end
 
@@ -1432,8 +1512,7 @@ local function actions(view)
               )
             end
             view.tree.marks = {}
-            require('perforated.checkout').changed(ws)
-            M.refresh(view)
+            require('perforated.checkout').changed(ws, { files = paths_of(items) })
           end)
         end)
       end,
@@ -1477,8 +1556,7 @@ local function actions(view)
               )
             end
             view.tree.marks = {}
-            require('perforated.checkout').changed(ws)
-            M.refresh(view)
+            require('perforated.checkout').changed(ws, { files = paths_of(files) })
           end)
         end, {
           title = ('Move %d file(s) from %s to'):format(#files, table.concat(names, ', ')),
@@ -1595,7 +1673,7 @@ local function actions(view)
             single = #by.delete == 1,
           }, function(res)
             co.report('delete', res, #res.records)
-            co.changed(ws)
+            co.changed(ws, { files = by.delete })
             applied(res)
           end)
         end
@@ -2117,20 +2195,31 @@ function M.open(ws, opts)
       M.update_footer(view)
     end,
   })
-  -- Changes made elsewhere (check-out, revert, …) refresh a visible view.
-  local pending_refresh = false
+  -- Changes made elsewhere (check-out, revert, …) refresh a visible view: only what the
+  -- events say changed, or everything (the poll's news, :P4 refresh, events naming nothing).
+  local owed = nil
   vim.api.nvim_create_autocmd('User', {
     group = group,
     pattern = 'PerforatedChanged',
     callback = function(ev)
+      local d = ev.data or {}
       -- Visible in any tab (the default kind gives the view its own tab).
-      if (ev.data or {}).ws ~= ws.key or #vim.fn.win_findbuf(buf) == 0 or pending_refresh then
+      if d.ws ~= ws.key or #vim.fn.win_findbuf(buf) == 0 then
         return
       end
-      pending_refresh = true
+      local what = (d.files or d.changes)
+          and not d.source
+          and { files = d.files, changes = d.changes }
+        or FULL
+      if owed then
+        owed = merge_what(owed, what)
+        return
+      end
+      owed = what
       vim.defer_fn(function()
-        pending_refresh = false
-        M.refresh(view)
+        local w = owed
+        owed = nil
+        M.refresh(view, w)
       end, 150)
     end,
   })

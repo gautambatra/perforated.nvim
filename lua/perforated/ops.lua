@@ -144,7 +144,7 @@ function M.shelve(ws, change, paths, cb)
     require('perforated.jobs').run(ws, title, args, opts, function(res)
       task.done()
       co.report('shelve', res, #res.records)
-      co.changed(ws)
+      co.changed(ws, { changes = true })
       cb(#res.errors == 0 and #res.records > 0 and not res.stopped)
     end)
   end
@@ -229,7 +229,7 @@ function M.delete_shelved(ws, change, depot_files, cb)
   local title = ('delete shelved CL %s'):format(change)
   require('perforated.jobs').run(ws, title, args, opts, function(res)
     if res.stopped then
-      co.changed(ws)
+      co.changed(ws, { changes = true })
       return cb(false)
     end
     if #res.errors > 0 then
@@ -237,7 +237,7 @@ function M.delete_shelved(ws, change, depot_files, cb)
     else
       notify(('deleted shelved files of CL %s'):format(change))
     end
-    co.changed(ws)
+    co.changed(ws, { changes = true })
     cb(#res.errors == 0)
   end)
 end
@@ -446,7 +446,7 @@ function M.delete_change(ws, change, cb)
                 vim.log.levels.ERROR
               )
             end
-            co.changed(ws)
+            co.changed(ws, { changes = true })
             cb(ok)
           end)
         end
@@ -462,7 +462,7 @@ function M.delete_change(ws, change, cb)
           cls.reopen(ws, paths, 'default', function(res)
             if #res.errors > 0 then
               notify('could not move the files: ' .. res.errors[1], vim.log.levels.ERROR)
-              co.changed(ws)
+              co.changed(ws, { files = paths, changes = true })
               return cb(false)
             end
             refresh(ws, paths)
@@ -482,12 +482,12 @@ function M.delete_change(ws, change, cb)
         local job = ('delete shelved CL %s'):format(change)
         require('perforated.jobs').run(ws, job, args, opts, function(res)
           if res.stopped then
-            co.changed(ws)
+            co.changed(ws, { changes = true })
             return cb(false)
           end
           if #res.errors > 0 then
             notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
-            co.changed(ws)
+            co.changed(ws, { changes = true })
             return cb(false)
           end
           empty_files()
@@ -1132,7 +1132,7 @@ function M.delete(ws, paths, cb)
         end
       end
     end
-    co.changed(ws)
+    co.changed(ws, { files = paths })
     cb(next(deleted) ~= nil)
   end)
 end
@@ -1172,7 +1172,7 @@ function M.move(buf, new, cb)
       -- A file opened for add comes back as action "add", not "move/add".
       local ok = #res.errors == 0 and #res.records > 0
       if not ok and res.stopped then
-        co.changed(ws)
+        co.changed(ws, { files = { old, new } })
         return cb(false)
       end
       if not ok then
@@ -1197,7 +1197,7 @@ function M.move(buf, new, cb)
         require('perforated.gate').lookup(vim.fs.dirname(new))
       )
       notify(('moved to %s'):format(vim.fn.fnamemodify(new, ':~:.')))
-      co.changed(ws)
+      co.changed(ws, { files = { old, new } })
       cb(true)
     end)
   end

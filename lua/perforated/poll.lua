@@ -130,16 +130,19 @@ end
 --- Full refresh of opened-file state (one `fstat -Ro`), updating counts, buffers and toasts.
 ---@param ws perforated.Workspace
 ---@param opts { initial: boolean?, notify: boolean? }?
----@param cb fun()?
+---@param cb fun(recs: table[]?, res: perforated.RunResult)?  the opened records (nil: failed)
 function M.refresh(ws, opts, cb)
   opts = opts or {}
   local f = follow[ws.key]
+  -- A plugin change since the last refresh explains what this one finds: its listeners
+  -- already heard of it, so no `poll` news (one more view refresh) for it.
+  local explained = f and f.event > f.started
   if f then
     f.started = vim.uv.hrtime() -- answers every event before this moment
   end
-  p4.fstat_opened(ws, { priority = 3 }, function(recs)
+  p4.fstat_opened(ws, { priority = 3 }, function(recs, res)
     if not recs then
-      return cb and cb()
+      return cb and cb(nil, res)
     end
     local opened, stale, unres = {}, 0, 0
     ws.stale_seen = ws.stale_seen or {}
@@ -215,12 +218,12 @@ function M.refresh(ws, opts, cb)
     end
     table.sort(sig)
     local key = table.concat(sig, '\n')
-    if ws.poll_sig and ws.poll_sig ~= key then
+    if ws.poll_sig and ws.poll_sig ~= key and not explained then
       require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
     end
     ws.poll_sig = key
     if cb then
-      cb()
+      cb(recs, res)
     end
   end)
 end
