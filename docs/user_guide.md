@@ -74,7 +74,8 @@ reopen it. `:w other.c` offers to add `other.c`, the file you wrote, not the buf
 - `]h` / `[h` jump between hunks.
 - **Preview** shows the hunk in a float, in the diff views' colours. In a changed line, the
   words that changed are highlighted, as in diff mode. It follows `diff.syntax`, so it's plain
-  text by default. `<Esc>` or moving the cursor closes it.
+  text by default. `<Esc>` or moving the cursor closes it. Previewing the same hunk again
+  moves into the preview, to scroll or copy from it; `q`, `<Esc>` or leaving it closes it.
 - **Reset** puts the hunk back to the have revision. It's undoable.
 
 ### Directories and wildcards

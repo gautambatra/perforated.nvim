@@ -485,6 +485,52 @@ T['ops']['the hunk preview closes on <Esc>, and the buffer gets its own <Esc> ba
   H.eq(child.lua_get('_G.mine'), true) -- the user's mapping is back
 end
 
+local function floats()
+  return child.lua_get([[#vim.tbl_filter(function(w)
+    return vim.api.nvim_win_get_config(w).relative ~= '' end, vim.api.nvim_list_wins())]])
+end
+
+T['ops']['previewing the same hunk again moves into the open preview; q goes back'] = function()
+  child.lua([[vim.keymap.set('n', '<Esc>', function() _G.mine = true end, { buffer = 0 })]])
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  local file_win = child.api.nvim_get_current_win()
+  local win = child.lua([[return require('perforated.signs').preview()]])
+  H.eq(child.lua([[return require('perforated.signs').preview()]]), win)
+  H.eq(floats(), 1)
+  H.eq(child.api.nvim_get_current_win(), win) -- in the preview, which stays open
+  child.type_keys('j')
+  H.eq(child.api.nvim_win_is_valid(win), true)
+  child.type_keys('q')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  H.eq(child.api.nvim_get_current_win(), file_win)
+  H.eq(floats(), 0)
+  child.type_keys('<Esc>')
+  H.eq(child.lua_get('_G.mine'), true) -- the user's own <Esc>, not a preview's
+end
+
+T['ops']['leaving the entered preview closes it'] = function()
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  local win = child.lua([[return require('perforated.signs').preview()]])
+  child.lua([[require('perforated.signs').preview()]])
+  child.cmd('wincmd p')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  H.eq(floats(), 0)
+end
+
+T['ops']['a preview of another hunk replaces the open one'] = function()
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  local first = child.lua([[return require('perforated.signs').preview()]])
+  -- Counted in the same call: the cursor move's CursorMoved (which closes previews) comes after.
+  local n, lines = unpack(child.lua([[vim.api.nvim_win_set_cursor(0, { 6, 0 })
+    local win = require('perforated.signs').preview()
+    local n = #vim.tbl_filter(function(w)
+      return vim.api.nvim_win_get_config(w).relative ~= '' end, vim.api.nvim_list_wins())
+    return { n, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false) }]]))
+  H.eq(n, 1)
+  H.eq(lines, { '+six' })
+  H.eq(child.api.nvim_win_is_valid(first), false)
+end
+
 T['ops']['hunk preview: changed words get DiffText, syntax follows diff.syntax'] = function()
   child.bo.filetype = 'lua'
   child.api.nvim_buf_set_lines(0, 3, 4, false, { 'four and a half' })

@@ -1033,7 +1033,7 @@ with the hunk's unified diff: in a change hunk old and new lines are paired in o
 `_word_diff` marks the changed words (`PerforatedPreviewText`); token-level `vim.text.diff` over
 word / whitespace / punctuation runs, nothing when only whitespace is in common; the file's
 filetype only with `diff.syntax`; the line colours are ranged `hl_eol` highlights, since a
-`line_hl_group` is drawn over ranged highlights whatever their priority; closed by moving, insert mode, or `<Esc>` — a temporary mapping
+`line_hl_group` is drawn over ranged highlights whatever their priority; one preview at a time (the same hunk again enters it, so `BufLeave` is ignored while entering; another hunk replaces it, closing it first so its `<Esc>` mapping is given back before the next one saves the buffer's own); closed by moving, insert mode, leaving the entered float, or `<Esc>` — a temporary mapping
 in the file's buffer that gives back a buffer-local `<Esc>` the user had) and `reset` (replace the hunk with the base lines).
 
 #### `status.lua`

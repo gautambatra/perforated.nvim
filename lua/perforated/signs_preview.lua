@@ -4,6 +4,9 @@ local signs = require('perforated.signs')
 
 local M = {}
 
+--- The open preview: `{ win, key, close, entering }` (one at a time).
+local open
+
 -- Tokens of a line for the word diff: runs of word characters (any non-ASCII byte counts, so
 -- a multibyte character stays whole), runs of whitespace, single other characters.
 ---@param s string
@@ -66,6 +69,9 @@ end
 --- Floating preview of the hunk under the cursor (old lines `-`, new lines `+`). In a change
 --- hunk, old and new lines are paired in order and the words that changed get
 --- `PerforatedPreviewText` (diff mode's `DiffText`). Syntax colouring follows `diff.syntax`.
+--- Previewing the same hunk again moves into the float (`q`, `<Esc>` or leaving it closes it);
+--- another hunk replaces it, so floats never stack.
+---@return integer? win
 function M.preview()
   local buf = vim.api.nvim_get_current_buf()
   local st = require('perforated.buffer').get(buf)
@@ -75,6 +81,16 @@ function M.preview()
       '[perforated] no hunk under cursor',
       vim.log.levels.INFO
     )
+  end
+  local key = ('%d:%s:%d:%d'):format(buf, h.type, h.a_start, h.b_start)
+  if open and vim.api.nvim_win_is_valid(open.win) then
+    if open.key == key then
+      open.entering = true -- not a BufLeave that closes it
+      vim.api.nvim_set_current_win(open.win)
+      open.entering = false
+      return open.win
+    end
+    open.close() -- before the new one saves the buffer's own `<Esc>`
   end
   local lines, hls = {}, {}
   for i = h.a_start, h.a_start + h.a_count - 1 do
@@ -136,11 +152,17 @@ function M.preview()
   local saved = vim.fn.maparg('<Esc>', 'n', false, true)
   saved = saved.buffer == 1 and saved or nil
   local closed = false
+  local group = vim.api.nvim_create_augroup('perforated.preview.' .. win, { clear = true })
+  local this
   local function close()
-    if closed then
+    if closed or this.entering then
       return
     end
     closed = true
+    if open == this then
+      open = nil
+    end
+    pcall(vim.api.nvim_del_augroup_by_id, group)
     pcall(vim.api.nvim_win_close, win, true)
     if vim.api.nvim_buf_is_valid(buf) then
       pcall(vim.keymap.del, 'n', '<Esc>', { buffer = buf })
@@ -160,14 +182,17 @@ function M.preview()
   for _, lhs in ipairs({ 'q', '<Esc>' }) do
     vim.keymap.set('n', lhs, close, { buffer = pbuf, nowait = true })
   end
+  this = { win = win, key = key, close = close }
+  open = this
   vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI', 'InsertEnter', 'BufLeave' }, {
+    group = group,
     buffer = buf,
-    once = true,
     callback = close,
   })
+  vim.api.nvim_create_autocmd('WinLeave', { group = group, buffer = pbuf, callback = close })
   vim.api.nvim_create_autocmd(
     'WinClosed',
-    { pattern = tostring(win), once = true, callback = close }
+    { group = group, pattern = tostring(win), callback = close }
   )
   return win
 end
