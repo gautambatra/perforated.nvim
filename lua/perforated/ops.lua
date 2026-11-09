@@ -675,9 +675,15 @@ function M.submit(ws, change, cb)
     M.run_submit(ws, change, nil, cb, files, task)
   end
   -- Fresh state for the warnings: `fstat -Ro` of opened files (stale / unresolved).
-  p4.fstat_opened(ws, {}, function(recs)
+  p4.fstat_opened(ws, {}, function(recs, res)
+    if not recs then
+      -- Offline, logged out…: not the same as an empty changelist.
+      task.done()
+      notify("can't submit: " .. (res.errors[1] or vim.trim(res.stderr or '')), vim.log.levels.WARN)
+      return cb(false)
+    end
     local files = {}
-    for _, r in ipairs(recs or {}) do
+    for _, r in ipairs(recs) do
       if (r.change or 'default') == change then
         files[#files + 1] = r
       end

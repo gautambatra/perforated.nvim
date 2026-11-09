@@ -216,11 +216,12 @@ M.commands = {
     desc = 'Opened files, grouped by changelist, in the quickfix list',
     run = function(ws, o)
       local lists = require('perforated.lists')
-      lists.opened_items(ws, function(items)
+      lists.opened_items(ws, function(items, err)
         require('perforated.ui.qf').set({
           title = 'P4 opened · ' .. (ws:client() or ws.key),
           kind = 'opened',
           items = items,
+          err = err,
           open = not o.bang and nil or false,
           producer = function(cb)
             lists.opened_items(ws, cb)
@@ -236,11 +237,12 @@ M.commands = {
     run = function(ws, o)
       local lists = require('perforated.lists')
       require('perforated.poll').refresh(ws, { notify = false })
-      lists.status_items(ws, function(items)
+      lists.status_items(ws, function(items, err)
         require('perforated.ui.qf').set({
           title = 'P4 status · ' .. (ws:client() or ws.key),
           kind = 'status',
           items = items,
+          err = err,
           open = not o.bang and nil or false,
           producer = function(cb)
             lists.status_items(ws, cb)
@@ -266,11 +268,12 @@ M.commands = {
         })
         return
       end
-      lists.all_hunk_items(ws, function(items)
+      lists.all_hunk_items(ws, function(items, err)
         require('perforated.ui.qf').set({
           title = 'P4 hunks · ' .. (ws:client() or ws.key),
           kind = 'hunks',
           items = items,
+          err = err,
           open = not o.bang and nil or false,
           producer = function(cb)
             lists.all_hunk_items(ws, cb)

@@ -764,6 +764,70 @@ T['ops']['large files are diffed off the main thread'] = function()
   H.eq(child.lua_get('_G.async_calls') >= 1, true)
 end
 
+--- Mark the workspace's connection down: 'offline' (unreachable) or 'offline_auth' (logged out).
+local function go_offline(state, why)
+  child.lua([[local ws = require('perforated').workspace(); ws.conn:_set(...)]], { state, why })
+end
+
+local function qf_count()
+  return child.lua_get('#vim.fn.getqflist()')
+end
+
+T['ops']['offline: submit says why instead of "nothing to submit"'] = function()
+  go_offline('offline', 'gone')
+  child.lua([[require('perforated.ops').submit(require('perforated').workspace(), 'default')]])
+  H.eq(H.wait_message(child, "can't submit: Perforce server unreachable"), true)
+  H.eq(H.messages(child):find('nothing to submit', 1, true), nil)
+end
+
+T['ops']['an empty default changelist still says "nothing to submit"'] = function()
+  server:p4({ 'revert', root .. '/a.txt' }, { client = 'alice_ws', cwd = root })
+  child.lua([[require('perforated.ops').submit(require('perforated').workspace(), 'default')]])
+  H.eq(H.wait_message(child, 'nothing to submit in the default changelist'), true)
+end
+
+T['ops']['offline: :P4 opened and gr keep the list and say why'] = function()
+  child.cmd('P4 opened')
+  wait('#vim.fn.getqflist() > 0')
+  local n = qf_count()
+  go_offline('offline', 'gone')
+  child.cmd('P4 opened')
+  H.eq(H.wait_message(child, 'P4 opened · alice_ws: Perforce server unreachable'), true)
+  H.eq(H.messages(child):find('nothing to show', 1, true), nil)
+  H.eq(qf_count(), n)
+  -- `gr` in the list window: the same.
+  child.cmd('copen')
+  child.type_keys('gr')
+  vim.uv.sleep(300)
+  H.eq(qf_count(), n)
+end
+
+T['ops']['logged out: :P4 status and :P4 hunks say so'] = function()
+  go_offline('offline_auth', 'login cancelled')
+  child.cmd('P4 status')
+  H.eq(
+    H.wait_message(child, 'P4 status · alice_ws: Not logged in to Perforce; run :P4 login'),
+    true
+  )
+  child.cmd('P4 hunks')
+  H.eq(
+    H.wait_message(child, 'P4 hunks · alice_ws: Not logged in to Perforce; run :P4 login'),
+    true
+  )
+  H.eq(H.messages(child):find('nothing to show', 1, true), nil)
+end
+
+T['ops']['offline: the opened-files diff tab and picker say why, nothing opens'] = function()
+  local tabs = #child.api.nvim_list_tabpages()
+  go_offline('offline', 'gone')
+  child.lua([[require('perforated.diff.tab').open_opened(require('perforated').workspace())]])
+  H.eq(H.wait_message(child, 'opened files · alice_ws: Perforce server unreachable'), true)
+  child.lua([[require('perforated.picker.sources').opened(require('perforated').workspace())]])
+  H.eq(H.wait_message(child, 'opened files: Perforce server unreachable'), true)
+  H.eq(#child.api.nvim_list_tabpages(), tabs)
+  H.eq(child.lua_get([[vim.bo.filetype]]) ~= 'TelescopePrompt', true)
+end
+
 T['modes'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

@@ -13,7 +13,7 @@
 
 local M = {}
 
-local producers = {} ---@type table<integer, fun(cb: fun(items: table[]))>  list id → producer
+local producers = {} ---@type table<integer, fun(cb: fun(items: table[], err: string?))>  list id → producer
 local on_qf_buf -- forward declaration
 
 ---@class perforated.QfSpec
@@ -23,7 +23,8 @@ local on_qf_buf -- forward declaration
 ---@field loclist boolean?
 ---@field win integer?         loclist window (default current)
 ---@field open boolean?        override config.qf.open
----@field producer fun(cb: fun(items: table[]))?  for `gr` refresh
+---@field producer fun(cb: fun(items: table[], err: string?))?  for `gr` refresh
+---@field err string?          the query failed (offline, logged out…): say so, keep the list
 
 local function what(spec, items)
   return {
@@ -34,11 +35,24 @@ local function what(spec, items)
   }
 end
 
---- Create a list (and open it per policy).
+--- A list's query failed: warn with the reason; the list on screen stays as it was.
+---@param title string
+---@param err string
+local function failed(title, err)
+  require('perforated.ui.toast').notify(
+    ('[perforated] %s: %s'):format(title, err),
+    vim.log.levels.WARN
+  )
+end
+
+--- Create a list (and open it per policy). With `spec.err`, only warn (nil id).
 ---@param spec perforated.QfSpec
----@return integer id
+---@return integer? id
 function M.set(spec)
   M.setup()
+  if spec.err then
+    return failed(spec.title, spec.err)
+  end
   local w = what(spec, spec.items)
   local id
   if spec.loclist then
@@ -154,7 +168,10 @@ local function refresher(quiet)
       end
       return
     end
-    producer(function(items)
+    producer(function(items, err)
+      if err then
+        return failed(cur.title, err)
+      end
       local w = { id = cur.id, items = items, title = cur.title }
       if is_loc then
         if vim.api.nvim_win_is_valid(win) then

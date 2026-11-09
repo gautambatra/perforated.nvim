@@ -481,7 +481,7 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
     return f.depotFile
   end, shelved)
   -- Two queries at once: where the shelved files are, and what is opened.
-  local map, opened
+  local map, opened, failed
   local function relative(path)
     if ws.root and path:sub(1, #ws.root + 1) == ws.root .. '/' then
       return path:sub(#ws.root + 2)
@@ -491,6 +491,9 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
   local function done()
     if not map or not opened then
       return
+    end
+    if failed then
+      return notify(('CL %s: %s'):format(change, failed), vim.log.levels.WARN)
     end
     local in_shelf = {}
     for _, d in ipairs(depot) do
@@ -532,8 +535,9 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
     map = m
     done()
   end)
-  p4.fstat_opened(ws, {}, function(recs)
+  p4.fstat_opened(ws, {}, function(recs, res)
     opened = recs or {}
+    failed = not recs and (res.errors[1] or vim.trim(res.stderr or '')) or nil
     done()
   end)
 end
@@ -542,8 +546,15 @@ end
 ---@param ws perforated.Workspace
 function M.open_opened(ws)
   start_busy()
-  p4.fstat_opened(ws, {}, function(recs)
-    M.open(ws, 'opened files · ' .. (ws:client() or ws.key), opened_entries(ws, recs or {}))
+  p4.fstat_opened(ws, {}, function(recs, res)
+    local title = 'opened files · ' .. (ws:client() or ws.key)
+    if not recs then
+      return notify(
+        title .. ': ' .. (res.errors[1] or vim.trim(res.stderr or '')),
+        vim.log.levels.WARN
+      )
+    end
+    M.open(ws, title, opened_entries(ws, recs))
   end)
 end
 

@@ -1692,6 +1692,12 @@ PerforatedChanged`, which refreshes visible views) and refresh affected buffers.
 when the operation touched only some files (`files`) or only changelists (`changes`), so the
 client view re-runs only those queries; leave it out when anything may have changed.
 
+**Failed is not empty.** A query that failed (`res.ok` false: offline, logged out, p4's error)
+must not be shown as an empty result ("nothing to submit", "nothing to show"). Pass the reason
+on (`res.errors[1]`, which for a refused call is the connection's own message) and warn with
+it: the list builders in `lists.lua` call `cb(items, err)`, and `qf.set{ err = … }` (or a
+producer's `err`) warns and keeps the list on screen.
+
 **Async safety.** Callbacks check buffer/window validity; long operations are jobs (stoppable);
 no synchronous waits except one bounded `vim.wait` (a write waits for an in-flight `p4 edit`).
 

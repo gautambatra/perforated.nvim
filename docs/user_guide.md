@@ -701,6 +701,10 @@ the one that last changed the line, history, annotate, time-lapse.
   background retry backs off from 5 s to 5 min; the statusline shows `⊘`. A command that's
   merely slow doesn't count: the plugin checks the server first and only goes offline if that
   fails too.
+  Commands that list things say why they couldn't instead of showing an empty result: `P`
+  says "can't submit: Perforce server unreachable…" rather than "nothing to submit", and
+  `:P4 opened`, `:P4 status` and `:P4 hunks` (or `gr` in their list) warn and leave the list
+  you had.
 - **`:P4 log`** lists every p4 command the plugin ran, with timings.
 
 ## Debug log

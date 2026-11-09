@@ -17,14 +17,24 @@ local function first_line(s)
   return vim.trim((s or ''):match('[^\n]*') or '')
 end
 
---- Opened files grouped by changelist.
+--- Why a query failed (offline, logged out, p4's error), for the list's warning.
+---@param res perforated.RunResult
+---@return string
+local function failure(res)
+  return res.errors[1] or vim.trim(res.stderr or '')
+end
+
+--- Opened files grouped by changelist. `err` when the opened files couldn't be listed.
 ---@param ws perforated.Workspace
----@param cb fun(items: table[])
+---@param cb fun(items: table[], err: string?)
 function M.opened_items(ws, cb)
-  local recs, changes, modified
+  local recs, changes, modified, err
   local function done()
     if not recs or not changes or modified == nil then
       return
+    end
+    if err then
+      return cb({}, err)
     end
     local mod = require('perforated.modified')
     local overlay = mod.overlay(ws)
@@ -80,8 +90,9 @@ function M.opened_items(ws, cb)
     end
     cb(items)
   end
-  p4.fstat_opened(ws, {}, function(r)
+  p4.fstat_opened(ws, {}, function(r, res)
     recs = r or {}
+    err = not r and failure(res) or nil
     done()
   end)
   p4.pending_changes(ws, function(c)
@@ -94,13 +105,16 @@ function M.opened_items(ws, cb)
   end)
 end
 
---- Opened files that are stale (have < head) or unresolved.
+--- Opened files that are stale (have < head) or unresolved. `err` when they couldn't be listed.
 ---@param ws perforated.Workspace
----@param cb fun(items: table[])
+---@param cb fun(items: table[], err: string?)
 function M.status_items(ws, cb)
-  p4.fstat_opened(ws, {}, function(recs)
+  p4.fstat_opened(ws, {}, function(recs, res)
+    if not recs then
+      return cb({}, failure(res))
+    end
     local items = {}
-    for _, r in ipairs(recs or {}) do
+    for _, r in ipairs(recs) do
       local why = {}
       if require('perforated.status').is_stale(r) then
         why[#why + 1] = ('stale %s → sync before submit'):format(revs(r))
@@ -168,12 +182,15 @@ end
 --- Hunks across every opened file: one fstat, one batched print for uncached bases, then
 --- in-process diffs (loaded buffers use their current text; others are read from disk).
 ---@param ws perforated.Workspace
----@param cb fun(items: table[])
+---@param cb fun(items: table[], err: string?)  `err` when the opened files couldn't be listed
 function M.all_hunk_items(ws, cb)
-  p4.fstat_opened(ws, {}, function(recs)
+  p4.fstat_opened(ws, {}, function(recs, res)
+    if not recs then
+      return cb({}, failure(res))
+    end
     recs = vim.tbl_filter(function(r)
       return p4.is_text(r) and r.action ~= 'delete' and r.action ~= 'move/delete'
-    end, recs or {})
+    end, recs)
     table.sort(recs, function(a, b)
       return a.clientFile < b.clientFile
     end)

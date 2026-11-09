@@ -33,9 +33,15 @@ function M.pending(ws)
         vim.log.levels.ERROR
       )
     end
-    p4.fstat_opened(ws, {}, function(recs)
+    p4.fstat_opened(ws, {}, function(recs, res)
+      if not recs then
+        return require('perforated.ui.toast').notify(
+          '[perforated] ' .. (res.errors[1] or vim.trim(res.stderr or '')),
+          vim.log.levels.WARN
+        )
+      end
       local files = {}
-      for _, r in ipairs(recs or {}) do
+      for _, r in ipairs(recs) do
         local cl = r.change or 'default'
         files[cl] = files[cl] or {}
         table.insert(files[cl], r)
@@ -67,8 +73,13 @@ end
 
 --- Opened files → open them.
 function M.opened(ws)
-  p4.fstat_opened(ws, {}, function(recs)
-    recs = recs or {}
+  p4.fstat_opened(ws, {}, function(recs, res)
+    if not recs then
+      return require('perforated.ui.toast').notify(
+        '[perforated] opened files: ' .. (res.errors[1] or vim.trim(res.stderr or '')),
+        vim.log.levels.WARN
+      )
+    end
     picker.pick({
       title = 'Opened files',
       items = recs,
