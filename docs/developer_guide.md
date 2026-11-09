@@ -1529,6 +1529,11 @@ another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's
 failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view, and `M.MENU_LAYOUT` the order and grouping
 of the `.` menu on changelists and opened files. A `BufWritePost`
 hook updates one file's changed marker; a `PerforatedChanged` hook refreshes the visible view.
+`d` on a file never opened in this session (`diff_file`) gives the new buffer the view's own
+record of it (the same fstat fields) through `buffer.apply`, so the diff opens without waiting
+for the buffer's own fstat. Only a buffer that can't attach yet (a workspace known only from the
+environment, waiting for `p4 info`) is waited for, on a 20 ms timer for up to `DIFF_WAIT_MS`
+(3 s); a newer `d` replaces a waiting one.
 
 #### `views/describe.lua`
 `:P4 describe N`: header, description, files and shelved files; `<Tab>` expands a file's
@@ -1683,7 +1688,7 @@ when the operation touched only some files (`files`) or only changelists (`chang
 client view re-runs only those queries; leave it out when anything may have changed.
 
 **Async safety.** Callbacks check buffer/window validity; long operations are jobs (stoppable);
-no synchronous waits except bounded `vim.wait` in a few deliberate places.
+no synchronous waits except one bounded `vim.wait` (a write waits for an in-flight `p4 edit`).
 
 **Commit messages.** Imperative subject, a body explaining what changed and why. No
 co-author / AI attribution trailers.

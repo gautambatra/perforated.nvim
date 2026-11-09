@@ -664,6 +664,66 @@ T['client view']['D shows "Opening diff view…" until the tab is open'] = funct
   H.eq(child.lua_get([[#require('perforated.ui.toast').visible()]]), 0)
 end
 
+T['client view']['d on a file not loaded yet opens the diff without waiting for its fstat'] = function()
+  -- Wrap p4 so a buffer's own status query (`fstat -T …`, not the view's `fstat -Ro`) takes 2 s.
+  local wrapper = server.dir .. '/slow-p4'
+  H.write(
+    wrapper,
+    ('#!/bin/sh\ncase "$*" in *"fstat -T"*) sleep 2;; esac\nexec %s "$@"\n'):format(P.p4)
+  )
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  open_view()
+  child.lua(
+    'vim.g.perforated = vim.tbl_extend("force", vim.g.perforated, { p4 = ... })',
+    { wrapper }
+  )
+  child.lua([[require('perforated.config').reload()]])
+  H.write(root .. '/b.txt', 'b2\n')
+  goto_line('b.txt')
+  local tabs = #child.api.nvim_list_tabpages()
+  -- The key runs to completion here: a blocking wait inside it shows as its duration.
+  local ms = child.lua([[local t = vim.uv.hrtime()
+    vim.api.nvim_feedkeys('d', 'x', false)
+    return (vim.uv.hrtime() - t) / 1e6]])
+  H.eq(ms < 500, true)
+  wait(('#vim.api.nvim_list_tabpages() == %d'):format(tabs + 1), 5000)
+  H.eq(child.lua_get([[vim.fs.basename(vim.api.nvim_buf_get_name(0))]]), 'b.txt')
+end
+
+T['client view']['d waits for a buffer attached later without blocking; gives up after a while'] = function()
+  H.write(root .. '/b.txt', 'b2\n')
+  open_view()
+  -- Attaching late, as for a workspace known only from the environment (waits for p4 info).
+  child.lua([[
+    local act = require('perforated.core.activation')
+    local attach = act.attach
+    act.attach = function(buf, path, found)
+      if _G.never then return end
+      vim.defer_fn(function() attach(buf, path, found) end, 300)
+    end
+  ]])
+  goto_line('b.txt')
+  local tabs = #child.api.nvim_list_tabpages()
+  local ms = child.lua([[local t = vim.uv.hrtime()
+    vim.api.nvim_feedkeys('d', 'x', false)
+    return (vim.uv.hrtime() - t) / 1e6]])
+  H.eq(ms < 200, true)
+  wait(('#vim.api.nvim_list_tabpages() == %d'):format(tabs + 1), 5000)
+  -- Never attached: after DIFF_WAIT_MS it says why and the busy indicator goes.
+  child.cmd('tabclose')
+  child.lua([[_G.never = true; require('perforated.views.client').DIFF_WAIT_MS = 200]])
+  goto_line('c.txt')
+  child.type_keys('d')
+  H.eq(H.wait_message(child, 'status not known yet'), true)
+  H.eq(#child.api.nvim_list_tabpages(), tabs)
+  H.eq(
+    child.lua_get(
+      [[vim.tbl_map(function(t) return t.title end, require('perforated.ui.toast').visible())]]
+    ),
+    { 'Perforce: warning' } -- the message above; "Opening diff view…" is gone
+  )
+end
+
 T['client view']['marks inside a collapsed changelist still apply'] = function()
   open_view()
   child.lua([[vim.ui.select = function(items, _, cb)

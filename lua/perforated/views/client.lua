@@ -812,8 +812,15 @@ local function shelved_by_change(nodes)
   return out
 end
 
+-- Bumped by each `diff_file`, so a diff still waiting for its buffer gives way to a newer one.
+local diff_gen = 0
+
+--- Most a diff waits for its buffer to get a status, in ms.
+M.DIFF_WAIT_MS = 3000
+
 --- Open a workspace file for diffing: load its buffer, then :P4 diff (against `rev`, default
---- the have revision).
+--- the have revision). Never waits on p4: the view's record (the same fstat fields) is the
+--- buffer's status until its own query answers.
 local function diff_file(rec, rev)
   local path = rec.clientFile
   if not path or not path:match('^/') then
@@ -821,26 +828,55 @@ local function diff_file(rec, rev)
   end
   -- Loading the file and its status takes a moment too.
   local dview = require('perforated.diff.view')
+  local buffer = require('perforated.buffer')
   dview.start_busy()
   local buf = vim.fn.bufadd(path)
   vim.fn.bufload(buf)
-  local st = require('perforated.buffer').get(buf)
-  if not st then
-    -- Not attached yet (never opened in this session): attach and wait for its status.
+  if not buffer.get(buf) then
+    -- Not attached yet (never opened in this session).
     require('perforated.core.activation').attach(
       buf,
       path,
       require('perforated.gate').lookup(vim.fs.dirname(path))
     )
   end
-  vim.wait(3000, function()
-    local s = require('perforated.buffer').get(buf)
-    return s ~= nil and s.rec ~= nil
-  end, 10)
-  if not (require('perforated.buffer').get(buf) or {}).rec then
-    dview.finish_busy() -- open() says why
+  local st = buffer.get(buf)
+  -- Another client's file (`opened -a`, all-clients scope) has no record for this buffer.
+  if st and not st.rec and rec.depotFile and not rec.client then
+    buffer.apply(buf, rec)
   end
-  dview.open(buf, rev)
+  diff_gen = diff_gen + 1
+  if (buffer.get(buf) or {}).rec then
+    return dview.open(buf, rev)
+  end
+  -- Not attached yet (a workspace known only from the environment waits for `p4 info`): check
+  -- again on a timer, without blocking.
+  local gen, waited = diff_gen, 0
+  local timer = assert(vim.uv.new_timer())
+  timer:start(
+    20,
+    20,
+    vim.schedule_wrap(function()
+      if timer:is_closing() then
+        return
+      end
+      waited = waited + 20
+      local ready = (buffer.get(buf) or {}).rec ~= nil
+      if gen == diff_gen and not ready and waited < M.DIFF_WAIT_MS then
+        return
+      end
+      timer:close()
+      if gen ~= diff_gen then
+        return -- a newer diff took over (and owns the busy indicator)
+      end
+      if not ready then
+        dview.finish_busy() -- open() says why
+      end
+      if vim.api.nvim_buf_is_valid(buf) then
+        dview.open(buf, rev)
+      end
+    end)
+  )
 end
 
 --- A workspace file with depot history (not another client's file, not a new add).
