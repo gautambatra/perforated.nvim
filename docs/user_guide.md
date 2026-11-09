@@ -42,8 +42,12 @@ The first change to an unopened (read-only) depot file opens a small menu next t
   session. It's dropped once that changelist is submitted or deleted.
 - **Choosing a changelist.** `c` lists the default changelist, your pending ones and
   `+ new changelist…`.
-- **Writes never wait on the server.** Choosing a target makes the file writable at once;
-  `p4 edit` runs in the background while a "Checking out a.c…" pop-up shows.
+- **Checking out runs in the background.** `p4 edit` runs while a "Checking out a.c…" pop-up
+  shows, and you keep typing. A `:w` (or `:wq`) made before p4 answers waits for it, saying
+  "Waiting for p4 edit of a.c before writing… (Ctrl-C to stop)", for up to `runner.timeout`
+  (10 s). If p4 is still working when you press Ctrl-C or the time runs out, the file isn't
+  written: Neovim reports it read-only, the buffer keeps your changes and `:wq` doesn't quit.
+  `:w` again once the file is checked out.
 - **Warnings.** The menu warns when a newer revision exists in the depot, or when another user
   has the file open.
 - **Typing through the menu is safe.** Keys typed in the first 300 ms after the menu appears

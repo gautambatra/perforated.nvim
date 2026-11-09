@@ -367,8 +367,8 @@ tools:
 - **Coroutines** can make callback chains read sequentially; this codebase uses plain
   callbacks.
 - **`vim.wait(ms, cond)`** processes events while waiting — acceptable in short, bounded
-  cases (the check-out waits for an in-flight `p4 edit` before a write), never as a general
-  tool.
+  cases that say what they wait for and stop on Ctrl-C (the check-out waits for an in-flight
+  `p4 edit` before a write), never as a general tool.
 
 Rules this plugin follows:
 
@@ -742,8 +742,13 @@ why keys, menus and help never disagree.
    during the first 300 ms (`checkout.prompt_grace`) are treated as typing, not choices, and
    replayed.
 3. The choice runs `p4 edit` asynchronously. If you `:w` while it's in flight, `BufWritePre`
-   waits (bounded) for it. The file is made writable optimistically because Neovim checks
-   write permission before any write autocmd runs.
+   waits for it (`vim.wait`, up to `checkout.WRITE_WAIT_MS` or else `runner.timeout`; Ctrl-C
+   stops it), with a message saying so. The file is made writable optimistically because
+   Neovim checks write permission before any write autocmd runs. If the edit is still running
+   when the wait ends, `before_write` makes the file read-only again: Neovim checks again after
+   `BufWritePre` and refuses the write (E505, on 0.11 and 0.12), so the buffer stays modified,
+   `:wq` doesn't quit, and nothing lands in a file p4 may yet refuse to open. The old mode is
+   kept in `refused_mode`, and `edit` puts it back if p4 opens the file.
 4. `FileChangedShell` for a permission-only change (p4 flipped the permission bit) is
    silenced. Neovim reports it as `mode`, but as `conflict` (W12) when the buffer has unsaved
    edits — the usual case right after a check-out — so the plugin compares the file's mtime and

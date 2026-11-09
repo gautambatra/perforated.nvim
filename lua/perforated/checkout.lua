@@ -5,7 +5,8 @@
 ---   doesn't warn → the change goes through → menu: <CR> sticky/default CL · c pick · n new ·
 ---   A always (session) · s skip (buffer; for add: this file, session) · S never (session) →
 ---   async `p4 edit` → refresh.
----   BufWritePre waits (bounded) for an in-flight edit so the write never races it.
+---   BufWritePre waits (bounded, Ctrl-C stops it) for an in-flight edit so the write never
+---   races it; if p4 is still working then, the write is refused (the file goes read-only).
 
 local p4 = require('perforated.p4')
 local config = require('perforated.config')
@@ -20,6 +21,7 @@ local M = {}
 ---@field prompting boolean?
 ---@field scheduled boolean? a prompt is queued (FileChangedRO and the 'modified' hook both fire)
 ---@field restore fun()?     undo an optimistic chmod (on_write mode) if the edit fails
+---@field refused_mode integer? the file's mode before a write that stopped waiting made it read-only
 
 local cs = {} ---@type table<integer, perforated.CheckoutState>
 -- Per Neovim session: never ask, always use the target, and files not to ask about again
@@ -226,6 +228,7 @@ function M.edit(ws, paths, cl, cb)
       state(b).pending = false
     end
     local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
+    local keep = {}
     if not ok then
       -- Only the files p4 didn't open go back to read-only: after a partial failure the
       -- opened ones must stay writable.
@@ -236,13 +239,21 @@ function M.edit(ws, paths, cl, cb)
         end
       end
       dbg.warn('checkout', 'edit failed; restoring file modes for unopened path(s)')
-      local keep = {}
       for _, p in ipairs(paths) do
         if opened[vim.fs.normalize(p)] then
           keep[p] = true
         end
       end
       restore(keep)
+    end
+    -- A write that stopped waiting made its file read-only again: opened, it is writable.
+    for _, b in ipairs(bufs) do
+      local c = state(b)
+      local st = require('perforated.buffer').get(b)
+      if c.refused_mode and st and (ok or keep[st.path]) then
+        vim.uv.fs_chmod(st.path, c.refused_mode)
+      end
+      c.refused_mode = nil
     end
     report('edit', res, #res.records)
     changed(ws, { files = paths })
@@ -438,7 +449,12 @@ local function other_target(st, ev)
   end
 end
 
---- Block (bounded) until an in-flight edit finishes; check out on write when configured.
+--- Most a write waits for an in-flight edit of its file, in ms (nil = `runner.timeout`).
+---@type integer?
+M.WRITE_WAIT_MS = nil
+
+--- Block (bounded, Ctrl-C stops it) until an in-flight edit finishes; check out on write when
+--- configured.
 ---@param buf integer
 ---@param ev table
 local function before_write(buf, ev)
@@ -466,16 +482,42 @@ local function before_write(buf, ev)
   end
   if c.pending then
     local t0 = vim.uv.hrtime()
-    vim.wait(config.get().runner.timeout, function()
+    local name = vim.fn.fnamemodify(st.path, ':t')
+    vim.api.nvim_echo(
+      { { ('Waiting for p4 edit of %s before writing… (Ctrl-C to stop)'):format(name) } },
+      false,
+      {}
+    )
+    vim.cmd.redraw()
+    local got = vim.wait(M.WRITE_WAIT_MS or config.get().runner.timeout, function()
       return not c.pending
     end, 10)
+    vim.api.nvim_echo({ { '' } }, false, {})
     dbg.debug(
       'checkout',
-      'buf %d write waited %.0fms for edit (done=%s)',
+      'buf %d write waited %.0fms for edit (done=%s, wait=%s)',
       buf,
       (vim.uv.hrtime() - t0) / 1e6,
-      tostring(not c.pending)
+      tostring(not c.pending),
+      tostring(got)
     )
+    if c.pending then
+      -- Stopped (Ctrl-C) or out of time with p4 still working: the file was made writable
+      -- ahead of the edit, so the write would land in a file p4 may yet refuse to open. Make
+      -- it read-only again: Neovim refuses the write (E505), the buffer stays modified and
+      -- `:wq` doesn't quit. The edit puts the mode back if it opens the file.
+      local fst = vim.uv.fs_stat(st.path)
+      if fst and vim.fn.filewritable(st.path) == 1 then
+        c.refused_mode = fst.mode
+        vim.uv.fs_chmod(st.path, bit.band(fst.mode, bit.bnot(tonumber('222', 8))))
+      end
+      notify(
+        ('p4 edit of %s is still running: not written (:w again once it is checked out)'):format(
+          name
+        ),
+        vim.log.levels.WARN
+      )
+    end
   end
 end
 

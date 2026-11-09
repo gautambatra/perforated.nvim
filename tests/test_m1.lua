@@ -222,6 +222,68 @@ T['checkout']['write right after choosing waits for the in-flight edit'] = funct
   H.eq(opened()['//depot/a.txt'], 'default')
 end
 
+--- Wrap p4 so `p4 edit` takes `secs` seconds.
+local function slow_edit(secs)
+  local wrapper = server.dir .. '/slow-p4'
+  H.write(
+    wrapper,
+    ('#!/bin/sh\ncase "$*" in *" edit"*) sleep %s;; esac\nexec %s "$@"\n'):format(secs, P.p4)
+  )
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  child.lua(
+    'vim.g.perforated = vim.tbl_extend("force", vim.g.perforated, { p4 = ... })',
+    { wrapper }
+  )
+  child.lua([[require('perforated.config').reload()]])
+end
+
+local function on_disk(rel)
+  return table.concat(vim.fn.readfile(root .. '/' .. rel), '\n')
+end
+
+T['checkout']['a write that outlasts the wait is refused, not raced; :wq stays'] = function()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  slow_edit(2)
+  child.lua([[require('perforated.checkout').WRITE_WAIT_MS = 400]])
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('<CR>')
+  child.cmd('silent! wq')
+  H.eq(child.lua_get('vim.v.errmsg'):find('E505', 1, true) ~= nil, true)
+  H.eq(child.bo.modified, true)
+  H.eq(on_disk('a.txt'):sub(1, 3), 'one')
+  H.eq(H.wait_message(child, 'p4 edit of a.txt is still running'), true)
+  -- Once p4 has opened it, the file is writable again and :w goes through.
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(vim.fn.filewritable(root .. '/a.txt'), 1)
+  child.cmd('write')
+  H.eq(child.bo.modified, false)
+  H.eq(on_disk('a.txt'):sub(1, 3), 'ne\n')
+  H.eq(opened()['//depot/a.txt'], 'default')
+end
+
+T['checkout']['Ctrl-C stops the wait; the file is left as it was'] = function()
+  edit('a.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  slow_edit(3)
+  child.type_keys('x')
+  wait_prompt()
+  child.type_keys('<CR>')
+  child.type_keys(':w<CR>')
+  vim.uv.sleep(300)
+  H.neq(tostring(child.get_screenshot()):find('Waiting for p4 edit of a.txt', 1, true), nil)
+  -- The refused write is Neovim's E505 (raised here by type_keys).
+  local ok, err = pcall(child.type_keys, '<C-c>')
+  H.eq(ok, false)
+  H.neq(tostring(err):find('E505', 1, true), nil)
+  H.eq(H.wait_message(child, 'p4 edit of a.txt is still running'), true)
+  H.eq(child.bo.modified, true)
+  H.eq(on_disk('a.txt'):sub(1, 3), 'one')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  H.eq(vim.fn.filewritable(root .. '/a.txt'), 1)
+end
+
 T['checkout']['p4 edit flipping the mode bit does not trigger a file-changed prompt'] = function()
   edit('a.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
