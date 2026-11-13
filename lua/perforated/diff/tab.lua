@@ -4,6 +4,8 @@
 --- shelved), a submitted CL (#rev-1 ↔ #rev), or every opened file (`:P4 diff -a`).
 --- Files load lazily when selected (the next one is prefetched). Moving the cursor in the
 --- panel selects; `q` closes the tab; `<Tab>`/`<S-Tab>` step through files from any window.
+--- The panel's keys come from the action registry (`ui/keys.lua`): `?`, the `.` menu and the
+--- footer, `o` opens the file and `r` reverts an opened one.
 
 local p4 = require('perforated.p4')
 local cls = require('perforated.changelists')
@@ -19,6 +21,7 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 ---@field action string?
 ---@field left perforated.DiffSide
 ---@field right perforated.DiffSide|{ path: string }
+---@field client_file string?  set for opened files: what `r` reverts
 
 -- "Opening diff view…": shown as soon as a diff tab is asked for (fetching file lists and the
 -- identical-files check take a moment), closed when the tab opens or the request ends any
@@ -61,6 +64,116 @@ local function workspace_buf(path)
 end
 
 local open_tab
+
+--- A panel line: action, icon, then the name before its folder, so a long path cuts off the
+--- folder and not the name. Returns the line and the byte column where the folder starts.
+---@param e perforated.DiffEntry
+---@param icon boolean
+---@return string line, integer? dir_col
+local function panel_line(e, icon)
+  local dir, name = e.label:match('^(.*/)([^/]+)$')
+  name = name or e.label
+  local ic = icon and require('perforated.ui.icons').file(e.label) or ''
+  local line = (' %-9s %s%s'):format(e.action or '', ic ~= '' and (ic .. ' ') or '', name)
+  if not dir then
+    return line, nil
+  end
+  return line .. '  ' .. dir, #line + 2
+end
+
+--- The panel's actions. `p` is the open tab: { ws, step, focus, close, open, revert, actions,
+--- view }.
+---@param p table
+---@return perforated.Action[]
+local function panel_actions(p)
+  local FILE = { file = true }
+  return {
+    require('perforated.lookup').action(function()
+      return p.ws
+    end),
+    {
+      id = 'next_file',
+      desc = 'Next file',
+      keys = { 'j', '<Down>', '<Tab>' },
+      nomenu = true,
+      run = function()
+        p.step(vim.v.count1)
+      end,
+    },
+    {
+      id = 'prev_file',
+      desc = 'Previous file',
+      keys = { 'k', '<Up>', '<S-Tab>' },
+      nomenu = true,
+      run = function()
+        p.step(-vim.v.count1)
+      end,
+    },
+    {
+      id = 'focus_diff',
+      desc = 'Go to the diff',
+      keys = { '<CR>' },
+      kinds = FILE,
+      nomenu = true,
+      run = function()
+        p.focus()
+      end,
+    },
+    {
+      id = 'open',
+      desc = 'Open file',
+      keys = { 'o' },
+      kinds = FILE,
+      footer = 10,
+      run = function(items)
+        p.open(items[1])
+      end,
+    },
+    {
+      id = 'revert',
+      desc = 'Revert',
+      keys = { 'r' },
+      p4v = { '<C-r>' },
+      kinds = FILE,
+      footer = 20,
+      when = function(e)
+        return e ~= nil and e.client_file ~= nil
+      end,
+      run = function(items)
+        p.revert(items[1])
+      end,
+    },
+    {
+      id = 'close',
+      desc = 'Close',
+      keys = { 'q' },
+      p4v = { '<C-w>' },
+      nomenu = true,
+      run = function()
+        p.close()
+      end,
+    },
+    {
+      id = 'help',
+      desc = 'Help',
+      keys = { '?' },
+      nomenu = true,
+      run = function()
+        require('perforated.ui.keys').help(p.actions, 'Diff tab')
+      end,
+    },
+    {
+      id = 'menu',
+      desc = 'Action menu',
+      keys = { '.', '<RightMouse>' },
+      nomenu = true,
+      run = function()
+        require('perforated.ui.keys').menu(p.actions, p.view)
+      end,
+    },
+  }
+end
+M._panel_actions = panel_actions -- for the generated help (scripts/gen_doc.lua)
 
 --- Open the diff tab, unless every file is identical (then just say so). Only files that
 --- differ get a diff; identical ones are listed under "Identical:" at the end of the panel.
@@ -125,6 +238,7 @@ end
 ---@param entries perforated.DiffEntry[]
 ---@param listed { title: string, entries: perforated.DiffEntry[] }[]  sections listed, not diffed
 open_tab = function(ws, title, entries, listed)
+  local origin_win = vim.api.nvim_get_current_win() -- where `o` opens a file
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
   local panel_buf = vim.api.nvim_get_current_buf()
@@ -134,52 +248,57 @@ open_tab = function(ws, title, entries, listed)
   pcall(vim.api.nvim_buf_set_name, panel_buf, 'perforated://files/' .. title)
   local panel = vim.api.nvim_get_current_win()
 
-  -- Panel content
-  local icons = require('perforated.ui.icons')
-  local lines = { ' ' .. title, '' }
-  for _, e in ipairs(entries) do
-    local icon = icons.file(e.label)
-    lines[#lines + 1] = (' %-9s %s%s'):format(
-      e.action or '',
-      icon ~= '' and (icon .. ' ') or '',
-      e.label
-    )
-  end
-  vim.api.nvim_buf_set_lines(panel_buf, 0, -1, false, lines)
-  vim.bo[panel_buf].modifiable = false
-  vim.api.nvim_buf_set_extmark(panel_buf, ns, 0, 0, { line_hl_group = 'PerforatedTitle' })
-  for i = 1, #entries do
-    vim.api.nvim_buf_set_extmark(
-      panel_buf,
-      ns,
-      i + 1,
-      1,
-      { end_col = 10, hl_group = 'PerforatedAction' }
-    )
-  end
-  for _, sec in ipairs(listed) do
-    if #sec.entries > 0 then
-      local first = #lines
-      lines[#lines + 1] = ''
-      lines[#lines + 1] = (' %s (%d):'):format(sec.title, #sec.entries)
-      for _, e in ipairs(sec.entries) do
-        lines[#lines + 1] = (' %-9s %s'):format(e.action or '', e.label)
+  -- Panel content: the title, a row per file that differs (rows 3 … #entries + 2), then the
+  -- listed-only sections. Rendered again when a revert takes a file out.
+  local function render()
+    local lines, dirs = { ' ' .. title, '' }, {}
+    for _, e in ipairs(entries) do
+      local row = #lines + 1
+      lines[row], dirs[row] = panel_line(e, true)
+    end
+    local sections = {}
+    for _, sec in ipairs(listed) do
+      if #sec.entries > 0 then
+        lines[#lines + 1] = ''
+        lines[#lines + 1] = (' %s (%d):'):format(sec.title, #sec.entries)
+        sections[#sections + 1] = { #lines - 1, #lines + #sec.entries - 1 }
+        for _, e in ipairs(sec.entries) do
+          lines[#lines + 1] = panel_line(e, false)
+        end
       end
-      vim.bo[panel_buf].modifiable = true
-      vim.api.nvim_buf_set_lines(panel_buf, first, -1, false, vim.list_slice(lines, first + 1))
-      vim.bo[panel_buf].modifiable = false
+    end
+    vim.bo[panel_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(panel_buf, 0, -1, false, lines)
+    vim.bo[panel_buf].modifiable = false
+    vim.api.nvim_buf_clear_namespace(panel_buf, ns, 0, -1)
+    vim.api.nvim_buf_set_extmark(panel_buf, ns, 0, 0, { line_hl_group = 'PerforatedTitle' })
+    for i = 1, #entries do
       vim.api.nvim_buf_set_extmark(
         panel_buf,
         ns,
-        first + 1,
-        0,
-        { line_hl_group = 'PerforatedSection' }
+        i + 1,
+        1,
+        { end_col = 10, hl_group = 'PerforatedAction' }
       )
-      for row = first + 2, #lines - 1 do
+      local col = dirs[i + 2]
+      if col then
+        vim.api.nvim_buf_set_extmark(
+          panel_buf,
+          ns,
+          i + 1,
+          col,
+          { end_col = #lines[i + 2], hl_group = 'PerforatedDim' }
+        )
+      end
+    end
+    for _, s in ipairs(sections) do
+      vim.api.nvim_buf_set_extmark(panel_buf, ns, s[1], 0, { line_hl_group = 'PerforatedSection' })
+      for row = s[1] + 1, s[2] do
         vim.api.nvim_buf_set_extmark(panel_buf, ns, row, 0, { line_hl_group = 'PerforatedDim' })
       end
     end
   end
+  render()
 
   vim.cmd('rightbelow vnew')
   local rwin = vim.api.nvim_get_current_win()
@@ -303,6 +422,7 @@ open_tab = function(ws, title, entries, listed)
         vim.api.nvim_win_set_cursor(panel, { clamped, 0 })
       end
       show_entry(clamped - 2)
+      state.update_footer()
     end,
   })
   -- Closing any of the three windows (`:q` in a diff side too) closes the whole tab.
@@ -333,33 +453,110 @@ open_tab = function(ws, title, entries, listed)
       end)
     end,
   })
-  local function pmap(lhs, fn)
-    vim.keymap.set('n', lhs, fn, { buffer = panel_buf, nowait = true })
-  end
-  pmap('q', close_tab)
-  require('perforated.lookup').map(panel_buf, ws)
-  pmap('<Tab>', function()
-    state.step(1)
-  end)
-  -- Up and down move between files and wrap around at both ends.
-  for _, lhs in ipairs({ 'j', '<Down>' }) do
-    pmap(lhs, function()
-      state.step(vim.v.count1)
-    end)
-  end
-  for _, lhs in ipairs({ 'k', '<Up>' }) do
-    pmap(lhs, function()
-      state.step(-vim.v.count1)
-    end)
-  end
-  pmap('<S-Tab>', function()
-    state.step(-1)
-  end)
-  pmap('<CR>', function()
-    if state.current then
-      vim.api.nvim_set_current_win(rwin)
+  -- `o`: in the window the tab was opened from when it shows a file, else another file window
+  -- of that tab, else a tab of its own (as describe's `o`).
+  local function open(e)
+    local r = e.right
+    local target = r.path and r or (r.spec and r) or e.left
+    local win
+    if vim.api.nvim_win_is_valid(origin_win) then
+      local otab = vim.api.nvim_win_get_tabpage(origin_win)
+      for _, w in ipairs(vim.list_extend({ origin_win }, vim.api.nvim_tabpage_list_wins(otab))) do
+        if
+          vim.api.nvim_win_get_config(w).relative == ''
+          and vim.bo[vim.api.nvim_win_get_buf(w)].buftype == ''
+        then
+          win = w
+          break
+        end
+      end
     end
-  end)
+    if not win then
+      return require('perforated.revs').open(ws, target)
+    end
+    vim.api.nvim_set_current_win(win)
+    if target.path then
+      vim.cmd('edit ' .. vim.fn.fnameescape(target.path))
+    elseif target.spec then
+      vim.api.nvim_win_set_buf(win, require('perforated.uri').buffer(ws, target.spec))
+    end
+  end
+
+  -- `r`: asks as the client view does; the reverted file leaves the panel.
+  local function revert(e)
+    if
+      require('perforated.ui.prompt').confirm(
+        ('Revert %s? Local changes will be lost.'):format(e.client_file),
+        '&Revert\n&Cancel',
+        2
+      ) ~= 1
+    then
+      return
+    end
+    require('perforated.checkout').revert(ws, { e.client_file }, false, function(ok)
+      local i
+      for k, x in ipairs(entries) do
+        if x == e then
+          i = k
+        end
+      end
+      if not ok or not i or not vim.api.nvim_tabpage_is_valid(tab) then
+        return
+      end
+      table.remove(entries, i)
+      if #entries == 0 then
+        return close_tab()
+      end
+      state.count = #entries
+      render()
+      state.current = nil
+      local n = math.min(i, #entries)
+      vim.api.nvim_win_set_cursor(panel, { n + 2, 0 })
+      show_entry(n)
+      state.update_footer()
+    end)
+  end
+
+  local p = {
+    ws = ws,
+    step = function(delta)
+      state.step(delta)
+    end,
+    focus = function()
+      if state.current then
+        vim.api.nvim_set_current_win(rwin)
+      end
+    end,
+    close = close_tab,
+    open = open,
+    revert = revert,
+  }
+  local function node_at(row)
+    local i = (row or vim.api.nvim_win_get_cursor(panel)[1]) - 2
+    return entries[i] and { kind = 'file', item = entries[i] } or nil
+  end
+  p.view = {
+    ws = ws,
+    buf = panel_buf,
+    win = panel,
+    tree = {
+      node_at = function(_, row)
+        return node_at(row)
+      end,
+      marked = function()
+        return {}
+      end,
+    },
+  }
+  p.actions = panel_actions(p)
+  local keys = require('perforated.ui.keys')
+  keys.attach(panel_buf, p.actions, p.view)
+  local footer = require('perforated.ui.footer').attach(panel)
+  state.update_footer = function()
+    if vim.api.nvim_win_is_valid(panel) then
+      footer:set(keys.footer(p.actions, node_at()))
+    end
+  end
 
   -- Panel keeps its width; the two diff windows share the rest equally.
   vim.cmd('wincmd =')
@@ -367,6 +564,7 @@ open_tab = function(ws, title, entries, listed)
   vim.api.nvim_win_set_cursor(panel, { 3, 0 })
   show_entry(1)
   vim.api.nvim_set_current_win(panel)
+  state.update_footer()
   finish_busy()
   return state
 end
@@ -397,6 +595,8 @@ local function opened_entries(ws, recs)
           label = r.haveRev and base == r.depotFile .. '#' .. r.haveRev and 'have' or nil,
         } or { empty = 'new file' },
         right = deleted and { empty = 'deleted' } or { path = r.clientFile },
+        -- Revertable here only when it's this workspace's file (not another client's CL).
+        client_file = label ~= r.clientFile and r.clientFile or nil,
       }
     end
   end

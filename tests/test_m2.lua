@@ -1456,7 +1456,9 @@ T['client view']['w diffs shelved vs workspace: one file, or the whole shelf in 
   wait([[vim.bo.filetype == 'perforated']])
   goto_line('Shelved (1)')
   child.type_keys('w') -- the whole shelf: a diff tab (panel + pair)
-  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  wait(
+    [[#vim.api.nvim_list_tabpages() == 3 and require("perforated.views.base").normal_wins(0) == 3]]
+  )
   wait(
     [[vim.tbl_contains(vim.tbl_map(function(w) return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)) end, vim.api.nvim_tabpage_list_wins(0)), 'perforated:////depot/a.txt@=2')]]
   )
@@ -1479,7 +1481,9 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
   H.write(root .. '/a.txt', 'a3\n')
   goto_line('Shelved (1)')
   child.type_keys('w')
-  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  wait(
+    [[#vim.api.nvim_list_tabpages() == 3 and require("perforated.views.base").normal_wins(0) == 3]]
+  )
   local text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
   local section = text:find('Not in Shelf (2):', 1, true)
   H.neq(section, nil)
@@ -1504,7 +1508,9 @@ T['client view']['shelf vs workspace lists opened files that are not in the shel
   H.write(root .. '/a.txt', 'a3\n')
   goto_line('Shelved (1)')
   child.type_keys('w')
-  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  wait(
+    [[#vim.api.nvim_list_tabpages() == 3 and require("perforated.views.base").normal_wins(0) == 3]]
+  )
   text = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
   H.neq(text:find('a.txt', 1, true), nil)
   H.eq(text:find('Not in Shelf', 1, true), nil)
@@ -1623,7 +1629,9 @@ T['client view']['diff tab: moving the cursor in the panel loads each file (both
   goto_line('initial import')
   child.type_keys('D')
   -- The diff tab (floats count as windows: the client view's footer and the busy pop-up too).
-  wait([[#vim.api.nvim_list_tabpages() == 3 and #vim.api.nvim_tabpage_list_wins(0) == 3]])
+  wait(
+    [[#vim.api.nvim_list_tabpages() == 3 and require("perforated.views.base").normal_wins(0) == 3]]
+  )
   -- Move through the panel the way a user does (CursorMoved inside the panel).
   local seen = {}
   for row = 3, 6 do
@@ -2004,6 +2012,96 @@ T['client view']['diff tab panel: the cursor stays on the files; j/k/arrows wrap
   wait('vim.api.nvim_win_get_cursor(0)[1] == 3')
 end
 
+-- The diff tab's footer line (the panel's).
+local DIFF_FOOTER = [[(function()
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local c = vim.api.nvim_win_get_config(w)
+    if c.relative == 'win' and c.focusable == false then
+      return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)[1]
+    end
+  end
+  return ''
+end)()]]
+
+local DIFF_TAB =
+  [[#vim.api.nvim_list_tabpages() == 2 and require('perforated.views.base').normal_wins(0) == 3
+  and vim.api.nvim_buf_get_name(0):find('perforated://files', 1, true) ~= nil]]
+
+T['client view']['diff tab panel: the name before its folder; the footer and ? list its keys'] = function()
+  H.write(root .. '/src/deep/x.txt', 'x\n')
+  server:p4({ 'add', root .. '/src/deep/x.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/b.txt', 'b2\n')
+  child.cmd('P4 diff -a')
+  wait(DIFF_TAB)
+  local panel = table.concat(lines(), '\n')
+  H.neq(panel:find('x.txt  src/deep/', 1, true), nil) -- a long folder can't cut off the name
+  H.eq(panel:find('src/deep/x.txt', 1, true), nil)
+  wait(DIFF_FOOTER .. [[:find('o open file', 1, true) ~= nil]])
+  H.neq(child.lua_get(DIFF_FOOTER):find('r revert', 1, true), nil)
+  child.type_keys('?')
+  local help = table.concat(lines(), '\n')
+  for _, row in ipairs({
+    'Next file',
+    'Previous file',
+    'Go to the diff',
+    'Open file',
+    'Revert',
+    'Close',
+  }) do
+    H.neq(help:find(row, 1, true), nil)
+  end
+end
+
+T['client view']['diff tab panel: o opens the file where the tab came from; r reverts, asking first'] = function()
+  H.write(root .. '/b.txt', 'b2\n')
+  H.write(root .. '/c.txt', 'c-mine\n')
+  local origin = child.api.nvim_get_current_win() -- d.txt
+  child.cmd('P4 diff -a')
+  wait(DIFF_TAB)
+  local panel = child.api.nvim_get_current_win()
+  H.eq(lines()[3]:find('a.txt', 1, true) ~= nil, true) -- a.txt, b.txt, c.txt
+  child.type_keys('o')
+  H.eq(child.api.nvim_get_current_win(), origin)
+  H.eq(child.api.nvim_buf_get_name(0), root .. '/a.txt')
+  H.eq(#child.api.nvim_list_tabpages(), 2) -- the diff tab stays
+  child.api.nvim_set_current_win(panel)
+  -- r asks; "Cancel" keeps the file
+  child.lua(
+    [[require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return 2 end]]
+  )
+  child.type_keys('j', 'r')
+  H.eq(child.lua_get('_G.asked'), 'Revert ' .. root .. '/b.txt? Local changes will be lost.')
+  H.eq(#lines() >= 5 and lines()[4]:find('b.txt', 1, true) ~= nil, true)
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
+  child.type_keys('r')
+  wait(
+    [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true)]]
+  )
+  local opened = server:p4({ 'opened' }, { client = 'alice_ws', cwd = root }).stdout
+  H.eq(opened:find('b.txt', 1, true), nil)
+  H.neq(opened:find('c.txt', 1, true), nil)
+  -- the next file is shown in its place
+  H.eq(child.api.nvim_win_get_cursor(0)[1], 4)
+  local right = child.api.nvim_tabpage_list_wins(0)[3]
+  H.eq(vim.fs.basename(child.api.nvim_buf_get_name(child.api.nvim_win_get_buf(right))), 'c.txt')
+end
+
+T['client view']['diff tab panel of a submitted changelist: o opens the revision; no r'] = function()
+  open_view()
+  goto_line('initial import')
+  child.type_keys('D')
+  wait(
+    [[#vim.api.nvim_list_tabpages() == 3 and require('perforated.views.base').normal_wins(0) == 3]]
+  )
+  wait(DIFF_FOOTER .. [[:find('o open file', 1, true) ~= nil]])
+  H.eq(child.lua_get(DIFF_FOOTER):find('revert', 1, true), nil)
+  child.type_keys('r')
+  H.eq(H.wait_message(child, 'Revert (r) does not apply here', 2000), true)
+  child.type_keys('o')
+  H.eq(child.api.nvim_buf_get_name(0), 'perforated:////depot/a.txt#1')
+  H.eq(#child.api.nvim_list_tabpages() >= 3, true) -- the diff tab stays
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up
@@ -2032,7 +2130,7 @@ T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function(
   child.type_keys('D')
   wait([[#vim.api.nvim_list_tabpages() == 3]])
   local wins = child.api.nvim_tabpage_list_wins(0)
-  H.eq(#wins, 3) -- panel + pair
+  H.eq(child.lua_get([[require('perforated.views.base').normal_wins(0)]]), 3) -- panel + pair (+ footer)
   local panel = child.api.nvim_buf_get_lines(0, 0, -1, false)
   H.expect.no_equality(table.concat(panel, '\n'):find('b.txt', 1, true), nil)
   H.expect.no_equality(table.concat(panel, '\n'):find('c.txt', 1, true), nil)

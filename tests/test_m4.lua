@@ -167,7 +167,7 @@ T['m4']['shelf vs workspace after a re-shelve shows the new shelved content'] = 
   H.eq(child.lua_get(lines), { 'b2' })
   -- The shelf on the left, the workspace file on the right, each named in its header.
   local wins = child.api.nvim_tabpage_list_wins(0)
-  H.eq(#wins, 3) -- panel + pair
+  H.eq(child.lua_get([[require('perforated.views.base').normal_wins(0)]]), 3) -- panel + pair (+ footer)
   local bar = function(w)
     return child.api.nvim_get_option_value('winbar', { win = w })
   end

@@ -268,6 +268,13 @@ only scans when you expand it (`l`).
   changelists, and `:P4 diff -a` opens it for every opened file.
   - Moving through the panel switches files, as do `<Tab>` / `<S-Tab>` from any window.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
+    Each line shows the file name first, then its folder, so a narrow panel cuts off the
+    folder rather than the name.
+  - `o` opens the file: your workspace file in the window you opened the tab from, or the
+    revision for a submitted or shelved file. `r` reverts an opened file, after asking; it
+    leaves the panel. `<CR>` goes into the diff.
+  - Like the other views, the panel has a footer with its keys, `?` for all of them and `.`
+    for a menu.
   - Each file opens at its first change, with both sides scrolled in line. It loads when you
     select it, and the next one is fetched ahead of time.
   - `Ctrl+1` / `Ctrl+2` jump to the previous / next change, like `[c` / `]c`, in terminals that

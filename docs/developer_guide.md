@@ -1137,7 +1137,13 @@ The multi-file diff tab: a file panel plus a native diff pair; files load when s
 next one is prefetched); `<Tab>`/`<S-Tab>` step files; in the panel `j`/`k`/`<Down>`/`<Up>`
 step with wrap-around, and the `CursorMoved` handler clamps any other motion back onto the
 file rows (3 … #entries + 2); `q` (any window) and `:q` (any of the three windows) close the
-whole tab. Shelf-vs-workspace puts the shelf left, the workspace file
+whole tab. The panel's keys are an action registry (`panel_actions`, also `M._panel_actions` for
+`make doc`) attached through `keys.attach` with a small stand-in tree: `node_at` gives a
+`{ kind = 'file', item = entry }` node on the file rows, and nothing elsewhere. That brings `?`,
+the `.` menu and a footer (`ui/footer.lua`, updated on `CursorMoved`). `o` opens the file in
+the window the tab was opened from (or another file window there, else a new tab), `r` reverts
+entries with `client_file` (opened files of this workspace only) and re-renders the panel
+without the file. Panel lines put the name before its folder (`panel_line`). Shelf-vs-workspace puts the shelf left, the workspace file
 right. Before opening, every pair is checked
 with `same.check`: identical files go to an "Identical (N):" section; if all are identical,
 the tab doesn't open. `M.open`'s `opts.extra` adds more listed-only sections below it:

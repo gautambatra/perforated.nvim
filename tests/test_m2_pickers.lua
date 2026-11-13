@@ -361,7 +361,7 @@ T['changes'][':P4 changes -u bob shows only bob; D opens the CL diff'] = functio
   H.eq(
     H.wait(
       child,
-      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and #vim.api.nvim_tabpage_list_wins(0) == 3]]
+      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and require('perforated.views.base').normal_wins(0) == 3]]
     ),
     true
   )
@@ -472,7 +472,7 @@ T['changes'][':P4 pick pending opens the chosen CL in the diff tab'] = function(
   H.eq(
     H.wait(
       child,
-      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and #vim.api.nvim_tabpage_list_wins(0) == 3]]
+      [[vim.api.nvim_buf_get_name(0):find('^perforated://files/') and require('perforated.views.base').normal_wins(0) == 3]]
     ),
     true
   )
