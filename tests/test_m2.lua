@@ -619,13 +619,13 @@ T['client view']['gm on a changelist moves all its files; the picker offers the 
   H.neq(o['//depot/a.txt'], '2')
 end
 
-T['client view']['K popup: C edits the description in place, then comes back'] = function()
+T['client view']['K popup: i edits the description in place, then comes back'] = function()
   open_view()
   goto_line('CL 2  Fix parser')
   child.type_keys('K')
   wait([[vim.bo.filetype == 'perforated-changelist']])
   local win = child.api.nvim_get_current_win()
-  child.type_keys('C')
+  child.type_keys('i') -- as in the client view
   wait([[vim.bo.filetype == 'perforated-description']])
   H.eq(child.api.nvim_get_current_win(), win) -- the same popup, now in edit mode
   H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'Fix parser', 'second line' })
@@ -637,7 +637,7 @@ T['client view']['K popup: C edits the description in place, then comes back'] =
   local spec = server:p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
   H.neq(spec:find('\tFix the parser\n\tsecond line', 1, true), nil)
   -- q in edit mode (unmodified) goes back to the popup too; q there closes it.
-  child.type_keys('C')
+  child.type_keys('C') -- the old key still works
   wait([[vim.bo.filetype == 'perforated-description']])
   child.type_keys('q')
   wait([[vim.bo.filetype == 'perforated-changelist']])

@@ -676,7 +676,8 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'gL' },
+      keys = { 'gh' }, -- as in the client view
+      old = { 'gL' },
       p4v = { '<C-t>' },
       run = function()
         require('perforated.views.history').open(ws, view.tl.depotFile)

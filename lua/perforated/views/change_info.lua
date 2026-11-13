@@ -1,6 +1,6 @@
 --- "View changelist" popup (`K`): header, full description and files — opened files for
 --- pending changelists, shelved files, or the submitted files. Scrollable; `q`/`<Esc>` close,
---- `D` opens the diff tab for the changelist, `C` switches the popup to edit mode (the
+--- `D` opens the diff tab for the changelist, `i` (or the older `C`) switches the popup to edit mode (the
 --- description editor in the same float; saving or cancelling comes back to the popup).
 
 local cls = require('perforated.changelists')
@@ -209,7 +209,7 @@ function M.show(ws, item, d, shelved)
     title_pos = 'left',
     footer = ' q close · <CR> describe · D diff all files'
       .. ((#shelved > 0 and ws.mode ~= 'connection') and ' · S unshelve' or '')
-      .. (editable and ' · C edit ' or ' '),
+      .. (editable and ' · i edit ' or ' '),
     footer_pos = 'right',
   })
   vim.wo[win][0].winhighlight = 'NormalFloat:PerforatedFloat,FloatBorder:PerforatedFloatBorder'
@@ -243,7 +243,7 @@ function M.show(ws, item, d, shelved)
     end, { buffer = buf, nowait = true })
   end
   if editable then
-    vim.keymap.set('n', 'C', function()
+    local function edit()
       require('perforated.views.change_editor').edit(ws, rec.change, {
         submitted = rec.status == 'submitted',
         win = win,
@@ -255,7 +255,10 @@ function M.show(ws, item, d, shelved)
           end
         end,
       })
-    end, { buffer = buf, nowait = true })
+    end
+    -- `i` as in the client view; `C` was the key before.
+    vim.keymap.set('n', 'i', edit, { buffer = buf, nowait = true })
+    vim.keymap.set('n', 'C', edit, { buffer = buf, nowait = true })
   end
   return buf, win
 end

@@ -1328,7 +1328,9 @@ Also: `node_at`, `row_of`, `open`/`close`/`toggle`, `collapse_at_cursor`, `jump_
 
 #### `ui/keys.lua`
 The action registry ([§17.5](#175-views-tree--registry)). `keys_of(action)` applies user
-overrides (`keys = { <id> = {...} | false }`, `keys.p4v = false`). `applies(action, node)`
+overrides (`keys = { <id> = {...} | false }`, `keys.p4v = false`). `old` lists an action's
+earlier keys after a rename: `mapped_keys(action)` adds them to the keymaps, but `keys_of`
+(the help, footer and menu) leaves them out, and overriding the action's keys drops them. `applies(action, node)`
 checks `kinds` and `when`. `attach(buf, actions, view)` creates one raw keymap per key (raw
 `nvim_buf_set_keymap` is faster than `vim.keymap.set`); keys shared by several actions
 dispatch to the first that applies to the node under the cursor (so `r` reverts a file but
@@ -1553,7 +1555,7 @@ environment, waiting for `p4 info`) is waited for, on a 20 ms timer for up to `D
 `:P4 describe N`: header, description, files and shelved files; `<Tab>` expands a file's
 unified diff inline (two prints, computed only when expanded; files above 20k lines say "use
 `d`"). Pending changelists of this client diff against the workspace file; shelved files
-against their base (`w` workspace, `gh` head). Actions include submit, delete, integrate,
+against their base (`w` workspace, `gH` head). Actions include submit, delete, integrate,
 sync-to-CL, copy the Swarm URL, quickfix of the files.
 `S` unshelves (`ops.unshelve`): the shelved file(s) under the cursor or marked, or the whole
 shelf from the header / Shelved section, for any user's or client's shelf; the `K` pop-up
@@ -1598,7 +1600,7 @@ the client view's extra groups vanish in `:P4 changes`) are shared with the clie
 shelved files; `fetch` gets them, `render` builds lines + highlights, `show` opens the float,
 and `previewer(ws)` puts the same content in a picker's preview buffer: a placeholder, then
 the content once fetched, cached per changelist for that picker, and written only while the
-buffer still previews that changelist; `C` turns the same float into the description editor, and a save or cancel
+buffer still previews that changelist; `i` (or the older `C`) turns the same float into the description editor, and a save or cancel
 comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save;
 only the Description field of the spec is replaced, so the file list can't be edited by
 accident; submitted changelists use `change -u`, with an opt-in `-f` retry).
@@ -1657,7 +1659,7 @@ on_open? }`; `depth` and `parent` are set when rendered. `kind` is what actions 
 `reconcile_file`, `describe_file`, `diff_line`, `rev`, `spacer`, …).
 
 **Action** (`ui/keys.lua`): `{ id, desc, keys, p4v?, kinds?, when?, run, multi?, footer?,
-footer_when?, footer_desc?, nomenu? }`. A tree node may carry `line_hl`, a highlight for the
+footer_when?, footer_desc?, nomenu?, old? }`. A tree node may carry `line_hl`, a highlight for the
 whole row to the window's edge (the client view's header bar: `hl_eol` from the decoration
 provider).
 
@@ -1740,6 +1742,9 @@ co-author / AI attribution trailers.
    In the client view, add its id to a section of `M.HELP_SECTIONS` (else it lands under
    "Other" in `?`).
 2. Avoid buffer-local key prefixes of existing keys (see [§14](#14-traps-we-fell-into)).
+   Use the client view's key when the action exists there (`gh` history, `i` edit
+   description, `dd` delete changelist): one key per action across views. When you rename a
+   key, keep the old one in `old` for a while.
 3. `make doc` — the key tables in `:h perforated` come from these registries.
 
 **A config option**

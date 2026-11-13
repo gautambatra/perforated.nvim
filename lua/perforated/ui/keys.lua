@@ -16,6 +16,10 @@
 --- there's no `dd` mapping (which would make `d` wait 'timeoutlen'); `d` itself reads a second
 --- key, and only on a node where no single-key `d` action applies.
 ---
+--- `old` keys are an action's earlier keys, kept working after a rename so habits don't break:
+--- mapped like `keys`, but not shown in the `?` help, the footer or the `.` menu. Overriding
+--- an action's keys drops them.
+---
 --- Users override keys per action: `keys = { diff = { 'D' } }` or `{ diff = false }`; the
 --- P4V layer (`keys.p4v = false`) can be disabled as a whole.
 
@@ -26,6 +30,7 @@ local M = {}
 ---@field desc string
 ---@field keys string[]?
 ---@field p4v string[]?
+---@field old string[]?  earlier keys: still mapped, not shown
 ---@field kinds table<string, boolean>?
 ---@field when (fun(item: any, node: perforated.TreeNode): boolean)?
 ---@field run fun(items: any[], ctx: table)
@@ -48,6 +53,18 @@ function M.keys_of(a)
   local out = vim.deepcopy(type(override) == 'table' and override or (a.keys or {}))
   if cfg.p4v ~= false and type(override) ~= 'table' then
     vim.list_extend(out, a.p4v or {})
+  end
+  return out
+end
+
+--- Keys mapped for an action: its effective keys, then its `old` ones (unless overridden).
+---@param a perforated.Action
+---@return string[]
+function M.mapped_keys(a)
+  local out = M.keys_of(a)
+  local cfg = require('perforated.config').get().keys or {}
+  if cfg[a.id] == nil then
+    vim.list_extend(out, a.old or {})
   end
   return out
 end
@@ -168,7 +185,7 @@ function M.attach(buf, actions, view)
     end
   end
   for _, a in ipairs(actions) do
-    for _, lhs in ipairs(M.keys_of(a)) do
+    for _, lhs in ipairs(M.mapped_keys(a)) do
       local c = #lhs == 2 and lhs:sub(1, 1) == lhs:sub(2, 2) and lhs:sub(1, 1) or nil
       if c and c:match('%a') then
         doubles[c] = doubles[c] or {}

@@ -174,6 +174,9 @@ There's no timer. `<F5>`, or `:P4` again, refreshes every section on demand.
   `keys = { menu = { '<your key>' } }`.)
 - **`?`** lists every key, grouped by section. Keys that do the same thing are separated by a
   dimmed `·`, as in `l · <Tab> · <CR>`.
+- **The same key does the same thing in every view:** wherever they apply, `gh` is a file's
+  history, `i` edits a description and `dd` deletes a changelist. The keys these views used before (`gL`, `C` and
+  `<Del>` in describe) still work for now, but `?` doesn't list them.
 - **The footer** shows the keys for the current line. Off a changelist or file, it offers `gS`
   (sync the workspace) and `W` (switch client).
 - **P4V's shortcuts** work alongside the Vim-style keys: `<C-d>` diff, `<C-r>` revert, `<C-n>`
@@ -194,7 +197,7 @@ The full list is `?` in the view, or `:h perforated-client-view`. Some keys need
   pick the same way.
 - **`gr`** reverts a file if it's unchanged; on a changelist, it reverts its unchanged files.
 - **`K`** on a changelist opens **View changelist**: a scrollable pop-up with the full
-  description, the files and the shelved files. `D` there opens the diff tab, and `C` turns
+  description, the files and the shelved files. `D` there opens the diff tab, and `i` turns
   the pop-up into the description editor (`q` goes back). It works in `:P4 changes` too, so
   you can read other people's changelists.
 - **`A`** toggles between this client and all your clients. **`W`** switches the view to
@@ -246,7 +249,8 @@ only scans when you expand it (`l`).
 - **Create one:** `c` in the client view, or `:P4 change new`. A small editor opens for the
   description: `:w` or `<C-s>` saves, `q` cancels. Check-out's "new changelist" uses the same
   editor.
-- **Edit a description:** `i`, `:P4 change [N]`, or `C` in the `K` pop-up. This works on
+- **Edit a description:** `i` (in the client view, `:P4 changes`, describe and the `K`
+  pop-up) or `:P4 change [N]`. This works on
   pending *and* submitted changelists; for your own submitted ones it uses `p4 change -u`.
   Only the description changes, so the file list can't be edited by accident. `gS` in the
   editor, or `:P4 change! N`, opens the full spec instead. The default changelist has no
@@ -354,11 +358,13 @@ header, full description, files and shelved files. With no number it uses the cu
 changelist.
 
 - `<Tab>` expands a file's diff inline. It's computed only when you expand it.
-- `d` opens a side-by-side diff, `D` a diff tab of every file, and `Q` sends the files to
-  quickfix.
+- `d` opens a side-by-side diff, `D` a diff tab of every file, `gh` the file's history, and
+  `Q` sends the files to quickfix.
+- On the header or description, `i` edits the description and `dd` deletes the changelist (a
+  pending one of yours). On a file, `d` still diffs at once.
 - Pending changelists work too: your pending files are diffed against the workspace.
 - **Shelves:** `d` compares a shelved file with its base, `w` with your workspace file and
-  `gh` with the head revision. `w` on the Shelved line opens a diff tab of every shelved file
+  `gH` with the head revision. `w` on the Shelved line opens a diff tab of every shelved file
   against the workspace.
 - **`S` unshelves** anyone's shelf, another user's or another client's too: on a shelved
   file, that file; on the header or the Shelved line, the whole shelf. It goes into the
@@ -386,7 +392,8 @@ show "Not submitted".
 
 - `<CR>` describes the line's changelist.
 - `~` re-annotates the revision before that change, and `<BS>` goes back.
-- `d` diffs that change, and `Q` lists every line from it in the location list.
+- `d` diffs that change, `gh` opens the file's history, and `Q` lists every line from it in
+  the location list.
 
 It follows branches (`p4 annotate -i`), so each line shows the change that wrote it, not the
 one that branched the file. `annotate.integrations = true` follows integrations too (`-I`).
@@ -426,7 +433,7 @@ instantly.
   `s` hides it (`timelapse.slider = false` starts without it).
 - **Other keys:** `d` diffs against the previous revision, `D` describes the changelist, `K`
   shows it in a pop-up, `y` copies its number, `Q` lists the lines it added (location list),
-  `a` toggles an age gutter, `b` annotates the revision, `gL` opens the history.
+  `a` toggles an age gutter, `b` annotates the revision, `gh` opens the history.
 
 **Modes** (`m` cycles): *single* (the default), *incremental diff* and *range*. The two
 comparison modes add a second handle, `◆`, for the older revision you compare against.

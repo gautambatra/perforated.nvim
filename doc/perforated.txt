@@ -266,17 +266,17 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   d · <C-d>         Diff shelved vs base revision
   w · gw            Diff shelved vs workspace file
   w · gw            Diff every shelved file vs workspace
-  gh                Diff shelved vs head revision
+  gH                Diff shelved vs head revision
   D                 Diff all files
   o                 Open file
-  gL · <C-t>        File history
+  gh · <C-t>        File history
   t · <C-S-t>       Time-lapse
   b                 Annotate
-  C                 Edit description
+  i                 Edit description
   y                 Copy CL number
   S                 Unshelve
   P · <C-s>         Submit
-  <Del>             Delete changelist
+  dd                Delete changelist
   g@                Sync workspace to this CL
   I                 Integrate into this workspace
   Q                 Files to quickfix
@@ -312,7 +312,7 @@ Annotate (:P4 annotate)                                  *perforated-annotate*
   <BS>              Back to the newer revision
   d · <C-d>         Diff this change (the file's revision in it vs the one before)
   t · <C-S-t>       Time-lapse from this revision
-  gL · <C-t>        File history
+  gh · <C-t>        File history
   Q                 Lines from this changelist to the location list
   y                 Copy CL number
   gX                Copy Swarm URL
@@ -342,7 +342,7 @@ Time-lapse (:P4 timelapse)                              *perforated-timelapse*
   Q                 Lines added in this revision to the location list
   a                 Toggle the age gutter
   b                 Annotate this revision
-  gL · <C-t>        File history
+  gh · <C-t>        File history
   q                 Close
   ?                 Help
   . · <RightMouse>  Action menu

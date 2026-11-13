@@ -396,7 +396,7 @@ local function actions(view)
     {
       id = 'diff_shelved_head',
       desc = 'Diff shelved vs head revision',
-      keys = { 'gh' },
+      keys = { 'gH' },
       kinds = { describe_shelved = true },
       run = function(items)
         local f = items[1]
@@ -447,7 +447,8 @@ local function actions(view)
     {
       id = 'history',
       desc = 'File history',
-      keys = { 'gL' },
+      keys = { 'gh' }, -- as in the client view
+      old = { 'gL' },
       p4v = { '<C-t>' },
       kinds = FILE,
       footer = 13,
@@ -490,7 +491,8 @@ local function actions(view)
     {
       id = 'edit_description',
       desc = 'Edit description',
-      keys = { 'C' },
+      keys = { 'i' }, -- as in the client view
+      old = { 'C' },
       footer = 20,
       when = function()
         local it = view.item
@@ -570,7 +572,8 @@ local function actions(view)
     {
       id = 'delete_change',
       desc = 'Delete changelist',
-      keys = { '<Del>' },
+      keys = { 'dd' }, -- as in the client view; `d` waits for it only where it doesn't diff
+      old = { '<Del>' },
       when = function()
         local it = view.item
         return it.status == 'pending'

@@ -156,7 +156,7 @@ T['m3']['describe a pending CL: workspace diff and shelved files (vs base, vs he
   child.cmd('tabclose')
   wait([[vim.bo.filetype == 'perforated']])
   child.api.nvim_win_set_cursor(0, { row, 0 })
-  child.type_keys('gh')
+  child.type_keys('gH') -- gh is the file's history, as in the client view
   wait(DIFF_OPEN)
   H.eq(
     child.lua_get(WIN_NAMES),
@@ -442,7 +442,7 @@ T['m3']['lookup: a user lists all their submits, not only those in the client vi
   H.neq(text():find('bob fixes line 2', 1, true), nil)
 end
 
-T['m3']['client view: L history, gd describe on a CL'] = function()
+T['m3']['client view: gh history, gd describe on a CL'] = function()
   child.cmd('P4')
   wait_text('CL 4')
   goto_line('CL 4')
@@ -451,8 +451,82 @@ T['m3']['client view: L history, gd describe on a CL'] = function()
   child.cmd('tabclose')
   wait([[vim.bo.filetype == 'perforated']])
   goto_line('b.txt')
-  child.type_keys('gL')
+  child.type_keys('gh')
+  wait([[vim.api.nvim_win_get_config(0).relative == 'editor']]) -- the history pop-up
   wait_text('initial import')
+end
+
+-- Stand-ins for what the keys open, recording what they were asked for.
+local SPIES = [[
+  _G.spied = {}
+  local function spy(mod, fn, arg)
+    require(mod)[fn] = function(...) table.insert(_G.spied, fn .. ' ' .. tostring(select(arg, ...))) end
+  end
+  spy('perforated.views.history', 'open', 2)
+  spy('perforated.views.change_editor', 'edit', 2)
+  spy('perforated.ops', 'delete_change', 2)
+]]
+
+T['m3']['describe: gh history, i description, dd delete, as in the client view'] = function()
+  child.lua(SPIES)
+  child.cmd('P4 describe 4')
+  wait_text('Shelved (1)')
+  goto_line('//depot/b.txt')
+  child.type_keys('gh')
+  child.api.nvim_win_set_cursor(0, { 1, 0 }) -- the header
+  child.type_keys('i')
+  child.type_keys('dd')
+  H.eq(child.lua_get('_G.spied'), { 'open //depot/b.txt', 'edit 4', 'delete_change 4' })
+  -- d on a file still diffs at once: it doesn't wait for a second d.
+  goto_line('//depot/b.txt')
+  child.type_keys('d')
+  wait(DIFF_OPEN)
+end
+
+T['m3']['describe: the old keys gL, C and <Del> still work but are not listed'] = function()
+  child.lua(SPIES)
+  child.cmd('P4 describe 4')
+  wait_text('Shelved (1)')
+  goto_line('//depot/b.txt')
+  child.type_keys('gL')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+  child.type_keys('C')
+  child.type_keys('<Del>')
+  H.eq(child.lua_get('_G.spied'), { 'open //depot/b.txt', 'edit 4', 'delete_change 4' })
+  child.type_keys('?')
+  local help = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  H.neq(help:find('gh · <C%-t> +File history'), nil)
+  H.neq(help:find('\n +i +Edit description'), nil)
+  H.neq(help:find('\n +dd +Delete changelist'), nil)
+  H.eq(help:find('gL', 1, true), nil)
+  H.eq(help:find('<Del>', 1, true), nil)
+  H.eq(help:find('\n +C ', 1, false), nil)
+  child.type_keys('q')
+  -- Choosing an action's keys drops its old ones.
+  child.lua([[require('perforated.config').get().keys = { history = { 'X' } }]])
+  child.cmd('bwipeout | P4 describe 4')
+  wait_text('Shelved (1)')
+  H.eq(child.lua_get([[vim.fn.maparg('gL', 'n', false, true).desc]]), vim.NIL)
+  H.eq(child.lua_get([[vim.fn.maparg('X', 'n', false, true).desc]]), 'perforated: File history')
+end
+
+T['m3']['annotate and time-lapse: gh is the history, gL still works'] = function()
+  child.lua(SPIES)
+  child.cmd('P4 annotate')
+  wait([[next(require('perforated.views.annotate')._views) ~= nil and vim.bo.buftype == 'nofile']])
+  child.type_keys('gh')
+  child.type_keys('gL')
+  child.cmd('tabonly | only | edit ' .. root .. '/a.txt')
+  child.cmd('P4 timelapse')
+  wait(
+    [[require('perforated.views.timelapse')._last ~= nil and require('perforated.views.timelapse')._last.tl ~= nil]]
+  )
+  child.type_keys('gh')
+  child.type_keys('gL')
+  H.eq(
+    child.lua_get('_G.spied'),
+    { 'open //depot/a.txt', 'open //depot/a.txt', 'open //depot/a.txt', 'open //depot/a.txt' }
+  )
 end
 
 return T
