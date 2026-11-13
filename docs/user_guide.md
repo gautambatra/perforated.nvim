@@ -495,6 +495,10 @@ Afterwards:
 
 A sync or submit shows a pop-up when it starts and one with the result. `:P4 jobs` shows the
 live progress (files so far, the last file, the time taken), and `x` there stops a job;
+a sync also shows how far it has got, from the totals p4 sends first, as in
+`sync workspace · 12s · 340/1,200 files (28%) · 45.0/160.0 MB`. With
+`toast.backend = 'notify'`, the percentage reaches Neovim's progress messages, so fidget or
+snacks can draw a bar.
 `:P4 cancel` stops them all. Stopping a sync midway is safe: p4 updates your have list file by
 file.
 

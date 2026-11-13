@@ -1272,7 +1272,11 @@ from a source path's history.
 Long-running operations register as jobs: `:P4 jobs` (a live float that updates twice a second
 with the file count, last file and elapsed time; `x` stops a job) and `:P4 cancel`.
 `start(ws, title)` returns run options (`timeout = 0`, `on_spawn`, `on_record`) to pass to
-`ws:run`. With pop-ups (the default) a job reports a pop-up when it starts and one with its
+`ws:run`. `on_record` counts every record, and for a sync reads `totalFileCount` and
+`totalFileSize` from the first one and adds up each file record's `fileSize` (messages have no
+`action`, so they don't count as files); `percent(job)` is then files done out of the total,
+which goes to `progress.update` as the progress message's `percent`. Jobs without totals keep
+the plain count. With pop-ups (the default) a job reports a pop-up when it starts and one with its
 result, and nothing in between; with `toast.backend = 'notify'` it also shows Neovim 0.12's
 progress messages (with `source`) while running. `start(ws, title, { quiet = true })` (resolve)
 has no progress item at all (`job.prog = false`): the caller shows its own pop-ups, and the

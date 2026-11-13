@@ -43,14 +43,17 @@ end
 --- Update a running progress item (no-op without progress messages: no notification spam).
 ---@param p perforated.Progress
 ---@param msg string
-function M.update(p, msg)
+---@param percent integer?  0–100, when known
+function M.update(p, msg, percent)
   if p.id then
-    pcall(
-      vim.api.nvim_echo,
-      { { msg } },
-      false,
-      { kind = 'progress', id = p.id, title = p.title, status = 'running', source = 'perforated' }
-    )
+    pcall(vim.api.nvim_echo, { { msg } }, false, {
+      kind = 'progress',
+      id = p.id,
+      title = p.title,
+      status = 'running',
+      percent = percent,
+      source = 'perforated',
+    })
   end
 end
 

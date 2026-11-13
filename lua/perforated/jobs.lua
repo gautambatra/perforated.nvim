@@ -1,6 +1,7 @@
 --- Long-running p4 operations (sync, submit): watch and stop them.
 ---
----   * a progress message that updates while the job runs (file count, last file, elapsed);
+---   * a progress message that updates while the job runs (file count, last file, elapsed; for a
+---     sync, files and bytes out of p4's totals, and a percentage);
 ---   * `:P4 jobs`: a float listing running jobs, refreshed live; `x` stops the one under the
 ---     cursor, `q` closes;
 ---   * `:P4 cancel`: stops every running job (SIGTERM, then SIGKILL after 2 s);
@@ -18,6 +19,10 @@ local progress = require('perforated.ui.progress')
 ---@field title string
 ---@field started number        hrtime
 ---@field count integer          records streamed so far
+---@field total_files integer?   `totalFileCount` of the first sync record
+---@field total_bytes integer?   `totalFileSize` of the first sync record
+---@field files integer          file records seen (each counts towards `total_files`)
+---@field bytes integer          their `fileSize`, added up
 ---@field last string?           last file seen
 ---@field ctl { cancel: fun() }? set once the process runs
 ---@field cancel_requested boolean?
@@ -34,8 +39,52 @@ local function elapsed(job)
   return s >= 60 and ('%dm%02ds'):format(math.floor(s / 60), s % 60) or (s .. 's')
 end
 
+--- `1234567` → `1,234,567`.
+local function grouped(n)
+  local s = tostring(n)
+  local out = s:reverse():gsub('(%d%d%d)', '%1,'):reverse()
+  return (out:gsub('^,', ''))
+end
+
+--- `done/total` in the unit that suits the total: `45.2/160.0 MB`.
+local function bytes_of(done, total)
+  local unit, div = 'bytes', 1
+  if total >= 1048576 then
+    unit, div = 'MB', 1048576
+  elseif total >= 1024 then
+    unit, div = 'KB', 1024
+  end
+  local fmt = div == 1 and '%d/%d %s' or '%.1f/%.1f %s'
+  return fmt:format(done / div, total / div, unit)
+end
+
+--- How far a job with p4's totals (a sync) has got, 0–100; nil without them.
+---@param job perforated.Job
+---@return integer?
+function M.percent(job)
+  if not job.total_files or job.total_files == 0 then
+    return nil
+  end
+  return math.min(100, math.floor(job.files * 100 / job.total_files))
+end
+
 local function describe(job)
-  local s = ('%s · %s · %d file(s)'):format(job.title, elapsed(job), job.count)
+  local s
+  local pct = M.percent(job)
+  if pct then
+    s = ('%s · %s · %s/%s files (%d%%)'):format(
+      job.title,
+      elapsed(job),
+      grouped(job.files),
+      grouped(job.total_files),
+      pct
+    )
+    if job.total_bytes and job.total_bytes > 0 then
+      s = s .. ' · ' .. bytes_of(math.min(job.bytes, job.total_bytes), job.total_bytes)
+    end
+  else
+    s = ('%s · %s · %d file(s)'):format(job.title, elapsed(job), job.count)
+  end
   if job.cancel_requested then
     s = s .. ' · stopping…'
   elseif job.last then
@@ -64,7 +113,7 @@ end
 local function tick()
   for _, j in ipairs(jobs) do
     if j.prog then -- quiet jobs (resolve) have no progress item: their caller shows its own
-      progress.update(j.prog, describe(j))
+      progress.update(j.prog, describe(j), M.percent(j))
     end
   end
   render_float()
@@ -94,6 +143,8 @@ function M.start(ws, title, opts)
     title = title,
     started = vim.uv.hrtime(),
     count = 0,
+    files = 0,
+    bytes = 0,
     prog = not (opts and opts.quiet)
       and progress.start('p4', title .. '…  (:P4 jobs to watch, :P4 cancel to stop)'),
   }
@@ -110,6 +161,16 @@ function M.start(ws, title, opts)
     on_record = function(rec) -- fast context: plain Lua only
       job.count = job.count + 1
       job.last = rec.depotFile or rec.clientFile or job.last
+      -- p4 sync's first record carries the totals; each file's record its size. Messages
+      -- (no action) aren't files.
+      if rec.totalFileCount and not job.total_files then
+        job.total_files = tonumber(rec.totalFileCount)
+        job.total_bytes = tonumber(rec.totalFileSize)
+      end
+      if rec.action then
+        job.files = job.files + 1
+        job.bytes = job.bytes + (tonumber(rec.fileSize) or 0)
+      end
     end,
   }
   return job, run_opts

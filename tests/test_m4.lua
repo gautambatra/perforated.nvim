@@ -442,10 +442,20 @@ T['m4']['sync reloads the buffer without prompting; state follows'] = function()
   )
   child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
   bob_submits('main/a.txt', 'l1\nfrom bob\nl3\nl4\nl5\n')
+  child.lua([[
+    local jobs = require('perforated.jobs')
+    local finish = jobs.finish
+    jobs.finish = function(job, ...)
+      _G.sizes = { job.files, job.total_files, job.bytes, job.total_bytes }
+      return finish(job, ...)
+    end
+  ]])
   child.lua(
     [[require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
   )
   wait('_G.r == true')
+  -- p4 sync's first record carries the totals the progress counts towards.
+  H.eq(child.lua_get('_G.sizes'), { 1, 1, 21, 21 })
   wait([[vim.api.nvim_buf_get_lines(0, 1, 2, false)[1] == 'from bob']])
   wait([[(require('perforated.buffer').get() or {}).rec.haveRev == '2']])
   H.eq(child.bo.modified, false)

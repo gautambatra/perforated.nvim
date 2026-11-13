@@ -198,8 +198,8 @@ More: [time-lapse](docs/user_guide.md#time-lapse).
 - **Resolve** takes the clean merges, then opens your merge tool (`$P4MERGE`) for each
   conflict.
 - **Integrate** cherry-picks a submitted changelist into your workspace.
-- Syncs, submits and resolves run as jobs: `:P4 jobs` shows their progress and `:P4 cancel`
-  stops them. Commands that change files have no time limit, and `Ctrl+c` on their busy pop-up
+- Syncs, submits and resolves run as jobs: `:P4 jobs` shows their progress (for a sync, files
+  and bytes out of the total, with a percentage) and `:P4 cancel` stops them. Commands that change files have no time limit, and `Ctrl+c` on their busy pop-up
   stops them.
 
 More: [shelve, submit, sync, resolve, integrate](docs/user_guide.md#shelve-submit-sync-resolve-integrate).

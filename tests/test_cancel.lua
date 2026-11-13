@@ -249,4 +249,55 @@ T['cancel']['p4 dying without a message reports its exit code'] = function()
   H.eq(H.messages(child):find('unknown error', 1, true), nil)
 end
 
+-- A sync streams a record per file; the first carries p4's totals.
+local SYNC = {
+  {
+    depotFile = '//d/a.c',
+    action = 'updated',
+    fileSize = '1024',
+    totalFileCount = '4',
+    totalFileSize = '4096',
+  },
+  { depotFile = '//d/b.c', action = 'updated', fileSize = '1024' },
+}
+
+T['cancel']['a sync shows files and bytes out of its totals, and a percentage'] = function()
+  setup({ { match = '^sync', records = SYNC, hang_after = true } })
+  child.lua([[
+    _G.pcts = {}
+    local progress = require('perforated.ui.progress')
+    local update = progress.update
+    progress.update = function(p, msg, pct) table.insert(_G.pcts, pct or false); return update(p, msg, pct) end
+    require('perforated.ops')._run_sync(_G.ws, {}, 'workspace', nil, false, function() end)
+  ]])
+  H.wait(child, '#_G.jobs.list() == 1 and _G.jobs.list()[1].files == 2')
+  child.cmd('P4 jobs')
+  local line = child.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+  H.neq(line:find('sync workspace · %d+s · 2/4 files %(50%%%) · 2%.0/4%.0 KB'), nil)
+  H.wait(child, '#_G.pcts > 0')
+  H.eq(child.lua_get('_G.pcts[#_G.pcts]'), 50)
+  child.lua('_G.jobs.cancel()')
+  H.wait(child, '#_G.jobs.list() == 0')
+end
+
+T['cancel']['a job without totals shows its plain count'] = function()
+  setup({
+    {
+      match = '^sync',
+      records = { { depotFile = '//d/a.c', action = 'updated' } },
+      hang_after = true,
+    },
+  })
+  child.lua(
+    [[require('perforated.ops')._run_sync(_G.ws, {}, 'workspace', nil, false, function() end)]]
+  )
+  H.wait(child, '#_G.jobs.list() == 1 and _G.jobs.list()[1].count == 1')
+  child.cmd('P4 jobs')
+  local line = child.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+  H.neq(line:find('sync workspace · %d+s · 1 file%(s%)'), nil)
+  H.eq(line:find('%', 1, true), nil)
+  child.lua('_G.jobs.cancel()')
+  H.wait(child, '#_G.jobs.list() == 0')
+end
+
 return T
