@@ -813,13 +813,17 @@ why keys, menus and help never disagree.
    name is asked again: `files` re-runs the pending changelists, the opened files and
    `diff -sa` of those files (`merge_modified` keeps the other files' markers and drops files
    no longer opened); `changes` re-runs the pending changelists, the opened files and the
-   shelves. The Sync CL and Recent submitted keep their answers. An event naming neither, a
-   `poll` or `refresh` event, `<F5>`, the scope toggle and the first refresh re-run
-   everything. `checkout.changed(ws, what)` turns depot paths into local ones and sends no
+   shelves. The Sync CL and Recent submitted keep their answers. A `poll` event re-runs
+   everything but the Sync CL (`POLLED`: its `changes -m1 #have` reads the whole have list,
+   and only a sync moves it). An event naming nothing, a `refresh` event, `<F5>`, the scope
+   toggle and the first refresh re-run everything. A query that fails leaves its section's
+   previous answer in place (pending changelists and opened files only ever change
+   together) and puts `refresh failed: <res.err>` at the top of Pending; every run result
+   carries `err`, a one-line reason even for a timeout or an exit with nothing on stderr. `checkout.changed(ws, what)` turns depot paths into local ones and sends no
    `files` (a full refresh) for more than `CHANGED_FILES_MAX` (500) files or an unknown depot
    path. Unshelve, submit, sync and integrate send nothing (they can change any section).
    The view takes its opened files from `poll.refresh` (no toast: the view shows stale files
-   itself), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
+   itself; with `runner.timeout`, not the background one the poll's own calls use), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
    poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background

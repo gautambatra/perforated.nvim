@@ -160,7 +160,13 @@ After that it refreshes itself:
 After an action it asks again only for what the action can change: checking out or reverting
 a file re-reads your changelists, opened files and that file's changed marker, and editing a
 description re-reads the changelists and shelves. The Sync CL and Recent submitted are asked
-again after a submit or sync.
+again after a submit or sync. News from the background check re-reads everything but the Sync
+CL: finding it means reading your whole workspace's have list, which is slow on a large
+workspace, and only a sync moves it. A sync made outside Neovim shows there on `<F5>`.
+
+If p4 doesn't answer a query (an error, or no reply within `runner.timeout`), its section
+keeps what it showed before, and the view's first line says `refresh failed:` and why. The
+next refresh that succeeds takes the line away.
 
 There's no timer. `<F5>`, or `:P4` again, refreshes every section on demand.
 

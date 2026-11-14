@@ -129,7 +129,7 @@ end
 
 --- Full refresh of opened-file state (one `fstat -Ro`), updating counts, buffers and toasts.
 ---@param ws perforated.Workspace
----@param opts { initial: boolean?, notify: boolean? }?
+---@param opts { initial: boolean?, notify: boolean?, timeout: integer? }?  timeout: ms (default: background)
 ---@param cb fun(recs: table[]?, res: perforated.RunResult)?  the opened records (nil: failed)
 function M.refresh(ws, opts, cb)
   opts = opts or {}
@@ -140,7 +140,7 @@ function M.refresh(ws, opts, cb)
   if f then
     f.started = vim.uv.hrtime() -- answers every event before this moment
   end
-  p4.fstat_opened(ws, { priority = 3 }, function(recs, res)
+  p4.fstat_opened(ws, { priority = 3, timeout = opts.timeout }, function(recs, res)
     if not recs then
       return cb and cb(nil, res)
     end

@@ -47,7 +47,7 @@ end
 --- Shelved files of several changelists in one call (`describe -S -s cl…`).
 ---@param ws perforated.Workspace
 ---@param changes string[]
----@param cb fun(by_change: table<string, table[]>)  change → { depotFile, action, rev, type }
+---@param cb fun(by_change: table<string, table[]>, err: string?)  change → { depotFile, action, rev, type }; err: p4 answered nothing
 function M.shelved_files(ws, changes, cb)
   if #changes == 0 then
     return vim.schedule(function()
@@ -62,7 +62,8 @@ function M.shelved_files(ws, changes, cb)
           require('perforated.core.parse').indexed(rec, { 'depotFile', 'action', 'rev', 'type' })
       end
     end
-    cb(out)
+    -- A changelist deleted meanwhile is an error beside the others' records: still an answer.
+    cb(out, not res.ok and #res.records == 0 and res.err or nil)
   end)
 end
 
@@ -97,7 +98,7 @@ end
 --- revision covers every file of the client (the same answer as `//<client>/...#have`, from
 --- any directory).
 ---@param ws perforated.Workspace
----@param cb fun(change: table?)  nil when nothing is synced (or on error)
+---@param cb fun(change: table?, err: string?)  nil when nothing is synced, or on error (err)
 function M.have_change(ws, cb)
   local client = ws:client()
   if not client then
@@ -110,7 +111,7 @@ function M.have_change(ws, cb)
     -- A switched workspace already passes its -c.
     { priority = 2, globals = not ws.client_arg and { '-c', client } or nil },
     function(res)
-      cb(res.records[1])
+      cb(res.records[1], not res.ok and res.err or nil)
     end
   )
 end

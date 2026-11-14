@@ -291,8 +291,9 @@ local function build(view, data)
   local npending = #pending_children
   if not (data.pending and data.opened) then
     -- Still loading (first refresh): no half-built changelists, nothing needs attention yet.
+    -- Not after a failure (below): nothing more is coming.
     pending_children, attention, npending =
-      {
+      data.err and data.err ~= '' and {} or {
         { id = 'pending:loading', kind = 'loading', text = { { 'loading…', 'PerforatedLoading' } } },
       }, {}, 0
   end
@@ -452,6 +453,9 @@ end
 
 --- A refresh of every section.
 local FULL = { full = true }
+--- What the poll's news owes: everything but the Sync CL, the one query that reads the whole
+--- workspace's have list (only a sync moves it: F5, :P4 refresh and the plugin's syncs ask it).
+local POLLED = { full = true, keep_have = true }
 
 --- What two refreshes owe together.
 ---@param a table  a `what` (see M.refresh), or FULL
@@ -459,7 +463,9 @@ local FULL = { full = true }
 ---@return table
 local function merge_what(a, b)
   if a.full or b.full then
-    return FULL
+    -- The Sync CL is owed if either asked for it.
+    local keep = (not a.full or a.keep_have) and (not b.full or b.keep_have)
+    return keep and POLLED or FULL
   end
   local files
   if a.files or b.files then
@@ -503,9 +509,13 @@ end
 ---
 --- `what` (from a `Changed` event) limits it to what a plugin action can have changed:
 --- pending changelists and opened files always, changed markers of `files` only, shelves
---- only with `changes`. The Sync CL and Recent submitted keep their answers. nil = everything.
+--- only with `changes`. The Sync CL and Recent submitted keep their answers. nil = everything;
+--- `keep_have` (the poll's news) = everything but the Sync CL.
+---
+--- A query that fails keeps its section's previous answer (pending changelists and their
+--- files together), and the view's first line says why.
 ---@param view table
----@param what { files: string[]?, changes: boolean? }?
+---@param what { files: string[]?, changes: boolean?, full: boolean?, keep_have: boolean? }?
 function M.refresh(view, what)
   if not vim.api.nvim_buf_is_valid(view.buf) then
     return
@@ -521,11 +531,13 @@ function M.refresh(view, what)
   local prev = view.data or {}
   -- The first refresh fills every section.
   local full = what.full or not view.data
+  local with_have = not view.data or (what.full and not what.keep_have)
   -- Markers of some files only: needs the full set from before.
   local some = not full and type(prev.modified) == 'table' and what.files or nil
   ws:ensure_info(function()
     local data, got = {}, {}
-    local left = full and 6 or 2 + (what.changes and 1 or 0) + (what.files and 1 or 0)
+    local left = full and (with_have and 6 or 5)
+      or 2 + (what.changes and 1 or 0) + (what.files and 1 or 0)
     local function set(k, v)
       data[k], got[k] = v, true
     end
@@ -598,7 +610,9 @@ function M.refresh(view, what)
       end
     end
     p4.pending_changes(ws, function(changes, err)
-      set('pending', changes or {})
+      if changes then
+        set('pending', changes)
+      end
       data.err = data.err or err
       done()
       if not (full or what.changes) then
@@ -611,17 +625,25 @@ function M.refresh(view, what)
           with_shelves[#with_shelves + 1] = c.change
         end
       end
-      cls.shelved_files(ws, with_shelves, function(shelved)
-        set('shelved', shelved)
+      cls.shelved_files(ws, with_shelves, function(shelved, serr)
+        if serr then
+          data.err = data.err or serr
+        else
+          set('shelved', shelved)
+        end
         done()
       end)
     end, view.scope)
     local function failed(res)
-      data.err = data.err or res.errors[1] or vim.trim(res.stderr or '')
+      data.err = data.err or res.err or res.errors[1] or 'p4 failed'
     end
-    if full then
-      cls.have_change(ws, function(c)
-        set('have', c or false)
+    if with_have then
+      cls.have_change(ws, function(c, herr)
+        if herr then
+          data.err = data.err or herr
+        else
+          set('have', c or false)
+        end
         done()
       end)
     end
@@ -634,13 +656,19 @@ function M.refresh(view, what)
     -- The opened files come from the poll's refresh, so buffers, counts and statuslines
     -- update from the same `fstat -Ro` (and its follow-up to this change is not needed).
     local function fstat_opened(cb)
-      -- No toast for stale files: the view shows them.
-      require('perforated.poll').refresh(ws, { notify = false }, function(recs, res)
-        if not recs then
-          failed(res)
+      -- No toast for stale files: the view shows them. Asked for the view, so with the
+      -- interactive timeout: a slow server mustn't empty it.
+      local timeout = require('perforated.config').get().runner.timeout
+      require('perforated.poll').refresh(
+        ws,
+        { notify = false, timeout = timeout },
+        function(recs, res)
+          if not recs then
+            failed(res)
+          end
+          cb(recs)
         end
-        cb(recs)
-      end)
+      )
     end
     if view.scope == 'user' then
       -- Current client with full fstat detail, other clients from `opened -a -u`.
@@ -650,7 +678,10 @@ function M.refresh(view, what)
         if n > 0 then
           return
         end
-        local opened = vim.list_extend({}, recs or {})
+        if not recs then
+          return done() -- the previous answer stays
+        end
+        local opened = vim.list_extend({}, recs)
         for _, o in ipairs(others or {}) do
           if o.client ~= ws:client() then
             opened[#opened + 1] = o
@@ -669,7 +700,9 @@ function M.refresh(view, what)
       end)
     else
       fstat_opened(function(recs)
-        set('opened', recs or {})
+        if recs then
+          set('opened', recs)
+        end
         done()
       end)
     end
@@ -679,7 +712,9 @@ function M.refresh(view, what)
         anywhere = true, -- all of the user's submits, not only those in this client's view
         max = require('perforated.config').get().client_view.submitted_limit,
       }, function(changes, err)
-        set('submitted', changes or {})
+        if changes then
+          set('submitted', changes)
+        end
         data.err = data.err or err
         done()
       end)
@@ -2246,6 +2281,7 @@ function M.open(ws, opts)
       local what = (d.files or d.changes)
           and not d.source
           and { files = d.files, changes = d.changes }
+        or d.source == 'poll' and POLLED
         or FULL
       if owed then
         owed = merge_what(owed, what)

@@ -37,6 +37,7 @@ local M = {}
 ---@field argv string[]
 ---@field all table[]?          tagged: every record incl. messages, in output order
 ---@field cancelled boolean?     stopped by the user (on_spawn's cancel)
+---@field err string?           why it failed, in one line (a p4 error, "timed out after …", …)
 
 M.TIMEOUT_CODE = 124 -- vim.system's exit code on timeout
 M.KILL_GRACE = 2000 -- ms between SIGTERM (timeout) and SIGKILL
@@ -128,6 +129,7 @@ function M.run(spec, cb)
         err = 'exit ' .. res.code
       end
     end
+    res.err = err
     if dbg.enabled then
       dbg.log(
         err and 'warn' or 'debug',

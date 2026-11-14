@@ -166,6 +166,7 @@ local function refused(reason)
     records = {},
     warnings = {},
     errors = { reason },
+    err = reason,
     stderr = '',
     ms = 0,
     timed_out = false,

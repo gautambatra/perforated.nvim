@@ -515,6 +515,107 @@ T['client view']['<F5> refreshes the view'] = function()
   )
 end
 
+--- Route the child's p4 through a shell wrapper: `body` runs first with the arguments in "$@"
+--- (it may exit), then the real p4. `runner` overrides the runner settings. Returns the
+--- wrapper's flag file (its rules can test `[ -e "$FLAG" ]`) and its log (one line per call).
+local function wrap_p4(body, runner)
+  local wrapper, flag, log =
+    server.dir .. '/wrap-p4', server.dir .. '/flag', server.dir .. '/p4.log'
+  H.write(
+    wrapper,
+    ('#!/bin/sh\nFLAG=%s\necho "$*" >> %s\n%s\nexec %s "$@"\n'):format(flag, log, body, P.p4)
+  )
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  child.lua(
+    'local p4, runner = ...; vim.g.perforated = vim.tbl_deep_extend("force", vim.g.perforated, { p4 = p4, runner = runner })',
+    { wrapper, runner or vim.empty_dict() }
+  )
+  child.lua([[require('perforated.config').reload(); require('perforated.core.env').reset()]])
+  return flag, log
+end
+
+local function view_text()
+  return table.concat(lines(), '\n')
+end
+
+--- F5 in the view, then wait for its refresh to end.
+local function f5()
+  child.type_keys('<F5>')
+  wait(('not (%s).loading'):format(view_expr(root)))
+end
+
+T['client view']['a timed-out opened-files query keeps the files and says why'] = function()
+  local flag = wrap_p4(
+    [[case "$*" in *"fstat -Ro"*) [ -e "$FLAG" ] && sleep 3;; esac]],
+    { timeout = 500, background_timeout = 500 }
+  )
+  open_view()
+  H.eq(has_line('b.txt') and has_line('a.txt'), true)
+  H.write(flag, '')
+  f5()
+  -- The files stay (not an empty changelist), and the view says the refresh failed.
+  H.eq(has_line('b.txt') and has_line('a.txt'), true, view_text())
+  H.eq(has_line('refresh failed: timed out after 500ms'), true, view_text())
+  vim.uv.fs_unlink(flag)
+  f5()
+  H.eq(has_line('refresh failed'), false, view_text())
+  H.eq(has_line('b.txt'), true)
+end
+
+T['client view']['its opened-files query has the interactive timeout, not the background one'] = function()
+  local flag = wrap_p4(
+    [[case "$*" in *"fstat -Ro"*) [ -e "$FLAG" ] && sleep 1.5;; esac]],
+    { timeout = 5000, background_timeout = 500 }
+  )
+  open_view()
+  H.write(flag, '')
+  f5()
+  H.eq(has_line('refresh failed'), false, view_text())
+  H.eq(has_line('b.txt') and has_line('a.txt'), true, view_text())
+end
+
+T['client view']['a failed changelist query keeps the changelists and says why'] = function()
+  local flag = wrap_p4(
+    [[case "$*" in *"changes -s pending"*) [ -e "$FLAG" ] && { echo "server busy" >&2; exit 1; };; esac]]
+  )
+  open_view()
+  H.eq(has_line('Fix parser'), true)
+  H.write(flag, '')
+  f5()
+  H.eq(has_line('Fix parser') and has_line('a.txt'), true, view_text())
+  H.eq(has_line('refresh failed: server busy'), true, view_text())
+end
+
+T['client view']['news from the poll refreshes everything but the Sync CL'] = function()
+  local _, log = wrap_p4('')
+  open_view()
+  local function count(pat)
+    local n = 0
+    for l in io.lines(log) do
+      n = n + (l:find(pat, 1, true) and 1 or 0)
+    end
+    return n
+  end
+  local have, pending, submitted =
+    count('#have'), count('changes -s pending'), count('-s submitted -l -m')
+  H.eq(have > 0, true)
+  local function changed(data)
+    child.lua(
+      [[local ws = require('perforated').workspace(vim.fn.bufnr(...))
+        require('perforated.core.events').emit('Changed', vim.tbl_extend('force', { ws = ws.key }, select(2, ...)))]],
+      { root .. '/d.txt', data }
+    )
+    vim.uv.sleep(300) -- the view's 150 ms settle
+    wait(('not (%s).loading'):format(view_expr(root)))
+  end
+  changed({ source = 'poll' })
+  H.eq(count('changes -s pending') > pending and count('-s submitted -l -m') > submitted, true)
+  H.eq(count('#have'), have)
+  -- A change from the plugin that names nothing (a sync, a submit) still asks it.
+  changed(vim.empty_dict())
+  H.eq(count('#have') > have, true)
+end
+
 T['client view']['h/l fold, and folds survive refresh'] = function()
   open_view()
   goto_line('CL 2  Fix parser')

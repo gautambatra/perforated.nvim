@@ -108,6 +108,7 @@ T['runner']['timeout kills a hung process'] = function()
   local r = run({ args = { 'changes' }, cwd = child.cwd, timeout = 300 })
   H.eq(r.timed_out, true)
   H.eq(r.ok, false)
+  H.eq(r.err, 'timed out after 300ms') -- no p4 message: callers still have one line to show
   H.expect.no_equality((vim.uv.hrtime() - t0) / 1e6 > 5000, true)
 end
 
