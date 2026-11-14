@@ -3280,6 +3280,99 @@ T['client view']['diff tab: closing it frees its revision buffers and cached rev
   H.eq(child.lua_get(cached, { '//depot/d.txt#1' }), true) -- cached before the tab
 end
 
+T['client view']['diff tab: <F5> reads a re-shelved file again, not its base revision'] = function()
+  open_view_quiet()
+  open_shelf_tab(1)
+  shown_right('a.txt@=2')
+  H.eq(buf_lines('//depot/a.txt@=2'), { 'a2' })
+  local tab, wins = child.api.nvim_get_current_tabpage(), child.api.nvim_tabpage_list_wins(0)
+  H.write(root .. '/a.txt', 'a3\n')
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  track_calls()
+  child.type_keys('<F5>')
+  wait([[(function()
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_get_name(b) == 'perforated:////depot/a.txt@=2' then
+        return vim.api.nvim_buf_get_lines(b, 0, -1, false)[1] == 'a3'
+      end
+    end
+  end)()]])
+  H.wait_idle(child)
+  local calls = child.lua_get('_G.CALLS')
+  local function count(pat)
+    return #vim.tbl_filter(function(c)
+      return c:find(pat, 1, true) ~= nil
+    end, calls)
+  end
+  H.eq(count('print -q //depot/a.txt@=2'), 1)
+  H.eq(count('a.txt#1'), 0) -- the base: a numbered revision, kept
+  H.eq(count('describe -S'), 1) -- the shelf's files
+  -- The same tab and windows.
+  H.eq(child.api.nvim_get_current_tabpage(), tab)
+  H.eq(child.api.nvim_tabpage_list_wins(0), wins)
+  H.eq(child.lua_get('#vim.api.nvim_list_tabpages()'), 3)
+end
+
+T['client view']['diff tab: <F5> lists files the changelist gained and moves off one it lost'] = function()
+  open_view_quiet()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'CL 2', 'a.txt' })
+  server:p4({ 'reopen', '-c', '2', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/b.txt', 'b2\n')
+  child.type_keys('<F5>')
+  wait([[(function()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('b.txt', 1, true) then return true end
+    end
+  end)()]])
+  H.eq(right_file(), 'a.txt') -- still on the file shown
+  server:p4({ 'revert', root .. '/a.txt' }, { client = 'alice_ws', cwd = root })
+  child.type_keys('<F5>')
+  wait(
+    [[vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[3]))) == 'b.txt']]
+  )
+  H.eq(
+    vim.tbl_filter(function(l)
+      return l:find('a.txt', 1, true) ~= nil
+    end, lines()),
+    {}
+  )
+end
+
+T['client view']['diff tab: <F5> shows a workspace file as it is on disk'] = function()
+  open_view_quiet()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'CL 2', 'a.txt' })
+  local right =
+    [[vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[3]), 0, -1, false)]]
+  H.eq(child.lua_get(right), { 'a2' })
+  H.write(root .. '/a.txt', 'a-disk\n')
+  -- (an older mtime would make Neovim miss it within the same second)
+  vim.uv.fs_utime(root .. '/a.txt', os.time() + 5, os.time() + 5)
+  child.type_keys('<F5>')
+  wait(right .. "[1] == 'a-disk'")
+end
+
+T['client view']['diff tab: <F5> is in the footer and works from a diff side'] = function()
+  open_view_quiet()
+  open_shelf_tab(1)
+  shown_right('a.txt@=2')
+  wait(DIFF_FOOTER .. [[:find('<F5> refresh', 1, true) ~= nil]])
+  H.write(root .. '/a.txt', 'a4\n')
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  child.cmd('wincmd l') -- the left diff side
+  child.type_keys('<F5>')
+  wait([[(function()
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_get_name(b) == 'perforated:////depot/a.txt@=2' then
+        return vim.api.nvim_buf_get_lines(b, 0, -1, false)[1] == 'a4'
+      end
+    end
+  end)()]])
+end
+
 T['p4.print_batch'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

@@ -1166,7 +1166,17 @@ not yet asked for (`asked`), up to `max_kb` in all; an entry over `file_max_kb` 
 print when shown. Sizes are estimates on the entry (`size`): describe's `fileSize` for
 shelves and submitted changelists, the local file's size for opened files, `file_max_kb`
 when unknown. Closing the tab calls `p4.release` and deletes the revision buffers it loaded
-(`created`: not loaded before) that no window shows; `<Tab>`/`<S-Tab>` step the diffed files; in the panel
+(`created`: not loaded before) that no window shows. `<F5>` (`state.refresh`, the panel's
+`refresh` action and a key in both sides) re-runs the opener's `reload` (each opener sets
+`opts.reload`; `change_again` picks what a changelist re-queries: a shelf's files, the opened
+files of one of your pending changelists, a submitted changelist as it was, another client's
+files as listed) with `{ into = state }`: `M.open` then hands the new files to
+`state.replace` instead of opening a tab (or closes the tab when nothing differs).
+`replace` renews the snapshot (`p4.renew`: mutable specs print again, the cached revisions
+stay owned), frees revision buffers no longer listed, runs `:checktime` on the workspace
+buffers, re-renders and shows the same file (`depot_file`, else the label) or the one now in
+its row. A failed re-query ends through `notify(..., opts)`, which clears `refreshing`;
+`<Tab>`/`<S-Tab>` step the diffed files; in the panel
 `j`/`k`/`<Down>`/`<Up>` move over every file row (`rows`: the diffed files, then the rows of
 `files` sections) with wrap-around, and the `CursorMoved` handler moves any other motion to the
 nearest file row; a row of a `files` section leaves the diff as it was; `q` (any window) and `:q` (any of the three windows) close the

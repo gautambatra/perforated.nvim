@@ -30,11 +30,14 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 -- other way (every such way goes through `notify` or `finish_busy`).
 local busy ---@type fun()?
 
-local function start_busy()
+---@param opts { into: table? }?  `into`: a refresh of an open tab
+local function start_busy(opts)
   if busy then
     return
   end
-  local close = require('perforated.ui.toast').busy('Opening diff view…')
+  local close = require('perforated.ui.toast').busy(
+    opts and opts.into and 'Refreshing diff view…' or 'Opening diff view…'
+  )
   busy = close
   -- Never left up by an unexpected failure.
   vim.defer_fn(function()
@@ -53,8 +56,12 @@ local function finish_busy()
   end
 end
 
-local function notify(msg, level)
+--- Say why there is no (new) tab. `opts.into`: a refresh that ends here, which may refresh again.
+local function notify(msg, level, opts)
   finish_busy()
+  if opts and opts.into then
+    opts.into.refreshing = false
+  end
   require('perforated.ui.toast').notify('[perforated] ' .. msg, level or vim.log.levels.INFO)
 end
 
@@ -65,7 +72,7 @@ local function workspace_buf(path)
   return b
 end
 
-local open_tab
+local open_tab, change_again
 
 --- A panel line: action, icon, then the name before its folder, so a long path cuts off the
 --- folder and not the name. Returns the line and the byte column where the folder starts.
@@ -164,6 +171,16 @@ local function panel_actions(p)
       end,
     },
     {
+      id = 'refresh',
+      desc = 'Refresh: the file list, shelved and head files, workspace files from disk',
+      footer_desc = 'refresh',
+      keys = { '<F5>' },
+      footer = 30,
+      run = function()
+        p.refresh()
+      end,
+    },
+    {
       id = 'close',
       desc = 'Close',
       keys = { 'q' },
@@ -211,21 +228,30 @@ end
 --- get a diff; new and deleted files are listed under "New Files" and "Deleted" (they can be
 --- opened and reverted there), identical ones under "Identical", at the end of the panel.
 --- `opts.extra` adds listed-only sections below them (shelf vs workspace: "Not in Shelf").
---- `opts.focus` (a depot path): the file shown first, when it has a diff.
+--- `opts.focus` (a depot path): the file shown first, when it has a diff. `opts.reload`
+--- (from the caller): builds the entries again and calls this with `{ into = <tab state> }`,
+--- for `<F5>`; with `into`, the open tab takes the new files (or closes when none differ).
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
----@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]?, focus: string? }?
+---@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]?, focus: string?, reload: fun(o: table)?, into: table? }?
 function M.open(ws, title, entries, opts)
-  start_busy()
+  start_busy(opts)
+  local into = opts and opts.into
+  if into and not into.valid() then
+    return finish_busy()
+  end
   if #entries == 0 then
-    return notify(title .. ': no files')
+    if into then
+      into.close()
+    end
+    return notify(title .. ': no files', nil, opts)
   end
   local new, deleted, diffable = {}, {}, {}
   for _, e in ipairs(entries) do
     local kind = one_sided(e)
-    local into = kind == 'new' and new or kind == 'deleted' and deleted or diffable
-    into[#into + 1] = e
+    local section = kind == 'new' and new or kind == 'deleted' and deleted or diffable
+    section[#section + 1] = e
   end
   local extra = vim.tbl_filter(
     function(sec)
@@ -244,8 +270,14 @@ function M.open(ws, title, entries, opts)
         n = n + 1
       end
     end
+    if into and not into.valid() then
+      return finish_busy()
+    end
     if n == #entries then
       finish_busy()
+      if into then
+        into.close() -- nothing left to diff
+      end
       local lines = {
         #entries == 0 and (title .. ': nothing to diff')
           or #entries == 1 and (title .. ': the file is identical')
@@ -285,7 +317,11 @@ function M.open(ws, title, entries, opts)
         listed[#listed + 1] = sec
       end
     end
-    open_tab(ws, title, differ, listed, opts and opts.focus)
+    if into then
+      finish_busy()
+      return into.replace(title, differ, listed, opts.focus)
+    end
+    open_tab(ws, title, differ, listed, opts and opts.focus, opts and opts.reload)
   end)
 end
 
@@ -295,7 +331,8 @@ end
 ---@param listed { title: string, entries: perforated.DiffEntry[], files: boolean? }[]  sections
 ---  listed, not diffed; `files`: the cursor can rest on its rows (open, revert)
 ---@param focus string?  depot path of the file to show first
-open_tab = function(ws, title, entries, listed, focus)
+---@param reload fun(o: table)?  see `M.open`
+open_tab = function(ws, title, entries, listed, focus, reload)
   local origin_win = vim.api.nvim_get_current_win() -- where `o` opens a file
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
@@ -492,6 +529,9 @@ open_tab = function(ws, title, entries, listed, focus)
           dv.tab_key(tab, b, '<S-Tab>', function()
             M._step(state, -1)
           end, 'Previous file')
+          dv.tab_key(tab, b, '<F5>', function()
+            state.refresh()
+          end, 'Refresh the diff tab')
         end
       end
     end
@@ -672,8 +712,75 @@ open_tab = function(ws, title, entries, listed, focus)
     end)
   end
 
+  --- `<F5>`: build the file list again (the caller's `reload`), staying on the file shown.
+  function state.refresh()
+    if state.refreshing or not reload then
+      return
+    end
+    state.refreshing = true
+    local cur = entries[state.current or 0]
+    reload({ into = state, focus = cur and (cur.depot_file or cur.label), reload = reload })
+  end
+  function state.valid()
+    return not closed and vim.api.nvim_tabpage_is_valid(tab)
+  end
+  state.close = close_tab
+  --- A refresh's answer: new files in this tab. Shelved and head sides print again (a new
+  --- snapshot); numbered revisions stay; workspace files are checked on disk (`:checktime`).
+  function state.replace(new_title, new_entries, new_listed, keep)
+    state.refreshing = false
+    local old = state.current or 1
+    title, entries, listed = new_title, new_entries, new_listed
+    snapshot, asked = p4.renew(snapshot), {}
+    local listed_names, paths = {}, {}
+    for _, e in ipairs(entries) do
+      for _, sd in ipairs({ e.left, e.right }) do
+        if sd.spec then
+          listed_names[require('perforated.uri').name(sd.spec)] = true
+        elseif sd.path then
+          paths[vim.fs.normalize(sd.path)] = true
+        end
+      end
+    end
+    -- Revision buffers of files no longer listed go, as when the tab closes.
+    for b in pairs(created) do
+      if
+        vim.api.nvim_buf_is_valid(b)
+        and not listed_names[vim.api.nvim_buf_get_name(b)]
+        and #vim.fn.win_findbuf(b) == 0
+      then
+        created[b] = nil
+        pcall(vim.api.nvim_buf_delete, b, { force = true })
+      end
+    end
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if
+        vim.api.nvim_buf_is_loaded(b) and paths[vim.fs.normalize(vim.api.nvim_buf_get_name(b))]
+      then
+        pcall(vim.cmd.checktime, b)
+      end
+    end
+    state.count = #entries
+    render()
+    local i = math.min(old, #entries)
+    for k, e in ipairs(entries) do
+      if keep and (e.depot_file or e.label) == keep then
+        i = k
+      end
+    end
+    state.current = nil
+    if vim.api.nvim_win_is_valid(panel) then
+      vim.api.nvim_win_set_cursor(panel, { i + 2, 0 })
+    end
+    show_entry(i)
+    state.update_footer()
+  end
+
   local p = {
     ws = ws,
+    refresh = function()
+      state.refresh()
+    end,
     step = function(delta)
       state.step(delta)
     end,
@@ -780,19 +887,46 @@ local function opened_entries(ws, recs)
   return out
 end
 
+--- What `<F5>` asks for again: a shelf's files, or a pending changelist's opened files (by the
+--- `item` it opens with). A submitted changelist is described
+--- again anyway; another client's opened files keep the list they had.
+---@param ws perforated.Workspace
+---@param item table  as `M.open_change` takes it
+---@return table item
+change_again = function(ws, item)
+  if item.status == 'submitted' or (item.rec == nil and item.files == nil and item.desc) then
+    return item
+  end
+  local files = item.files or {}
+  local mine = #files > 0 and (files[1].client == nil or files[1].client == ws:client())
+  if #files == 0 then
+    return { change = item.change, files = {} } -- a shelf: fetched again
+  end
+  if not mine then
+    return item
+  end
+  return { change = item.change, files = files, refetch = true }
+end
+
 --- Diff tab for a changelist node item from the client view (pending, shelf or submitted).
 --- `opts.focus`: the depot path of the file to show first (`D` on a file).
 ---@param ws perforated.Workspace
 ---@param item table
----@param opts { focus: string? }?
+---@param opts { focus: string?, into: table?, reload: fun(o: table)? }?
 function M.open_change(ws, item, opts)
-  start_busy()
+  start_busy(opts)
+  opts = opts or {}
+  if not opts.reload then
+    opts.reload = function(o)
+      M.open_change(ws, change_again(ws, item), o)
+    end
+  end
   if item.status == 'submitted' or (item.rec == nil and item.files == nil and item.desc) then
     -- Submitted CL: #rev-1 ↔ #rev for every file.
     return cls.describe(ws, { item.change }, {}, function(by)
       local d = by[item.change]
       if not d then
-        return notify('could not describe CL ' .. item.change, vim.log.levels.ERROR)
+        return notify('could not describe CL ' .. item.change, vim.log.levels.ERROR, opts)
       end
       local entries = {}
       for _, f in ipairs(d.files) do
@@ -812,6 +946,23 @@ function M.open_change(ws, item, opts)
         }
       end
       M.open(ws, 'CL ' .. item.change, entries, opts)
+    end)
+  end
+  if item.refetch then
+    -- `<F5>` on a pending changelist: its files as opened now.
+    return p4.fstat_opened(ws, {}, function(recs, res)
+      if not recs then
+        return notify(
+          ('CL %s: %s'):format(item.change, res.errors[1] or vim.trim(res.stderr or '')),
+          vim.log.levels.WARN,
+          opts
+        )
+      end
+      local files = vim.tbl_filter(function(r)
+        return (r.change or 'default') == item.change
+      end, recs)
+      local title = item.change == 'default' and 'default' or ('CL ' .. item.change)
+      M.open(ws, title, opened_entries(ws, files), opts)
     end)
   end
   if item.files and #item.files > 0 then
@@ -851,11 +1002,16 @@ end
 ---@param ws perforated.Workspace
 ---@param change string
 ---@param shelved table[]?  the shelf's files (fetched when nil)
-function M.open_shelf_vs_workspace(ws, change, shelved)
-  start_busy()
+---@param opts { into: table?, reload: fun(o: table)? }?  (see `M.open`)
+function M.open_shelf_vs_workspace(ws, change, shelved, opts)
+  start_busy(opts)
+  opts = opts or {}
+  opts.reload = opts.reload or function(o)
+    M.open_shelf_vs_workspace(ws, change, nil, o)
+  end
   if not shelved then
     return cls.shelved_files(ws, { change }, function(by)
-      M.open_shelf_vs_workspace(ws, change, by[change] or {})
+      M.open_shelf_vs_workspace(ws, change, by[change] or {}, opts)
     end)
   end
   local depot = vim.tbl_map(function(f)
@@ -874,7 +1030,7 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
       return
     end
     if failed then
-      return notify(('CL %s: %s'):format(change, failed), vim.log.levels.WARN)
+      return notify(('CL %s: %s'):format(change, failed), vim.log.levels.WARN, opts)
     end
     local in_shelf = {}
     for _, d in ipairs(depot) do
@@ -896,6 +1052,7 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
       entries[#entries + 1] = {
         label = path and relative(path) or f.depotFile,
         action = f.action,
+        depot_file = f.depotFile,
         left = (f.action == 'delete' or f.action == 'move/delete') and { empty = 'deleted' }
           or { spec = f.depotFile .. '@=' .. change },
         right = (path and vim.uv.fs_stat(path)) and { path = path }
@@ -910,7 +1067,11 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
       ws,
       ('CL %s (shelved vs workspace)'):format(change),
       entries,
-      { extra = { { title = 'Not in Shelf', entries = not_in_shelf } } }
+      vim.tbl_extend(
+        'force',
+        opts,
+        { extra = { { title = 'Not in Shelf', entries = not_in_shelf } } }
+      )
     )
   end
   require('perforated.revs').where(ws, depot, function(m)
@@ -926,17 +1087,23 @@ end
 
 --- Every opened file of the workspace.
 ---@param ws perforated.Workspace
-function M.open_opened(ws)
-  start_busy()
+---@param opts { into: table?, reload: fun(o: table)? }?  (see `M.open`)
+function M.open_opened(ws, opts)
+  start_busy(opts)
+  opts = opts or {}
+  opts.reload = opts.reload or function(o)
+    M.open_opened(ws, o)
+  end
   p4.fstat_opened(ws, {}, function(recs, res)
     local title = 'opened files · ' .. (ws:client() or ws.key)
     if not recs then
       return notify(
         title .. ': ' .. (res.errors[1] or vim.trim(res.stderr or '')),
-        vim.log.levels.WARN
+        vim.log.levels.WARN,
+        opts
       )
     end
-    M.open(ws, title, opened_entries(ws, recs))
+    M.open(ws, title, opened_entries(ws, recs), opts)
   end)
 end
 

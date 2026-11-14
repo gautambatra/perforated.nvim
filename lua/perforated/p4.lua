@@ -164,6 +164,17 @@ function M.release(snap)
   snap.lines, snap.cached, snap.closed = {}, {}, true
 end
 
+--- A fresh snapshot in place of `snap` (a refresh): mutable specs print again, while the
+--- revisions cached for `snap` stay cached and still go when the new one is released.
+---@param snap perforated.Snapshot
+---@return perforated.Snapshot
+function M.renew(snap)
+  local fresh = M.snapshot()
+  fresh.cached = snap.cached
+  snap.lines, snap.cached, snap.closed = {}, {}, true
+  return fresh
+end
+
 --- Prints in flight in a batch (`print_batch`): cache key → callbacks of `print`s that wait for it.
 local batched = {} ---@type table<string, fun(lines: string[]?)[]>
 

@@ -381,6 +381,7 @@ Diff tab (D, :P4 diff -a)                               *perforated-diff-tab*
   <CR>              Go to the diff
   o                 Open file
   r · <C-r>         Revert
+  <F5>              Refresh: the file list, shelved and head files, workspace files from disk
   q · <C-w>         Close
   ?                 Help
   . · <RightMouse>  Action menu

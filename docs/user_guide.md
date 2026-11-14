@@ -282,7 +282,13 @@ only scans when you expand it (`l`).
   - Moving through the panel switches files, as do `<Tab>` / `<S-Tab>` from any window.
   - Each shelved or `#head` file is read from the server once per diff tab, while you
     move between files or leave the tab and come back. It shows what it was when first
-    shown: after someone re-shelves, close the tab and open it again to see the new shelf.
+    shown: after someone re-shelves, press `<F5>` to see the new shelf.
+  - `<F5>` (in the panel or either diff side) refreshes the tab in place: the file list
+    again (files added to or gone from the changelist or shelf, files now identical), the
+    shelved and `#head` files read again, and your workspace files as they are on disk.
+    Numbered revisions can't change, so they aren't read again. It stays on the file you're
+    viewing, or the one in its place if that file is gone, and the tab closes with a message
+    if nothing is left to diff.
   - While you look at one file, the next ones load in the background, several in one call
     to the server (`diff.prefetch`: up to 10 files and 2 MB, files over 512 KB only when
     shown; `files = 0` turns it off). Closing the tab frees what it loaded.
