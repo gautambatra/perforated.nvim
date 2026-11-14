@@ -2075,6 +2075,8 @@ T['client view']['diffs: no gutter signs; sides in line (first change / your pos
   -- :P4 diff keeps your place in your file; the revision lines up with it
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
   child.api.nvim_win_set_cursor(0, { 55, 0 })
+  -- The base not cached (a first diff on a slow server): it fills in after the diff opens.
+  child.lua([[require('perforated.core.cache').content():clear()]])
   child.cmd('P4 diff')
   if not H.wait(child, [[#vim.api.nvim_list_tabpages() == 2]], 15000) then
     error('no diff tab; messages: ' .. child.cmd_capture('messages'), 0)
@@ -3371,6 +3373,92 @@ T['client view']['diff tab: <F5> is in the footer and works from a diff side'] =
       end
     end
   end)()]])
+end
+
+--- Wait until the diff tab's left side shows `file` (basename), loaded.
+local function shown_left(file)
+  wait(([[(function()
+    local b = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[2])
+    return vim.fs.basename(vim.api.nvim_buf_get_name(b)) == %q
+      and vim.b[b].perforated_loaded == true
+  end)()]]):format(file))
+  H.wait_idle(child)
+end
+
+--- The shelf vs workspace tab of CL 2's four files, b.txt and d.txt changed locally.
+local function shelf_vs_workspace_tab()
+  four_file_shelf()
+  H.write(root .. '/b.txt', 'b-local\n')
+  H.write(root .. '/d.txt', 'd-local\n')
+  open_view_quiet()
+  track_batches()
+  goto_line('Shelved (4)')
+  child.type_keys('w')
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+  shown_left('b.txt@=2') -- a.txt and c.txt are identical
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+end
+
+T['client view']['shelf vs workspace: one print for the check, none to show the files'] = function()
+  shelf_vs_workspace_tab()
+  -- a.txt (the first file) prints alone, from the start; the others in one call.
+  H.eq(
+    child.lua_get('_G.BATCHES'),
+    { { '//depot/b.txt@=2', '//depot/c.txt@=2', '//depot/d.txt@=2' } }
+  )
+  -- (loading the workspace files prints their bases for gutter signs: not the tab's)
+  local function shelf_prints()
+    return vim.tbl_filter(function(c)
+      return c:find('^print') and not c:find('#%d+$')
+    end, child.lua_get('_G.CALLS'))
+  end
+  H.eq(shelf_prints(), { 'print -q //depot/a.txt@=2', 'print -q' })
+  H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil)
+  child.type_keys('<Tab>')
+  shown_left('d.txt@=2')
+  H.eq(#shelf_prints(), 2)
+  H.eq(buf_lines('//depot/d.txt@=2'), { 'd2' })
+end
+
+T['client view']['shelf vs workspace: check content beyond prefetch.max_kb is not kept'] = function()
+  child.lua([[require('perforated.config').set({ diff = { prefetch = { max_kb = 0 } } })]])
+  shelf_vs_workspace_tab()
+  H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil) -- still right
+  -- b.txt wasn't kept: shown, it printed alone.
+  H.eq(#vim.tbl_filter(function(c)
+    return c == 'print -q //depot/b.txt@=2'
+  end, child.lua_get('_G.CALLS')), 1)
+end
+
+T['client view']['diff tab: the first file prints while the identical-files check runs'] = function()
+  open_view_quiet()
+  child.lua([[_G.ORDER = {}
+    local same, p4 = require('perforated.same'), require('perforated.p4')
+    local check, print = same.check, p4.print
+    same.check = function(ws, list, cb, ...)
+      table.insert(_G.ORDER, 'check')
+      return check(ws, list, function(r)
+        table.insert(_G.ORDER, 'checked')
+        cb(r)
+      end, ...)
+    end
+    p4.print = function(ws, spec, ...)
+      table.insert(_G.ORDER, 'print ' .. spec)
+      return print(ws, spec, ...)
+    end]])
+  open_shelf_tab(1)
+  shown_right('a.txt@=2')
+  local order = child.lua_get('_G.ORDER')
+  local function at(x)
+    for i, o in ipairs(order) do
+      if o == x then
+        return i
+      end
+    end
+  end
+  H.neq(at('print //depot/a.txt@=2'), nil)
+  H.eq(at('print //depot/a.txt@=2') < at('checked'), true)
 end
 
 T['p4.print_batch'] = MiniTest.new_set({

@@ -3,7 +3,8 @@
 ---
 ---   * depot revision vs depot revision: digests from one batched `fstat -Ol` (no content);
 ---   * an opened file vs its base, saved: one batched `p4 diff -sr` (p4 compares locally);
----   * anything else (unsaved buffers, a revision vs the workspace file): the contents.
+---   * anything else (unsaved buffers, a revision vs the workspace file): the contents, the
+---     depot sides printed together (`p4.print_batch`, 50 a call).
 ---
 --- Sides are diff sides: { spec = … } | { path = … } | { buf = … } | { empty = … }.
 
@@ -41,11 +42,19 @@ local function read(path)
   return ok and lines or nil
 end
 
+--- How many depot files one content-comparison `print` asks for.
+M.BATCH = 50
+
 --- Check several pairs; `cb` gets a list of booleans (true = identical), in order.
+--- `opts.snapshot` (a diff tab's) keeps the content printed for comparisons, up to
+--- `opts.keep_kb` in all, so showing those files needs no print; `opts.alone`: specs printed by
+--- themselves (already being printed: the tab's first file), not in a batch.
 ---@param ws perforated.Workspace
 ---@param list { left: table, right: table }[]
 ---@param cb fun(same: boolean[])
-function M.check(ws, list, cb)
+---@param opts { snapshot: perforated.Snapshot?, keep_kb: integer?, alone: table<string, true>? }?
+function M.check(ws, list, cb, opts)
+  opts = opts or {}
   local t0 = vim.uv.hrtime()
   local result = {}
   local digest_specs, digest_seen = {}, {}
@@ -126,8 +135,8 @@ function M.check(ws, list, cb)
   local paths = vim.tbl_keys(sr_paths)
   if #paths > 0 then
     todo = todo + 1
-    local opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
-    ws:run({ 'diff', '-sr' }, opts, function(res)
+    local run_opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
+    ws:run({ 'diff', '-sr' }, run_opts, function(res)
       local same = {}
       for _, rec in ipairs(res.records) do
         if rec.clientFile then
@@ -144,10 +153,12 @@ function M.check(ws, list, cb)
     end)
   end
 
+  -- Content comparisons: local sides read here, depot sides printed (together where they can).
+  local wanted, waiting = {}, {} -- specs to print; spec → fns for its lines
   for _, i in ipairs(content) do
     todo = todo + 1
     local got = {}
-    local function side_lines(k, s)
+    for k = 1, 2 do
       local function set(lines)
         got[k] = lines or false
         if got[1] ~= nil and got[2] ~= nil then
@@ -159,18 +170,42 @@ function M.check(ws, list, cb)
           done()
         end
       end
+      local s = sides[i][k]
       if s.lines then
         set(s.lines)
       elseif s.path then
         set(read(s.path))
       else
-        p4.print(ws, s.spec, {}, function(lines)
-          set(lines)
-        end)
+        if not waiting[s.spec] then
+          waiting[s.spec] = {}
+          wanted[#wanted + 1] = s.spec
+        end
+        table.insert(waiting[s.spec], set)
       end
     end
-    side_lines(1, sides[i][1])
-    side_lines(2, sides[i][2])
+  end
+  local function answer(spec, lines)
+    for _, fn in ipairs(waiting[spec]) do
+      fn(lines)
+    end
+  end
+  local batch, budget = {}, opts.keep_kb and { bytes = opts.keep_kb * 1024 } or nil
+  for _, spec in ipairs(wanted) do
+    if opts.alone and opts.alone[spec] or #wanted == 1 then
+      p4.print(ws, spec, { snapshot = opts.snapshot }, function(lines)
+        answer(spec, lines)
+      end)
+    else
+      batch[#batch + 1] = spec
+    end
+  end
+  for first = 1, #batch, M.BATCH do
+    local chunk = vim.list_slice(batch, first, first + M.BATCH - 1)
+    p4.print_batch(ws, chunk, { snapshot = opts.snapshot, budget = budget }, function(got)
+      for _, spec in ipairs(chunk) do
+        answer(spec, got[spec])
+      end
+    end)
   end
 
   todo = todo - 1

@@ -292,6 +292,10 @@ only scans when you expand it (`l`).
   - While you look at one file, the next ones load in the background, several in one call
     to the server (`diff.prefetch`: up to 10 files and 2 MB, files over 512 KB only when
     shown; `files = 0` turns it off). Closing the tab frees what it loaded.
+  - Opening the tab, the first file loads while the plugin checks which files are identical,
+    so the tab is ready one server round trip sooner. A shelf against your workspace (`w`)
+    is compared in batches of 50 files instead of one file at a time, and what that reads
+    is kept (up to `diff.prefetch.max_kb`), so showing those files needs no further call.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
     Each line shows the file name first, then its folder, so a narrow panel cuts off the
     folder rather than the name.

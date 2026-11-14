@@ -263,6 +263,23 @@ function M.open(ws, title, entries, opts)
     }, (opts and opts.extra) or {})
   )
   entries = diffable
+  -- The tab's snapshot from here: the check's content and the first file's print go into it.
+  local snapshot = into and into.renew() or p4.snapshot()
+  -- The first file prints while the check runs (wasted only if it turns out identical).
+  local first = entries[1]
+  for _, e in ipairs(entries) do
+    if opts and opts.focus and (e.depot_file or e.label) == opts.focus then
+      first = e
+    end
+  end
+  local alone = {}
+  for _, sd in ipairs(first and { first.left, first.right } or {}) do
+    if sd.spec then
+      alone[sd.spec] = true
+      p4.print(ws, sd.spec, { snapshot = snapshot }, function() end)
+    end
+  end
+  local keep_kb = (require('perforated.config').get().diff.prefetch or {}).max_kb or 2048
   require('perforated.same').check(ws, entries, function(same)
     local n = 0
     for i = 1, #entries do
@@ -277,6 +294,8 @@ function M.open(ws, title, entries, opts)
       finish_busy()
       if into then
         into.close() -- nothing left to diff
+      else
+        p4.release(snapshot) -- no tab
       end
       local lines = {
         #entries == 0 and (title .. ': nothing to diff')
@@ -321,8 +340,8 @@ function M.open(ws, title, entries, opts)
       finish_busy()
       return into.replace(title, differ, listed, opts.focus)
     end
-    open_tab(ws, title, differ, listed, opts and opts.focus, opts and opts.reload)
-  end)
+    open_tab(ws, title, differ, listed, opts and opts.focus, opts and opts.reload, snapshot)
+  end, { snapshot = snapshot, keep_kb = keep_kb, alone = alone })
 end
 
 ---@param ws perforated.Workspace
@@ -332,7 +351,8 @@ end
 ---  listed, not diffed; `files`: the cursor can rest on its rows (open, revert)
 ---@param focus string?  depot path of the file to show first
 ---@param reload fun(o: table)?  see `M.open`
-open_tab = function(ws, title, entries, listed, focus, reload)
+---@param snapshot perforated.Snapshot  the tab's (`M.open` fills it while checking)
+open_tab = function(ws, title, entries, listed, focus, reload, snapshot)
   local origin_win = vim.api.nvim_get_current_win() -- where `o` opens a file
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
@@ -427,8 +447,8 @@ open_tab = function(ws, title, entries, listed, focus, reload)
   require('perforated.diff.look').apply({ [panel] = 'ui', [lwin] = 'code', [rwin] = 'code' })
 
   local state = { current = nil }
-  -- Shelved and `#head` sides print once for the tab's life (shown again, they are not re-read).
-  local snapshot = p4.snapshot()
+  -- Shelved and `#head` sides print once for the tab's life (shown again, they are not re-read):
+  -- `snapshot`, from `M.open`.
   local keyed = {} -- buffers given this tab's keys (the user's files too, scoped to the tab)
 
   local function close_tab()
@@ -725,13 +745,18 @@ open_tab = function(ws, title, entries, listed, focus, reload)
     return not closed and vim.api.nvim_tabpage_is_valid(tab)
   end
   state.close = close_tab
-  --- A refresh's answer: new files in this tab. Shelved and head sides print again (a new
-  --- snapshot); numbered revisions stay; workspace files are checked on disk (`:checktime`).
+  --- A refresh starts: shelved and head sides print again (a new snapshot; numbered revisions
+  --- stay cached), and the files after the shown one may be asked for again.
+  function state.renew()
+    snapshot, asked = p4.renew(snapshot), {}
+    return snapshot
+  end
+  --- A refresh's answer: new files in this tab (its snapshot renewed when the refresh began);
+  --- workspace files are checked on disk (`:checktime`).
   function state.replace(new_title, new_entries, new_listed, keep)
     state.refreshing = false
     local old = state.current or 1
     title, entries, listed = new_title, new_entries, new_listed
-    snapshot, asked = p4.renew(snapshot), {}
     local listed_names, paths = {}, {}
     for _, e in ipairs(entries) do
       for _, sd in ipairs({ e.left, e.right }) do

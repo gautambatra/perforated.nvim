@@ -1116,7 +1116,7 @@ as end-of-line virtual text.
 loads it directly (not relying on `BufReadCmd`, which doesn't fire inside other
 autocommands); `read(buf)` fills it asynchronously via `p4.print`, sets the filetype from the
 depot path, keeps the buffer read-only (with `readonly` off while writing, to avoid W10) and
-refreshes diff mode in windows showing it. Revision buffers outlive their views (`bufhidden=hide`), so
+refreshes diff mode in windows showing it, lining the sides up again (`diff.view.align`, once more on the next tick: the new content's filler lines settle on the first redraw). Revision buffers outlive their views (`bufhidden=hide`), so
 reusing one of a *mutable* spec (`@=CL` shelves, `#head`, `@label`) reads it again, keeping the
 old text until the new arrives; only numbered revisions (`#N`) are reused as they are.
 `buffer(ws, spec, snapshot)` takes a `p4.snapshot()` (the diff tab's): its first print of a
@@ -1158,6 +1158,14 @@ environment (a terminal tab for terminal tools, detached for GUI tools). Identic
 a message instead (`same.lua`).
 
 #### `diff/tab.lua`
+`M.open` makes the tab's snapshot before the identical-files check (a refresh renews the open
+tab's, `state.renew`), starts printing the first file's sides into it (the focused one, or
+the first: `alone`, so the check's own print of them joins those runner jobs) and passes it
+to `same.check` with `keep_kb = diff.prefetch.max_kb`. `same.check` prints the depot sides
+of content comparisons with `p4.print_batch`, `same.BATCH` (50) specs a call, sharing one
+byte `budget` across the calls: content within it is kept (snapshot or content cache), the
+rest only compared. With no tab to show (every file identical), the snapshot is released.
+
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
 files after the shown one print ahead with `p4.print_batch`, into the tab's `p4.snapshot()`,
 so shelved and `#head` sides print once for the tab's life, revisits and tab switches

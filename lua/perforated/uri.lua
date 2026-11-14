@@ -177,8 +177,16 @@ function M._fetch(buf, spec, gen, snapshot)
         -- It was empty when the diff opened: line it up with the other side now.
         for _, other in ipairs(vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win))) do
           if other ~= win and vim.wo[other].diff then
-            require('perforated.diff.view').align(other, win, vim.w[other].perforated_first_change)
+            local dv = require('perforated.diff.view')
+            local first_change = vim.w[other].perforated_first_change
+            dv.align(other, win, first_change)
             vim.w[other].perforated_first_change = nil -- once: from now on the user moves
+            -- Again once drawn: the new content's diff (filler lines, folds) settles on the
+            -- first redraw and can leave the sides out of line.
+            vim.schedule(function()
+              dv.align(other, win, first_change)
+              vim.w[other].perforated_first_change = nil
+            end)
             break
           end
         end

@@ -253,12 +253,15 @@ end
 --- content cache, or `opts.snapshot`). A `print` of one of them meanwhile waits for this answer.
 --- p4 answers in the order asked and skips files it can't print, so each header is matched to
 --- the next spec it names; a spec without an answer is printed alone when it's asked for.
+--- `opts.budget` ({ bytes = n }, shared by the batches it's given to): keep only that much
+--- content (in the order asked), the rest only passed to `cb`.
 ---@param ws perforated.Workspace
 ---@param specs string[]
----@param opts (perforated.RunOpts|{ snapshot: perforated.Snapshot? })?
+---@param opts (perforated.RunOpts|{ snapshot: perforated.Snapshot?, budget: { bytes: integer }? })?
 ---@param cb fun(got: table<string, string[]>)?  spec → lines
 function M.print_batch(ws, specs, opts, cb)
   local snap = opts and opts.snapshot
+  local budget = opts and opts.budget
   local keys = {}
   for i, spec in ipairs(specs) do
     keys[i] = ws:server_key() .. '|' .. spec
@@ -266,7 +269,7 @@ function M.print_batch(ws, specs, opts, cb)
   end
   opts = vim.tbl_extend('force', { stdin = specs }, opts or {})
   opts.globals = { '-x', '-' }
-  opts.snapshot = nil
+  opts.snapshot, opts.budget = nil, nil
   ws:run({ 'print', '-q' }, opts, function(res)
     local got, sizes = {}, {}
     local cur, chunks, next_i = nil, {}, 1
@@ -292,7 +295,10 @@ function M.print_batch(ws, specs, opts, cb)
     end
     flush()
     for i, spec in ipairs(specs) do
-      if got[spec] then
+      if got[spec] and (not budget or sizes[spec] <= budget.bytes) then
+        if budget then
+          budget.bytes = budget.bytes - sizes[spec]
+        end
         keep(ws, spec, got[spec], sizes[spec], snap)
       end
       local waiting = batched[keys[i]] or {}
