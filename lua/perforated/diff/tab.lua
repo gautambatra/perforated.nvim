@@ -92,9 +92,27 @@ local function panel_actions(p)
       return p.ws
     end),
     {
+      id = 'next_row',
+      desc = 'Next file in the list (new and deleted files too)',
+      keys = { 'j', '<Down>' },
+      nomenu = true,
+      run = function()
+        p.move(vim.v.count1)
+      end,
+    },
+    {
+      id = 'prev_row',
+      desc = 'Previous file in the list',
+      keys = { 'k', '<Up>' },
+      nomenu = true,
+      run = function()
+        p.move(-vim.v.count1)
+      end,
+    },
+    {
       id = 'next_file',
-      desc = 'Next file',
-      keys = { 'j', '<Down>', '<Tab>' },
+      desc = 'Next diff',
+      keys = { '<Tab>' },
       nomenu = true,
       run = function()
         p.step(vim.v.count1)
@@ -102,8 +120,8 @@ local function panel_actions(p)
     },
     {
       id = 'prev_file',
-      desc = 'Previous file',
-      keys = { 'k', '<Up>', '<S-Tab>' },
+      desc = 'Previous diff',
+      keys = { '<S-Tab>' },
       nomenu = true,
       run = function()
         p.step(-vim.v.count1)
@@ -175,21 +193,47 @@ local function panel_actions(p)
 end
 M._panel_actions = panel_actions -- for the generated help (scripts/gen_doc.lua)
 
---- Open the diff tab, unless every file is identical (then just say so). Only files that
---- differ get a diff; identical ones are listed under "Identical:" at the end of the panel.
---- `opts.extra` adds listed-only sections below it (shelf vs workspace: "Not in Shelf").
+--- Whether an entry has nothing to diff: a deleted file, or a new one (no "before" side).
+---@param e perforated.DiffEntry
+---@return 'deleted'|'new'|nil
+local function one_sided(e)
+  if e.action == 'delete' or e.action == 'move/delete' then
+    return 'deleted'
+  end
+  if e.left.empty and not e.right.empty then
+    return 'new'
+  end
+end
+
+--- Open the diff tab, unless no file has a diff (then just say so). Only files that differ
+--- get a diff; new and deleted files are listed under "New Files" and "Deleted" (they can be
+--- opened and reverted there), identical ones under "Identical", at the end of the panel.
+--- `opts.extra` adds listed-only sections below them (shelf vs workspace: "Not in Shelf").
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
 ---@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]? }?
 function M.open(ws, title, entries, opts)
-  local extra = vim.tbl_filter(function(sec)
-    return #sec.entries > 0
-  end, (opts and opts.extra) or {})
   start_busy()
   if #entries == 0 then
     return notify(title .. ': no files')
   end
+  local new, deleted, diffable = {}, {}, {}
+  for _, e in ipairs(entries) do
+    local kind = one_sided(e)
+    local into = kind == 'new' and new or kind == 'deleted' and deleted or diffable
+    into[#into + 1] = e
+  end
+  local extra = vim.tbl_filter(
+    function(sec)
+      return #sec.entries > 0
+    end,
+    vim.list_extend({
+      { title = 'New Files', entries = new, files = true },
+      { title = 'Deleted', entries = deleted, files = true },
+    }, (opts and opts.extra) or {})
+  )
+  entries = diffable
   require('perforated.same').check(ws, entries, function(same)
     local n = 0
     for i = 1, #entries do
@@ -200,7 +244,8 @@ function M.open(ws, title, entries, opts)
     if n == #entries then
       finish_busy()
       local lines = {
-        #entries == 1 and (title .. ': the file is identical')
+        #entries == 0 and (title .. ': nothing to diff')
+          or #entries == 1 and (title .. ': the file is identical')
           or ('%s: all %d files are identical'):format(title, #entries),
       }
       for _, sec in ipairs(extra) do -- one file per line, indented under the section name
@@ -211,7 +256,7 @@ function M.open(ws, title, entries, opts)
         end
       end
       return require('perforated.ui.toast').show(
-        'Perforce: identical, nothing to diff',
+        #entries == 0 and 'Perforce: nothing to diff' or 'Perforce: identical, nothing to diff',
         lines,
         vim.log.levels.INFO
       )
@@ -224,19 +269,28 @@ function M.open(ws, title, entries, opts)
         differ[#differ + 1] = e
       end
     end
-    open_tab(
-      ws,
-      title,
-      differ,
-      vim.list_extend({ { title = 'Identical', entries = identical } }, extra)
-    )
+    -- New and deleted files first, then identical ones, then the caller's sections.
+    local listed = {}
+    for _, sec in ipairs(extra) do
+      if sec.files then
+        listed[#listed + 1] = sec
+      end
+    end
+    listed[#listed + 1] = { title = 'Identical', entries = identical }
+    for _, sec in ipairs(extra) do
+      if not sec.files then
+        listed[#listed + 1] = sec
+      end
+    end
+    open_tab(ws, title, differ, listed)
   end)
 end
 
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
----@param listed { title: string, entries: perforated.DiffEntry[] }[]  sections listed, not diffed
+---@param listed { title: string, entries: perforated.DiffEntry[], files: boolean? }[]  sections
+---  listed, not diffed; `files`: the cursor can rest on its rows (open, revert)
 open_tab = function(ws, title, entries, listed)
   local origin_win = vim.api.nvim_get_current_win() -- where `o` opens a file
   vim.cmd('tabnew')
@@ -249,21 +303,32 @@ open_tab = function(ws, title, entries, listed)
   local panel = vim.api.nvim_get_current_win()
 
   -- Panel content: the title, a row per file that differs (rows 3 … #entries + 2), then the
-  -- listed-only sections. Rendered again when a revert takes a file out.
+  -- listed-only sections. Rendered again when a revert takes a file out. `row_entry`: the
+  -- file of each row the cursor may rest on (the diffed ones and `files` sections').
+  local row_entry, rows = {}, {}
   local function render()
     local lines, dirs = { ' ' .. title, '' }, {}
+    row_entry, rows = {}, {}
     for _, e in ipairs(entries) do
       local row = #lines + 1
       lines[row], dirs[row] = panel_line(e, true)
+      row_entry[row], rows[#rows + 1] = e, row
     end
     local sections = {}
     for _, sec in ipairs(listed) do
       if #sec.entries > 0 then
         lines[#lines + 1] = ''
         lines[#lines + 1] = (' %s (%d):'):format(sec.title, #sec.entries)
-        sections[#sections + 1] = { #lines - 1, #lines + #sec.entries - 1 }
+        -- A `files` section's rows look like the diffed ones; the others are dimmed.
+        sections[#sections + 1] = { #lines - 1, not sec.files and #lines + #sec.entries - 1 }
         for _, e in ipairs(sec.entries) do
-          lines[#lines + 1] = panel_line(e, false)
+          local row = #lines + 1
+          if sec.files then
+            lines[row], dirs[row] = panel_line(e, true)
+            row_entry[row], rows[#rows + 1] = e, row
+          else
+            lines[row] = panel_line(e, false)
+          end
         end
       end
     end
@@ -272,28 +337,28 @@ open_tab = function(ws, title, entries, listed)
     vim.bo[panel_buf].modifiable = false
     vim.api.nvim_buf_clear_namespace(panel_buf, ns, 0, -1)
     vim.api.nvim_buf_set_extmark(panel_buf, ns, 0, 0, { line_hl_group = 'PerforatedTitle' })
-    for i = 1, #entries do
+    for _, row in ipairs(rows) do
       vim.api.nvim_buf_set_extmark(
         panel_buf,
         ns,
-        i + 1,
+        row - 1,
         1,
         { end_col = 10, hl_group = 'PerforatedAction' }
       )
-      local col = dirs[i + 2]
+      local col = dirs[row]
       if col then
         vim.api.nvim_buf_set_extmark(
           panel_buf,
           ns,
-          i + 1,
+          row - 1,
           col,
-          { end_col = #lines[i + 2], hl_group = 'PerforatedDim' }
+          { end_col = #lines[row], hl_group = 'PerforatedDim' }
         )
       end
     end
     for _, s in ipairs(sections) do
       vim.api.nvim_buf_set_extmark(panel_buf, ns, s[1], 0, { line_hl_group = 'PerforatedSection' })
-      for row = s[1] + 1, s[2] do
+      for row = s[1] + 1, s[2] or s[1] do
         vim.api.nvim_buf_set_extmark(panel_buf, ns, row, 0, { line_hl_group = 'PerforatedDim' })
       end
     end
@@ -414,14 +479,23 @@ open_tab = function(ws, title, entries, listed)
     -- FileType, OptionSet 'diff' for user diff settings, …).
     nested = true,
     callback = function()
-      -- The cursor stays on the file list (rows 3 … #entries + 2): any motion that leaves it
-      -- (gg, G, a click on the title or the "Identical" section, a search) comes back.
+      -- The cursor stays on a file row (the diffed files, new and deleted ones): any motion
+      -- that leaves them (gg, G, a click on the title or the "Identical" section, a search)
+      -- comes back to the nearest. A new or deleted file leaves the diff as it was.
       local row = vim.api.nvim_win_get_cursor(panel)[1]
-      local clamped = math.max(3, math.min(row, #entries + 2))
-      if clamped ~= row then
-        vim.api.nvim_win_set_cursor(panel, { clamped, 0 })
+      if not row_entry[row] then
+        local best
+        for _, r in ipairs(rows) do
+          if not best or math.abs(r - row) < math.abs(best - row) then
+            best = r
+          end
+        end
+        row = best or 3
+        vim.api.nvim_win_set_cursor(panel, { row, 0 })
       end
-      show_entry(clamped - 2)
+      if row - 2 <= #entries then
+        show_entry(row - 2)
+      end
       state.update_footer()
     end,
   })
@@ -494,25 +568,46 @@ open_tab = function(ws, title, entries, listed)
       return
     end
     require('perforated.checkout').revert(ws, { e.client_file }, false, function(ok)
+      if not ok or not vim.api.nvim_tabpage_is_valid(tab) then
+        return
+      end
+      local at -- where the reverted file's row was among the cursor's rows
+      for k, r in ipairs(rows) do
+        if row_entry[r] == e then
+          at = k
+        end
+      end
       local i
       for k, x in ipairs(entries) do
         if x == e then
           i = k
         end
       end
-      if not ok or not i or not vim.api.nvim_tabpage_is_valid(tab) then
-        return
+      for _, sec in ipairs(i and {} or listed) do
+        for k, x in ipairs(sec.entries) do
+          if x == e then
+            table.remove(sec.entries, k)
+            break
+          end
+        end
       end
-      table.remove(entries, i)
+      if i then
+        table.remove(entries, i)
+      end
       if #entries == 0 then
-        return close_tab()
+        return close_tab() -- no diff left to show
       end
       state.count = #entries
       render()
-      state.current = nil
-      local n = math.min(i, #entries)
-      vim.api.nvim_win_set_cursor(panel, { n + 2, 0 })
-      show_entry(n)
+      if i then
+        state.current = nil
+      end
+      -- The next file down takes its row (the last one if it was last).
+      local row = rows[math.min(at or 1, #rows)]
+      vim.api.nvim_win_set_cursor(panel, { row, 0 })
+      if row - 2 <= #entries then
+        show_entry(row - 2)
+      end
       state.update_footer()
     end)
   end
@@ -521,6 +616,17 @@ open_tab = function(ws, title, entries, listed)
     ws = ws,
     step = function(delta)
       state.step(delta)
+    end,
+    -- j/k: from row to row (diffed, new and deleted files), wrapping round.
+    move = function(delta)
+      local row = vim.api.nvim_win_get_cursor(panel)[1]
+      local at = 1
+      for k, r in ipairs(rows) do
+        if r == row then
+          at = k
+        end
+      end
+      vim.api.nvim_win_set_cursor(panel, { rows[(at - 1 + delta) % #rows + 1], 0 })
     end,
     focus = function()
       if state.current then
@@ -532,8 +638,8 @@ open_tab = function(ws, title, entries, listed)
     revert = revert,
   }
   local function node_at(row)
-    local i = (row or vim.api.nvim_win_get_cursor(panel)[1]) - 2
-    return entries[i] and { kind = 'file', item = entries[i] } or nil
+    local e = row_entry[row or vim.api.nvim_win_get_cursor(panel)[1]]
+    return e and { kind = 'file', item = e } or nil
   end
   p.view = {
     ws = ws,

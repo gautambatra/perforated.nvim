@@ -159,7 +159,8 @@ More: [client view](docs/user_guide.md#client-view), [changelists](docs/user_gui
 - `:P4 diff` opens the current file against its depot revision, side by side in a new tab, in
   Neovim's diff mode. It also takes `#rev`, `#head`, `@CL`, `@=CL` (shelved) and `prev`.
 - `D` diffs a whole changelist, pending, shelved or submitted, in a tab with a file panel.
-- Identical files are reported, not diffed.
+- Identical files are reported, not diffed; new and deleted files are listed in their own
+  sections.
 - `:P4 diff!` opens your `$P4DIFF` tool instead.
 - Diff views use your colorscheme without syntax colouring, so the changes stand out.
   `diff.syntax = true` brings it back; `diff.colors = 'perforated'` gives them a light palette

@@ -312,12 +312,20 @@ Neovim's diff mode (`]c`, `do`, `dp` all work).
   inside the diff tab.)
 - The mouse wheel over either side scrolls both, whichever window has focus.
 
-### Identical files
+### Identical, new and deleted files
 
 Every diff first checks whether the two sides are identical, and if they are just says so.
-For a set of files (`D` on a changelist or a shelf, `:P4 diff -a`), identical files are listed
-under "Identical" at the end of the file panel and only the rest are diffed. If every file is
-identical, the diff tab doesn't open.
+For a set of files (`D` on a changelist or a shelf, `:P4 diff -a`), only the files that changed
+are diffed. Below them, the file panel lists:
+
+- **New Files:** files marked for add (or added, in a submitted changelist), which have nothing
+  to compare with;
+- **Deleted:** files marked for delete, or deleted;
+- **Identical:** files with no changes.
+
+`<Tab>`/`<S-Tab>` step through the diffs only. `j`/`k` move over the new and deleted files too:
+the diff stays as it was, and `o` opens the file and `r` reverts it there. If no file has a
+diff, the tab doesn't open, and a pop-up lists the files instead.
 
 Diffing a shelf against the workspace (`w` on a shelf) also lists, under "Not in Shelf", every
 file you have opened (in any changelist) that the shelf doesn't hold.

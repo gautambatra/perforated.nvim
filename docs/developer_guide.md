@@ -1138,19 +1138,23 @@ a message instead (`same.lua`).
 
 #### `diff/tab.lua`
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
-next one is prefetched); `<Tab>`/`<S-Tab>` step files; in the panel `j`/`k`/`<Down>`/`<Up>`
-step with wrap-around, and the `CursorMoved` handler clamps any other motion back onto the
-file rows (3 … #entries + 2); `q` (any window) and `:q` (any of the three windows) close the
+next one is prefetched); `<Tab>`/`<S-Tab>` step the diffed files; in the panel
+`j`/`k`/`<Down>`/`<Up>` move over every file row (`rows`: the diffed files, then the rows of
+`files` sections) with wrap-around, and the `CursorMoved` handler moves any other motion to the
+nearest file row; a row of a `files` section leaves the diff as it was; `q` (any window) and `:q` (any of the three windows) close the
 whole tab. The panel's keys are an action registry (`panel_actions`, also `M._panel_actions` for
 `make doc`) attached through `keys.attach` with a small stand-in tree: `node_at` gives a
-`{ kind = 'file', item = entry }` node on the file rows, and nothing elsewhere. That brings `?`,
+`{ kind = 'file', item = entry }` node on the file rows (`row_entry`), and nothing elsewhere. That brings `?`,
 the `.` menu and a footer (`ui/footer.lua`, updated on `CursorMoved`). `o` opens the file in
 the window the tab was opened from (or another file window there, else a new tab), `r` reverts
 entries with `client_file` (opened files of this workspace only) and re-renders the panel
 without the file. Panel lines put the name before its folder (`panel_line`). Shelf-vs-workspace puts the shelf left, the workspace file
-right. Before opening, every pair is checked
-with `same.check`: identical files go to an "Identical (N):" section; if all are identical,
-the tab doesn't open. `M.open`'s `opts.extra` adds more listed-only sections below it:
+right. Before opening, `one_sided` takes out the files with nothing to diff: deleted files
+(action `delete`, `move/delete`) to "Deleted (N):", files without a left side (add, branch,
+a first revision) to "New Files (N):"; both are `files` sections, whose rows the cursor can
+rest on (`o`, `r`). Every remaining pair is checked with `same.check`: identical files go to
+an "Identical (N):" section; if none is left to diff, the tab doesn't open and the pop-up
+lists the sections. `M.open`'s `opts.extra` adds more listed-only sections below it:
 `open_shelf_vs_workspace` runs `p4 where` on the shelved files and `fstat -Ro` (opened files)
 in parallel and passes every opened file the shelf doesn't hold as "Not in Shelf (N):" (named
 in the pop-up instead when every shelved file is identical). Sources: `open_change` (pending, shelved, submitted), `open_opened`

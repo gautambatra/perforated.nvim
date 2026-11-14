@@ -373,15 +373,17 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
 
 Diff tab (D, :P4 diff -a)                               *perforated-diff-tab*
 
-  g/ · <C-g>          Go to changelist / path / user
-  j · <Down> · <Tab>  Next file
-  k · <Up> · <S-Tab>  Previous file
-  <CR>                Go to the diff
-  o                   Open file
-  r · <C-r>           Revert
-  q · <C-w>           Close
-  ?                   Help
-  . · <RightMouse>    Action menu
+  g/ · <C-g>        Go to changelist / path / user
+  j · <Down>        Next file in the list (new and deleted files too)
+  k · <Up>          Previous file in the list
+  <Tab>             Next diff
+  <S-Tab>           Previous diff
+  <CR>              Go to the diff
+  o                 Open file
+  r · <C-r>         Revert
+  q · <C-w>         Close
+  ?                 Help
+  . · <RightMouse>  Action menu
 
   <Tab> and <S-Tab> step through the files from the diff windows too.
 

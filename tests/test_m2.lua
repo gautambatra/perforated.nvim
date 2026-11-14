@@ -1801,8 +1801,23 @@ T['client view']['depot revisions load even when opened from inside an autocmd']
 end
 
 T['client view']['diff tab: moving the cursor in the panel loads each file (both sides)'] = function()
+  -- Edits (the initial import's files are all new: nothing to diff).
+  local as_alice = { client = 'alice_ws', cwd = root }
+  local cl = server
+    :p4(
+      { 'change', '-i' },
+      vim.tbl_extend('force', as_alice, {
+        stdin = 'Change: new\nDescription:\n\ttweak b d\n',
+      })
+    ).stdout
+    :match('Change (%d+) created')
+  server:p4({ 'reopen', '-c', cl, root .. '/b.txt' }, as_alice)
+  server:p4({ 'edit', '-c', cl, root .. '/d.txt' }, as_alice)
+  H.write(root .. '/b.txt', 'b2\n')
+  H.write(root .. '/d.txt', 'd2\n')
+  server:p4({ 'submit', '-c', cl }, as_alice)
   open_view()
-  goto_line('initial import')
+  goto_line('tweak b d')
   child.type_keys('D')
   -- The diff tab (floats count as windows: the client view's footer and the busy pop-up too).
   wait(
@@ -1810,7 +1825,7 @@ T['client view']['diff tab: moving the cursor in the panel loads each file (both
   )
   -- Move through the panel the way a user does (CursorMoved inside the panel).
   local seen = {}
-  for row = 3, 6 do
+  for row = 3, 4 do
     child.lua(([[
       vim.api.nvim_win_set_cursor(0, { %d, 0 })
       vim.api.nvim_exec_autocmds('CursorMoved', { buffer = 0 })
@@ -1820,7 +1835,7 @@ T['client view']['diff tab: moving the cursor in the panel loads each file (both
     seen[#seen + 1] = child.api.nvim_buf_get_lines(right, 0, -1, false)[1]
   end
   table.sort(seen)
-  H.eq(seen, { 'a1', 'b1', 'c1', 'd1' })
+  H.eq(seen, { 'b2', 'd2' })
   -- The two diff windows share the width equally.
   local w =
     child.lua_get([[vim.tbl_map(vim.api.nvim_win_get_width, vim.api.nvim_tabpage_list_wins(0))]])
@@ -2263,8 +2278,12 @@ T['client view']['diff tab panel: o opens the file where the tab came from; r re
 end
 
 T['client view']['diff tab panel of a submitted changelist: o opens the revision; no r'] = function()
+  -- An edit (the initial import's files are all new: nothing to diff).
+  server:p4({ 'edit', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/d.txt', 'd2\n')
+  server:p4({ 'submit', '-d', 'tweak d', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
   open_view()
-  goto_line('initial import')
+  goto_line('tweak d')
   child.type_keys('D')
   wait(
     [[#vim.api.nvim_list_tabpages() == 3 and require('perforated.views.base').normal_wins(0) == 3]]
@@ -2274,8 +2293,80 @@ T['client view']['diff tab panel of a submitted changelist: o opens the revision
   child.type_keys('r')
   H.eq(H.wait_message(child, 'Revert (r) does not apply here', 2000), true)
   child.type_keys('o')
-  H.eq(child.api.nvim_buf_get_name(0), 'perforated:////depot/a.txt#1')
+  H.eq(child.api.nvim_buf_get_name(0), 'perforated:////depot/d.txt#2')
   H.eq(#child.api.nvim_list_tabpages() >= 3, true) -- the diff tab stays
+end
+
+--- The diff tab's panel rows, and which file the right-hand window shows.
+local function right_file()
+  local wins = child.api.nvim_tabpage_list_wins(0)
+  return vim.fs.basename(child.api.nvim_buf_get_name(child.api.nvim_win_get_buf(wins[3])))
+end
+
+T['client view']['diff tab: new and deleted files are listed in their own sections, not diffed'] = function()
+  H.write(root .. '/x.txt', 'x\n')
+  server:p4({ 'add', root .. '/x.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'revert', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'delete', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/b.txt', 'b2\n')
+  child.cmd('P4 diff -a')
+  wait(DIFF_TAB)
+  local text = table.concat(lines(), '\n')
+  local new, del = text:find('New Files (1):', 1, true), text:find('Deleted (1):', 1, true)
+  H.neq(new, nil, text)
+  H.neq(del, nil, text)
+  -- Diffed: a.txt and b.txt, above both sections; x.txt under New Files, c.txt under Deleted.
+  H.eq(text:find('b.txt', 1, true) < new and new < text:find('x.txt', 1, true), true, text)
+  H.eq(del < text:find('c.txt', 1, true), true, text)
+  -- <Tab> only steps the diffs.
+  local seen = { [right_file()] = true }
+  for _ = 1, 3 do
+    child.type_keys('<Tab>')
+    seen[right_file()] = true
+  end
+  H.eq(seen, { ['a.txt'] = true, ['b.txt'] = true })
+  -- j goes on to the new and deleted files; the diff stays as it was, o and r apply.
+  child.type_keys('gg')
+  child.type_keys('j')
+  local shown = right_file()
+  child.type_keys('j')
+  H.neq(lines()[child.api.nvim_win_get_cursor(0)[1]]:find('x.txt', 1, true), nil)
+  H.eq(right_file(), shown)
+  wait(DIFF_FOOTER .. [[:find('r revert', 1, true) ~= nil]])
+  child.type_keys('j')
+  H.neq(lines()[child.api.nvim_win_get_cursor(0)[1]]:find('c.txt', 1, true), nil)
+  child.type_keys('j') -- wraps round to the first diff
+  H.eq(child.api.nvim_win_get_cursor(0)[1], 3)
+  -- r on the new file reverts it, and its section goes.
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]])
+  child.type_keys('k', 'k', 'r')
+  wait(
+    [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('New Files', 1, true)]]
+  )
+  H.eq(
+    server:p4({ 'opened' }, { client = 'alice_ws', cwd = root }).stdout:find('x.txt', 1, true),
+    nil
+  )
+  H.neq(lines()[child.api.nvim_win_get_cursor(0)[1]]:find('c.txt', 1, true), nil)
+end
+
+T['client view']['D on a changelist of new files only: nothing to diff, the files listed'] = function()
+  local cl = server
+    :p4({ 'change', '-i' }, {
+      client = 'alice_ws',
+      cwd = root,
+      stdin = 'Change: new\nDescription:\n\tOnly new\n',
+    }).stdout
+    :match('Change (%d+) created')
+  H.write(root .. '/y.txt', 'y\n')
+  server:p4({ 'add', '-c', cl, root .. '/y.txt' }, { client = 'alice_ws', cwd = root })
+  open_view()
+  goto_line('Only new')
+  child.type_keys('D')
+  wait(
+    [[vim.tbl_contains(vim.tbl_map(function(t) local s = t.title .. ' ' .. table.concat(t.lines, ' ') return s:find('nothing to diff', 1, true) ~= nil and s:find('New Files (1):', 1, true) ~= nil and s:find('y.txt', 1, true) ~= nil end, require('perforated.ui.toast').history()), true)]]
+  )
+  H.eq(#child.api.nvim_list_tabpages(), 2)
 end
 
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
