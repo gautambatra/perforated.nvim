@@ -471,7 +471,13 @@ local function merge_what(a, b)
   if a.files or b.files then
     files = vim.list_extend(vim.list_extend({}, a.files or {}), b.files or {})
   end
-  return { files = files, changes = a.changes or b.changes }
+  local changes = a.changes or b.changes
+  if type(a.changes) == 'table' and type(b.changes) == 'table' then
+    changes = vim.list_extend(vim.list_extend({}, a.changes), b.changes)
+  elseif a.changes == true or b.changes == true then
+    changes = true
+  end
+  return { files = files, changes = changes }
 end
 M._merge_what = merge_what
 
@@ -513,13 +519,15 @@ end
 ---
 --- `what` (from a `Changed` event) limits it to what a plugin action can have changed:
 --- pending changelists and opened files always, changed markers of `files` only, shelves
---- only with `changes`. The Sync CL and Recent submitted keep their answers. nil = everything;
+--- only with `changes`: `true` every changelist's, a list those changelists' (merged into the
+--- others' previous answer; an empty list none). The Sync CL and Recent submitted keep their
+--- answers. nil = everything;
 --- `keep_have` (the poll's news) = everything but the Sync CL.
 ---
 --- A query that fails keeps its section's previous answer (pending changelists and their
 --- files together), and the view's first line says why.
 ---@param view table
----@param what { files: string[]?, changes: boolean?, full: boolean?, keep_have: boolean? }?
+---@param what { files: string[]?, changes: boolean|string[]?, full: boolean?, keep_have: boolean? }?
 function M.refresh(view, what)
   if not vim.api.nvim_buf_is_valid(view.buf) then
     return
@@ -538,10 +546,19 @@ function M.refresh(view, what)
   local with_have = not view.data or (what.full and not what.keep_have)
   -- Markers of some files only: needs the full set from before.
   local some = not full and type(prev.modified) == 'table' and what.files or nil
+  -- Shelves to ask for: true = all; a list = those, the others keep their previous answer.
+  local shelves = full or what.changes
+  if type(shelves) == 'table' then
+    if not prev.shelved then
+      shelves = true
+    elseif #shelves == 0 then
+      shelves = nil
+    end
+  end
   ws:ensure_info(function()
     local data, got = {}, {}
     local left = full and (with_have and 6 or 5)
-      or 2 + (what.changes and 1 or 0) + (what.files and 1 or 0)
+      or 2 + (shelves and 1 or 0) + (what.files and 1 or 0)
     local function set(k, v)
       data[k], got[k] = v, true
     end
@@ -619,19 +636,32 @@ function M.refresh(view, what)
       end
       data.err = data.err or err
       done()
-      if not (full or what.changes) then
+      if not shelves then
         return
       end
-      -- Shelved files, only for CLs that have any.
+      -- Shelved files, only for CLs that have any (of those asked for).
+      local asked = shelves ~= true and {} or nil
+      for _, c in ipairs(asked and shelves or {}) do
+        asked[tostring(c)] = true
+      end
       local with_shelves = {}
       for _, c in ipairs(changes or {}) do
-        if c.shelved ~= nil then
+        if c.shelved ~= nil and (not asked or asked[c.change]) then
           with_shelves[#with_shelves + 1] = c.change
         end
       end
       cls.shelved_files(ws, with_shelves, function(shelved, serr)
         if serr then
           data.err = data.err or serr
+        elseif asked then
+          -- The others' shelves as before (if still pending); an asked CL without a shelf drops.
+          local merged = {}
+          for _, c in ipairs(changes or prev.pending or {}) do
+            if not asked[c.change] then
+              merged[c.change] = prev.shelved[c.change]
+            end
+          end
+          set('shelved', vim.tbl_extend('force', merged, shelved))
         else
           set('shelved', shelved)
         end

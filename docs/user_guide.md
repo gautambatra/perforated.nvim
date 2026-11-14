@@ -158,9 +158,10 @@ After that it refreshes itself:
 - when the background check finds news, such as a file becoming stale or someone resolving one.
 
 After an action it asks again only for what the action can change: checking out or reverting
-a file re-reads your changelists, opened files and that file's changed marker, unshelving
-does the same for the unshelved files plus the shelves, and editing a description re-reads the
-changelists and shelves. The Sync CL and Recent submitted are asked
+a file re-reads your changelists, opened files and that file's changed marker, and unshelving
+does the same for the unshelved files. Editing a description re-reads only the changelists;
+shelving, deleting shelved files or deleting a changelist re-reads them and that one
+changelist's shelf. The Sync CL and Recent submitted are asked
 again after a submit or sync. News from the background check re-reads everything but the Sync
 CL: finding it means reading your whole workspace's have list, which is slow on a large
 workspace, and only a sync moves it. A sync made outside Neovim shows there on `<F5>`.

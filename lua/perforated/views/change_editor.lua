@@ -201,10 +201,7 @@ local function remember(ws, change, desc)
   if ws.sticky_cl == change then
     ws.sticky_desc = desc
   end
-  require('perforated.core.events').emit(
-    'Changed',
-    { ws = ws.key, change = change, changes = true }
-  )
+  require('perforated.core.events').emit('Changed', { ws = ws.key, change = change, changes = {} })
 end
 
 --- Full spec in an acwrite buffer (jobs, type, files …); `:w` runs `change -i`.

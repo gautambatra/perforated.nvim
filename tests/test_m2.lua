@@ -2967,10 +2967,7 @@ T['client view']['after an unshelve the view asks for those files only, not the 
   )
   vim.uv.sleep(800)
   -- No `changes -m1 #have` (the whole have list), no submitted list; `diff -sa` for a.txt.
-  H.eq(
-    count_calls(SECTIONS),
-    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1, ['describe -S'] = 1 }
-  )
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1 })
   -- (given a file list, `-x -`: not every opened file)
   H.eq(
     child.lua_get([[(function()
@@ -2984,6 +2981,97 @@ T['client view']['after an unshelve the view asks for those files only, not the 
   wait([[(function() for _, b in ipairs(vim.api.nvim_list_bufs()) do
     local st = require('perforated.buffer').get(b)
     if st and st.path:find('a.txt', 1, true) then return st.status == 'opened' end end end)()]])
+end
+
+--- The changelists the last `describe -S` asked about.
+local function last_describe_cls()
+  return child.lua_get([[(function()
+    local d = vim.tbl_filter(function(e)
+      return e.argv[2] == 'describe' or vim.tbl_contains(e.argv or {}, 'describe')
+    end, require('perforated.core.log').entries())
+    local argv, out = d[#d].argv, {}
+    for _, a in ipairs(argv) do
+      if a:match('^%d+$') then out[#out + 1] = a end
+    end
+    return out
+  end)()]])
+end
+
+T['client view']['shelving one changelist re-reads its shelf only; the others stay'] = function()
+  local cl = server
+    :p4({ 'change', '-i' }, {
+      client = 'alice_ws',
+      cwd = root,
+      stdin = 'Change: new\nClient: alice_ws\nDescription:\n\tTweak d\n',
+    }).stdout
+    :match('Change (%d+)')
+  server:p4({ 'edit', '-c', cl, root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  open_view_quiet()
+  H.eq(row_of('Shelved (1)') ~= nil, true) -- CL 2's
+  child.lua(
+    ([[require('perforated.ops').shelve(require('perforated').workspace(), %q, nil, function(ok) _G.r = ok end)]]):format(
+      cl
+    )
+  )
+  wait('_G.r == true')
+  wait(([[(function() local n = 0
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+      if l:find('Shelved (1)', 1, true) then n = n + 1 end end
+    return n == 2 end)()]]):format(view_expr(root)))
+  vim.uv.sleep(800)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  -- (one `describe -S` is the shelve's own look at the shelf it may replace)
+  H.eq(
+    count_calls(SECTIONS),
+    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['describe -S'] = 2 }
+  )
+  H.eq(last_describe_cls(), { cl })
+end
+
+T['client view']['saving a description re-reads pending CLs, not shelves'] = function()
+  open_view_quiet()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('i')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  child.type_keys('ggA', ' (edited)', '<Esc>', ':w<CR>')
+  wait([[vim.bo.filetype ~= 'perforated-description']])
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('Fix parser (edited)', 1, true) then return true end end end)()]]):format(
+      view_expr(root)
+    )
+  )
+  vim.uv.sleep(800)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1 })
+  H.eq(row_of('Shelved (1)') ~= nil, true)
+end
+
+T['client view']['a listed changelist without a shelf left drops its shelved files'] = function()
+  open_view_quiet()
+  H.eq(row_of('Shelved (1)') ~= nil, true)
+  server:p4({ 'shelve', '-d', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  child.lua(
+    [[require('perforated.checkout').changed(require('perforated').workspace(), { changes = { '2' } })]]
+  )
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('Shelved (', 1, true) then return false end end return true end)()]]):format(
+      view_expr(root)
+    )
+  )
+end
+
+T['client view']['merged events ask for the shelves of every changelist they list'] = function()
+  local merged = child.lua_get([[(function()
+    local m = require('perforated.views.client')._merge_what
+    return {
+      m({ changes = { '2' } }, { changes = { '3' } }).changes,
+      m({ changes = { '2' } }, { changes = true }).changes,
+      m({ changes = {} }, { files = { 'x' } }).changes,
+    }
+  end)()]])
+  H.eq(merged, { { '2', '3' }, true, {} })
 end
 
 T['client view']['<F5> and events that name nothing re-run every section'] = function()

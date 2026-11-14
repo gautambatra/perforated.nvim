@@ -814,7 +814,12 @@ why keys, menus and help never disagree.
    name is asked again: `files` re-runs the pending changelists, the opened files and
    `diff -sa` of those files (`merge_modified` keeps the other files' markers and drops files
    no longer opened); `changes` re-runs the pending changelists, the opened files and the
-   shelves. The Sync CL and Recent submitted keep their answers. A `poll` event re-runs
+   shelves: `true` every changelist's, a list (`{ '1234' }`) only those changelists'
+   (`describe -S -s` of them, merged into the others' previous answer; a listed changelist
+   with no shelf left drops out), an empty list none. Shelve, delete shelved and delete
+   changelist name their changelist; a description save and unshelve name none (the
+   description comes from the pending list, and unshelving changes no shelf). Merged events
+   list every changelist they name, `true` winning. The Sync CL and Recent submitted keep their answers. A `poll` event re-runs
    everything but the Sync CL (`POLLED`: its `changes -m1 #have` reads the whole have list,
    and only a sync moves it). An event naming nothing, a `refresh` event, `<F5>`, the scope
    toggle and the first refresh re-run everything. A query that fails leaves its section's
@@ -824,7 +829,7 @@ why keys, menus and help never disagree.
    depot paths on as they are (`modified.query` takes them, `merge_modified` matches them by
    the opened records' `depotFile`), and sends no `files` (a full refresh) for more than
    `CHANGED_FILES_MAX` (500) files or a `<dir>/...` path. Unshelve sends the depot files it
-   unshelved and `changes` (it touches no have revision and no other opened file: a full
+   unshelved (it touches no have revision, no shelf and no other opened file: a full
    refresh would re-read the have list and every opened file); submit, sync and integrate
    send nothing (they can change any section).
    The view takes its opened files from `poll.refresh` (no toast: the view shows stale files

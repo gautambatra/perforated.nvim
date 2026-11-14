@@ -161,7 +161,7 @@ function M.shelve(ws, change, paths, cb)
     require('perforated.jobs').run(ws, title, args, opts, function(res)
       task.done()
       co.report('shelve', res, #res.records)
-      co.changed(ws, { changes = true })
+      co.changed(ws, { changes = { change } })
       cb(#res.errors == 0 and #res.records > 0 and not res.stopped)
     end)
   end
@@ -246,7 +246,7 @@ function M.delete_shelved(ws, change, depot_files, cb)
   local title = ('delete shelved CL %s'):format(change)
   require('perforated.jobs').run(ws, title, args, opts, function(res)
     if res.stopped then
-      co.changed(ws, { changes = true })
+      co.changed(ws, { changes = { change } })
       return cb(false)
     end
     if #res.errors > 0 then
@@ -254,7 +254,7 @@ function M.delete_shelved(ws, change, depot_files, cb)
     else
       notify(('deleted shelved files of CL %s'):format(change))
     end
-    co.changed(ws, { changes = true })
+    co.changed(ws, { changes = { change } })
     cb(#res.errors == 0)
   end)
 end
@@ -347,7 +347,7 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       end
       -- Only the unshelved files and the changelists changed: not the have list or the
       -- other opened files (a full refresh re-reads both, slow on a large workspace).
-      co.changed(ws, { files = depot, changes = true })
+      co.changed(ws, { files = depot })
       refresh_depot(ws, depot)
       cb(unshelved > 0)
     end)
@@ -491,7 +491,7 @@ function M.delete_change(ws, change, cb)
                 vim.log.levels.ERROR
               )
             end
-            co.changed(ws, { changes = true })
+            co.changed(ws, { changes = { change } })
             cb(ok)
           end)
         end
@@ -507,7 +507,7 @@ function M.delete_change(ws, change, cb)
           cls.reopen(ws, paths, 'default', function(res)
             if #res.errors > 0 then
               notify('could not move the files: ' .. res.errors[1], vim.log.levels.ERROR)
-              co.changed(ws, { files = paths, changes = true })
+              co.changed(ws, { files = paths, changes = { change } })
               return cb(false)
             end
             refresh(ws, paths)
@@ -527,12 +527,12 @@ function M.delete_change(ws, change, cb)
         local job = ('delete shelved CL %s'):format(change)
         require('perforated.jobs').run(ws, job, args, opts, function(res)
           if res.stopped then
-            co.changed(ws, { changes = true })
+            co.changed(ws, { changes = { change } })
             return cb(false)
           end
           if #res.errors > 0 then
             notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
-            co.changed(ws, { changes = true })
+            co.changed(ws, { changes = { change } })
             return cb(false)
           end
           empty_files()

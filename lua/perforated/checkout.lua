@@ -117,11 +117,12 @@ M.CHANGED_FILES_MAX = 500
 
 --- Announce a change made from the plugin (`User PerforatedChanged`). `what` says what it
 --- touched, so listeners can re-query only that: `files` (paths: their opened state and
---- content), `changes` (changelists: descriptions, shelves). Without it, anything may have
+--- content), `changes` (changelists: descriptions, and the shelves of the changelists listed,
+--- or of all of them for `true`). Without it, anything may have
 --- changed. Depot paths are named by their local path when it is known (an opened file), else
 --- passed on as they are (a file just unshelved isn't in `ws.opened` yet).
 ---@param ws perforated.Workspace
----@param what { files: string[]?, changes: boolean? }?
+---@param what { files: string[]?, changes: boolean|string[]? }?
 local function changed(ws, what)
   local data = { ws = ws.key }
   if what then
