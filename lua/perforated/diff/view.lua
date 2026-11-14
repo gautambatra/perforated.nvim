@@ -378,13 +378,14 @@ end
 
 ---@param ws perforated.Workspace
 ---@param side perforated.DiffSide
+---@param snapshot perforated.Snapshot?  (see `p4.snapshot`)
 ---@return integer buf
-local function side_buf(ws, side)
+local function side_buf(ws, side, snapshot)
   if side.buf then
     return side.buf
   end
   if side.spec then
-    return require('perforated.uri').buffer(ws, side.spec)
+    return require('perforated.uri').buffer(ws, side.spec, snapshot)
   end
   local b = vim.api.nvim_create_buf(false, true)
   vim.bo[b].bufhidden = 'wipe'

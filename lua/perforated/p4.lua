@@ -138,25 +138,40 @@ function M.is_text(rec)
   )
 end
 
---- Content for a revision spec, as lines. Numeric revisions are immutable and cached.
+---@class perforated.Snapshot
+---@field id integer
+---@field lines table<string, string[]>  spec → content
+
+local snapshots = 0
+
+--- A snapshot of mutable specs (`@=N`, `#head`): each prints once, then reads keep that
+--- content. The diff tab keeps one, so its files print once however often they are shown.
+---@return perforated.Snapshot
+function M.snapshot()
+  snapshots = snapshots + 1
+  return { id = snapshots, lines = {} }
+end
+
+--- Content for a revision spec, as lines. Numeric revisions are immutable and cached; others
+--- come from `opts.snapshot` once it has them.
 ---@param ws perforated.Workspace
 ---@param spec string  //depot/path#rev | @change | @=shelf
----@param opts perforated.RunOpts?
+---@param opts (perforated.RunOpts|{ snapshot: perforated.Snapshot? })?
 ---@param cb fun(lines: string[]?, err: string?)
 function M.print(ws, spec, opts, cb)
   local cache = require('perforated.core.cache').content()
   local immutable = spec:match('#%d+$') ~= nil
   local ckey = ws:server_key() .. '|' .. spec
-  if immutable then
-    local hit = cache:get(ckey)
-    if hit then
-      return vim.schedule(function()
-        cb(hit)
-      end)
-    end
+  local snap = opts and opts.snapshot
+  local hit = immutable and cache:get(ckey) or (snap and snap.lines[spec])
+  if hit then
+    return vim.schedule(function()
+      cb(hit)
+    end)
   end
   opts = vim.tbl_extend('force', { key = 'print:' .. spec }, opts or {})
   opts.tagged = false
+  opts.snapshot = nil
   ws:run({ 'print', '-q', spec }, opts, function(res)
     -- Untagged: "no such file" is a warning on stderr with exit 0, so check stderr too.
     local err = vim.trim(res.stderr or '')
@@ -166,6 +181,8 @@ function M.print(ws, spec, opts, cb)
     local lines = M.split_lines(res.stdout or '')
     if immutable then
       cache:set(ckey, lines, #(res.stdout or '') + 40 * #lines)
+    elseif snap then
+      snap.lines[spec] = lines
     end
     cb(lines)
   end)

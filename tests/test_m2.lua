@@ -3062,6 +3062,60 @@ T['client view']['a listed changelist without a shelf left drops its shelved fil
   )
 end
 
+T['client view']['diff tab: a shelf prints once per tab, also after leaving the tab and back'] = function()
+  server:p4({ 'reopen', '-c', '2', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/b.txt', 'b2\n')
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  open_view()
+  goto_line('Shelved (2)')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'CL 2 (shelved)', 'a.txt@=2' })
+  H.wait_idle(child)
+  vim.uv.sleep(300) -- b.txt's prefetch
+  H.wait_idle(child)
+  track_calls()
+  local function shelf_prints()
+    return #vim.tbl_filter(function(c)
+      return c:find('^print') and c:find('@=2', 1, true)
+    end, child.lua_get('_G.CALLS'))
+  end
+  local function shown(file)
+    wait(([[(function()
+      local b = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[3])
+      return vim.fs.basename(vim.api.nvim_buf_get_name(b)) == %q
+        and vim.b[b].perforated_loaded == true
+    end)()]]):format(file))
+    H.wait_idle(child)
+  end
+  child.type_keys('<Tab>') -- b.txt: prefetched
+  shown('b.txt@=2')
+  H.eq(shelf_prints(), 0)
+  child.cmd('tabnew')
+  child.cmd('tabprevious')
+  child.type_keys('<S-Tab>') -- a.txt: shown before
+  shown('a.txt@=2')
+  child.type_keys('<Tab>')
+  shown('b.txt@=2')
+  H.eq(shelf_prints(), 0)
+  H.eq(
+    child.lua_get(
+      [[vim.api.nvim_buf_get_lines(vim.fn.bufnr('perforated:////depot/b.txt@=2'), 0, -1, false)]]
+    ),
+    { 'b2' }
+  )
+  -- A new diff tab reads the shelf again.
+  child.cmd('tabclose $') -- the other tab
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  print(vim.inspect(child.lua_get('#vim.api.nvim_list_tabpages()')), vim.inspect(lines()))
+  goto_line('Shelved (2)')
+  child.type_keys('D')
+  vim.uv.sleep(1500)
+  print(child.lua_get('#vim.api.nvim_list_tabpages()'), child.api.nvim_buf_get_name(0))
+  shown('a.txt@=2')
+  H.eq(shelf_prints() >= 1, true)
+end
+
 T['client view']['merged events ask for the shelves of every changelist they list'] = function()
   local merged = child.lua_get([[(function()
     local m = require('perforated.views.client')._merge_what

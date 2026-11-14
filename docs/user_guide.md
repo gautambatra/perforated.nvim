@@ -280,6 +280,9 @@ only scans when you expand it (`l`).
   - `D` on a file does the same for the changelist it is in (the shelf, for a shelved file),
     and the tab starts on that file.
   - Moving through the panel switches files, as do `<Tab>` / `<S-Tab>` from any window.
+  - Each shelved or `#head` file is read from the server once per diff tab, while you
+    move between files or leave the tab and come back. It shows what it was when first
+    shown: after someone re-shelves, close the tab and open it again to see the new shelf.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
     Each line shows the file name first, then its folder, so a narrow panel cuts off the
     folder rather than the name.

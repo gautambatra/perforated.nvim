@@ -1015,7 +1015,8 @@ records by key plus "missing" reasons (not in view / no such file) per path.
 escaped with `escape` (`@ # % *` → `%40 %23 %25 %2A`; `add` takes names literally, with `-f`
 when they contain wildcards). A `#rev`/`@CL` suffix is cut only from depot paths, or from a
 local name that isn't an existing file, so `icon@2x.png` keeps its name. `base_spec(rec)` decides the diff base (`#have`,
-or the moved-from file). `print(ws, spec)` returns lines, cached when immutable;
+or the moved-from file). `print(ws, spec)` returns lines, cached when immutable (other specs from `opts.snapshot`, a
+`snapshot()`, once printed into it);
 `print_many` prints several specs in one call. `pending_changes`, `new_change`, `edit`, `add`,
 `revert` (all through `-x -`) and `latest_changes` (the poll probe).
 
@@ -1112,6 +1113,10 @@ depot path, keeps the buffer read-only (with `readonly` off while writing, to av
 refreshes diff mode in windows showing it. Revision buffers outlive their views (`bufhidden=hide`), so
 reusing one of a *mutable* spec (`@=CL` shelves, `#head`, `@label`) reads it again, keeping the
 old text until the new arrives; only numbered revisions (`#N`) are reused as they are.
+`buffer(ws, spec, snapshot)` takes a `p4.snapshot()` (the diff tab's): its first print of a
+mutable spec is kept there (`print` with `opts.snapshot` answers from it), and a buffer that
+holds that snapshot's content (`b:perforated_snapshot` = its id) isn't read again. The
+snapshot reaches the read that `bufload`'s BufReadCmd runs through `first_snapshot[buf]`.
 `when_loaded(buf, fn)` calls `fn` once the buffer has its content (at once if it isn't
 loading): the single-file diff closes its "Opening diff view…" with it.
 
@@ -1148,7 +1153,8 @@ a message instead (`same.lua`).
 
 #### `diff/tab.lua`
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
-next one is prefetched); `<Tab>`/`<S-Tab>` step the diffed files; in the panel
+next one is prefetched, into the tab's `p4.snapshot()`, so shelved and `#head` sides print
+once for the tab's life, revisits and tab switches included); `<Tab>`/`<S-Tab>` step the diffed files; in the panel
 `j`/`k`/`<Down>`/`<Up>` move over every file row (`rows`: the diffed files, then the rows of
 `files` sections) with wrap-around, and the `CursorMoved` handler moves any other motion to the
 nearest file row; a row of a `files` section leaves the diff as it was; `q` (any window) and `:q` (any of the three windows) close the

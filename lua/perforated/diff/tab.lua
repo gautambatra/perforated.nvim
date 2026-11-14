@@ -389,6 +389,8 @@ open_tab = function(ws, title, entries, listed, focus)
   require('perforated.diff.look').apply({ [panel] = 'ui', [lwin] = 'code', [rwin] = 'code' })
 
   local state = { current = nil }
+  -- Shelved and `#head` sides print once for the tab's life (shown again, they are not re-read).
+  local snapshot = p4.snapshot()
   local keyed = {} -- buffers given this tab's keys (the user's files too, scoped to the tab)
 
   local function close_tab()
@@ -399,7 +401,7 @@ open_tab = function(ws, title, entries, listed, focus)
     local e = entries[i]
     for _, side in ipairs(e and { e.left, e.right } or {}) do
       if side.spec then
-        p4.print(ws, side.spec, { priority = 3 }, function() end)
+        p4.print(ws, side.spec, { priority = 3, snapshot = snapshot }, function() end)
       end
     end
   end
@@ -426,7 +428,7 @@ open_tab = function(ws, title, entries, listed, focus)
       end
     end
     local l, r = side(e.left), side(e.right)
-    local lbuf, rbuf = dv.side_buf(ws, l), dv.side_buf(ws, r)
+    local lbuf, rbuf = dv.side_buf(ws, l, snapshot), dv.side_buf(ws, r, snapshot)
     for _, pair in ipairs({ { lwin, lbuf, l }, { rwin, rbuf, r } }) do
       local w, b, sd = pair[1], pair[2], pair[3]
       if vim.api.nvim_win_is_valid(w) then

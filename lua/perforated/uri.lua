@@ -12,6 +12,7 @@ local M = {}
 M.PREFIX = 'perforated://'
 
 local waiting = {} ---@type table<integer, fun()[]>  buffer → callbacks for when it's filled
+local first_snapshot = {} ---@type table<integer, perforated.Snapshot>  buffer → its first read's
 
 --- Call `fn` once the buffer has its content (at once when it isn't loading).
 ---@param buf integer
@@ -52,29 +53,36 @@ end
 --- handler would otherwise produce an empty buffer.
 ---
 --- Revision buffers outlive the views that show them (`bufhidden=hide`), so a reused buffer of
---- a mutable spec is read again: its old content stays until the new content arrives.
+--- a mutable spec is read again: its old content stays until the new content arrives. With a
+--- `snapshot` (see `p4.snapshot`) it is read from there once printed, and not at all while it
+--- holds what that snapshot gave it.
 ---@param ws perforated.Workspace
 ---@param spec string
+---@param snapshot perforated.Snapshot?
 ---@return integer buf
-function M.buffer(ws, spec)
+function M.buffer(ws, spec, snapshot)
   local name = M.name(spec)
   local buf = vim.fn.bufadd(name)
   vim.b[buf].perforated_ws = ws.key
   local reuse = vim.api.nvim_buf_is_loaded(buf)
   if not reuse then
+    first_snapshot[buf] = snapshot -- for the BufReadCmd that bufload runs
     vim.fn.bufload(buf)
+    first_snapshot[buf] = nil
   end
   if vim.b[buf].perforated_spec ~= spec then
-    M.read(buf) -- BufReadCmd didn't run (nested autocmd) or an earlier load was lost
+    M.read(buf, { snapshot = snapshot }) -- BufReadCmd didn't run (nested autocmd) or an earlier load was lost
   elseif reuse and not M.immutable(spec) then
-    M.read(buf, { keep = true })
+    if not (snapshot and vim.b[buf].perforated_snapshot == snapshot.id) then
+      M.read(buf, { keep = true, snapshot = snapshot })
+    end
   end
   return buf
 end
 
 --- BufReadCmd handler.
 ---@param buf integer
----@param opts? { keep: boolean }  keep the current content until the new content arrives
+---@param opts? { keep: boolean?, snapshot: perforated.Snapshot? }  keep: the current content until the new content arrives
 function M.read(buf, opts)
   local spec = M.parse(vim.api.nvim_buf_get_name(buf))
   if not spec then
@@ -93,8 +101,9 @@ function M.read(buf, opts)
   local gen = (vim.b[buf].perforated_read_gen or 0) + 1
   vim.b[buf].perforated_read_gen = gen
   vim.b[buf].perforated_spec = spec
+  local snapshot = opts and opts.snapshot or first_snapshot[buf]
   if keep then
-    return M._fetch(buf, spec, gen)
+    return M._fetch(buf, spec, gen, snapshot)
   end
   vim.b[buf].perforated_loaded = false
   local wsmod = require('perforated.core.workspace')
@@ -121,17 +130,18 @@ function M.read(buf, opts)
   if ft then
     vim.bo[buf].filetype = ft
   end
-  M._fetch(buf, spec, gen)
+  M._fetch(buf, spec, gen, snapshot)
 end
 
 ---@param buf integer
 ---@param spec string
 ---@param gen integer
-function M._fetch(buf, spec, gen)
+---@param snapshot perforated.Snapshot?
+function M._fetch(buf, spec, gen, snapshot)
   local wsmod = require('perforated.core.workspace')
   local ws = wsmod.get(vim.b[buf].perforated_ws) or wsmod.connection()
   local t0 = vim.uv.hrtime()
-  require('perforated.p4').print(ws, spec, {}, function(lines, err)
+  require('perforated.p4').print(ws, spec, { snapshot = snapshot }, function(lines, err)
     if not vim.api.nvim_buf_is_valid(buf) or vim.b[buf].perforated_read_gen ~= gen then
       return
     end
@@ -157,6 +167,8 @@ function M._fetch(buf, spec, gen)
     vim.bo[buf].readonly = true
     vim.bo[buf].modified = false
     vim.b[buf].perforated_loaded = true
+    -- (a failed read isn't in the snapshot: the next show asks again)
+    vim.b[buf].perforated_snapshot = lines and snapshot and snapshot.id or nil
     for _, win in ipairs(vim.fn.win_findbuf(buf)) do
       if vim.wo[win].diff then
         vim.api.nvim_win_call(win, function()
