@@ -141,6 +141,8 @@ end
 ---@class perforated.Snapshot
 ---@field id integer
 ---@field lines table<string, string[]>  spec → content
+---@field cached string[]  content-cache keys added while printing for it
+---@field closed boolean?  released: nothing more is kept
 
 local snapshots = 0
 
@@ -149,11 +151,38 @@ local snapshots = 0
 ---@return perforated.Snapshot
 function M.snapshot()
   snapshots = snapshots + 1
-  return { id = snapshots, lines = {} }
+  return { id = snapshots, lines = {}, cached = {} }
+end
+
+--- Drop a snapshot's content and the cached revisions printed for it (a closed diff tab).
+---@param snap perforated.Snapshot
+function M.release(snap)
+  local cache = require('perforated.core.cache').content()
+  for _, k in ipairs(snap.cached) do
+    cache:delete(k)
+  end
+  snap.lines, snap.cached, snap.closed = {}, {}, true
+end
+
+--- Prints in flight in a batch (`print_batch`): cache key → callbacks of `print`s that wait for it.
+local batched = {} ---@type table<string, fun(lines: string[]?)[]>
+
+--- Keep printed content: numbered revisions in the content cache, others in `snap`.
+local function keep(ws, spec, lines, bytes, snap)
+  local ckey = ws:server_key() .. '|' .. spec
+  if spec:match('#%d+$') then
+    local cache = require('perforated.core.cache').content()
+    if snap and not snap.closed and not cache:has(ckey) then
+      snap.cached[#snap.cached + 1] = ckey
+    end
+    cache:set(ckey, lines, bytes + 40 * #lines)
+  elseif snap and not snap.closed then
+    snap.lines[spec] = lines
+  end
 end
 
 --- Content for a revision spec, as lines. Numeric revisions are immutable and cached; others
---- come from `opts.snapshot` once it has them.
+--- come from `opts.snapshot` once it has them. A spec a `print_batch` is printing waits for it.
 ---@param ws perforated.Workspace
 ---@param spec string  //depot/path#rev | @change | @=shelf
 ---@param opts (perforated.RunOpts|{ snapshot: perforated.Snapshot? })?
@@ -169,6 +198,16 @@ function M.print(ws, spec, opts, cb)
       cb(hit)
     end)
   end
+  if batched[ckey] then
+    -- Not in the batch's answer (or it failed): print it alone after all.
+    table.insert(batched[ckey], function(lines)
+      if lines then
+        return cb(lines)
+      end
+      M.print(ws, spec, opts, cb)
+    end)
+    return
+  end
   opts = vim.tbl_extend('force', { key = 'print:' .. spec }, opts or {})
   opts.tagged = false
   opts.snapshot = nil
@@ -179,12 +218,81 @@ function M.print(ws, spec, opts, cb)
       return cb(nil, err ~= '' and err or res.errors[1] or 'p4 print failed')
     end
     local lines = M.split_lines(res.stdout or '')
-    if immutable then
-      cache:set(ckey, lines, #(res.stdout or '') + 40 * #lines)
-    elseif snap then
-      snap.lines[spec] = lines
-    end
+    keep(ws, spec, lines, #(res.stdout or ''), snap)
     cb(lines)
+  end)
+end
+
+--- Whether a `print` header record is the file `spec` names: same depot path, and the same
+--- revision (`#N`) or shelf (`@=N`) when the spec names one.
+---@param spec string
+---@param rec table
+---@return boolean
+local function header_is(spec, rec)
+  local path, rest = spec:match('^(.-)([#@].*)$')
+  if (path or spec) ~= rec.depotFile then
+    return false
+  end
+  local rev = rest and rest:match('^#(%d+)$')
+  local shelf = rest and rest:match('^@=(%d+)$')
+  return (not rev or rev == rec.rev) and (not shelf or shelf == rec.change)
+end
+
+--- Print several revision specs in one call (`-x - print`), keeping each as `print` would (the
+--- content cache, or `opts.snapshot`). A `print` of one of them meanwhile waits for this answer.
+--- p4 answers in the order asked and skips files it can't print, so each header is matched to
+--- the next spec it names; a spec without an answer is printed alone when it's asked for.
+---@param ws perforated.Workspace
+---@param specs string[]
+---@param opts (perforated.RunOpts|{ snapshot: perforated.Snapshot? })?
+---@param cb fun(got: table<string, string[]>)?  spec → lines
+function M.print_batch(ws, specs, opts, cb)
+  local snap = opts and opts.snapshot
+  local keys = {}
+  for i, spec in ipairs(specs) do
+    keys[i] = ws:server_key() .. '|' .. spec
+    batched[keys[i]] = batched[keys[i]] or {}
+  end
+  opts = vim.tbl_extend('force', { stdin = specs }, opts or {})
+  opts.globals = { '-x', '-' }
+  opts.snapshot = nil
+  ws:run({ 'print', '-q' }, opts, function(res)
+    local got, sizes = {}, {}
+    local cur, chunks, next_i = nil, {}, 1
+    local function flush()
+      if cur then
+        local text = table.concat(chunks)
+        got[cur], sizes[cur] = M.split_lines(text), #text
+      end
+      cur, chunks = nil, {}
+    end
+    for _, rec in ipairs(res.records) do
+      if rec.depotFile then
+        flush()
+        for i = next_i, #specs do
+          if header_is(specs[i], rec) then
+            cur, next_i = specs[i], i + 1
+            break
+          end
+        end
+      elseif rec.data and cur then
+        chunks[#chunks + 1] = rec.data
+      end
+    end
+    flush()
+    for i, spec in ipairs(specs) do
+      if got[spec] then
+        keep(ws, spec, got[spec], sizes[spec], snap)
+      end
+      local waiting = batched[keys[i]] or {}
+      batched[keys[i]] = nil
+      for _, fn in ipairs(waiting) do
+        fn(got[spec])
+      end
+    end
+    if cb then
+      cb(got)
+    end
   end)
 end
 

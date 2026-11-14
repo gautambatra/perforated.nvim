@@ -279,6 +279,7 @@ opts = {
     external_terminal = 'auto', -- true: terminal tab; false: detached GUI; auto: guess from tool name
     colors = 'colorscheme', -- 'perforated': the plugin's light palette; a table overrides its colours
     syntax = false, -- syntax / treesitter / LSP colouring in the diff sides
+    prefetch = { files = 10, max_kb = 2048, file_max_kb = 512 }, -- diff tab: load files ahead, in one call
   },
   change = { template = nil, allow_force = false }, -- template: string or function(ws) for new CLs
   merge = { tool = nil }, -- merge tool command (default: $P4MERGE), run as `tool base theirs yours merged`

@@ -512,6 +512,11 @@ keys):
       diff = {
         colors = "colorscheme",
         external_terminal = "auto",
+        prefetch = {
+          file_max_kb = 512,
+          files = 10,
+          max_kb = 2048
+        },
         syntax = false,
         tool = "builtin"
       },

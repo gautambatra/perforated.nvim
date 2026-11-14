@@ -1017,7 +1017,13 @@ when they contain wildcards). A `#rev`/`@CL` suffix is cut only from depot paths
 local name that isn't an existing file, so `icon@2x.png` keeps its name. `base_spec(rec)` decides the diff base (`#have`,
 or the moved-from file). `print(ws, spec)` returns lines, cached when immutable (other specs from `opts.snapshot`, a
 `snapshot()`, once printed into it);
-`print_many` prints several specs in one call. `pending_changes`, `new_change`, `edit`, `add`,
+`print_many` prints several specs in one call (keyed `depotFile#rev`); `print_batch(ws, specs,
+opts)` does too but keeps each answer as `print` would (content cache, or `opts.snapshot`),
+and a `print` of one of its specs meanwhile waits for it (`batched`), printing alone if the
+batch had no answer for it. p4 answers `-x - print` in order and skips what it can't print,
+so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N` by
+`change`, else the depot path). A snapshot records the content-cache keys printed for it
+(`cached`, only ones not cached before); `release(snap)` drops them and its content. `pending_changes`, `new_change`, `edit`, `add`,
 `revert` (all through `-x -`) and `latest_changes` (the poll probe).
 
 #### `changelists.lua`
@@ -1153,8 +1159,14 @@ a message instead (`same.lua`).
 
 #### `diff/tab.lua`
 The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
-next one is prefetched, into the tab's `p4.snapshot()`, so shelved and `#head` sides print
-once for the tab's life, revisits and tab switches included); `<Tab>`/`<S-Tab>` step the diffed files; in the panel
+files after the shown one print ahead with `p4.print_batch`, into the tab's `p4.snapshot()`,
+so shelved and `#head` sides print once for the tab's life, revisits and tab switches
+included). `prefetch(i)` looks at the next `diff.prefetch.files` entries and asks for those
+not yet asked for (`asked`), up to `max_kb` in all; an entry over `file_max_kb` is left to
+print when shown. Sizes are estimates on the entry (`size`): describe's `fileSize` for
+shelves and submitted changelists, the local file's size for opened files, `file_max_kb`
+when unknown. Closing the tab calls `p4.release` and deletes the revision buffers it loaded
+(`created`: not loaded before) that no window shows; `<Tab>`/`<S-Tab>` step the diffed files; in the panel
 `j`/`k`/`<Down>`/`<Up>` move over every file row (`rows`: the diffed files, then the rows of
 `files` sections) with wrap-around, and the `CursorMoved` handler moves any other motion to the
 nearest file row; a row of a `files` section leaves the diff as it was; `q` (any window) and `:q` (any of the three windows) close the

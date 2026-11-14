@@ -3116,6 +3116,210 @@ T['client view']['diff tab: a shelf prints once per tab, also after leaving the 
   H.eq(shelf_prints() >= 1, true)
 end
 
+--- Shelve a.txt to d.txt in CL 2 (`sizes`: bytes of content for some of them).
+local function four_file_shelf(sizes)
+  server:p4(
+    { 'reopen', '-c', '2', root .. '/b.txt', root .. '/c.txt' },
+    { client = 'alice_ws', cwd = root }
+  )
+  server:p4({ 'edit', '-c', '2', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  for _, f in ipairs({ 'b', 'c', 'd' }) do
+    local n = (sizes or {})[f]
+    H.write(root .. '/' .. f .. '.txt', n and (('x'):rep(n - 1) .. '\n') or (f .. '2\n'))
+  end
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+end
+
+--- Lines of the revision buffer of `spec`, nil when there is none (`bufnr()` would read the
+--- name as a pattern).
+local function buf_lines(spec)
+  local lines = child.lua_get(
+    [[(function(name)
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_get_name(b) == name then
+          return vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        end
+      end
+    end)(...)]],
+    { 'perforated://' .. spec }
+  )
+  if lines ~= vim.NIL then
+    return lines
+  end
+end
+
+--- Record what `p4.print_batch` is asked for, in `_G.BATCHES`.
+local function track_batches()
+  child.lua([[_G.BATCHES = {}
+    local p4 = require('perforated.p4')
+    local batch = p4.print_batch
+    if batch then
+      p4.print_batch = function(ws, specs, ...)
+        table.insert(_G.BATCHES, vim.deepcopy(specs))
+        return batch(ws, specs, ...)
+      end
+    end]])
+end
+
+--- Open the diff tab of CL 2's shelf (cursor in the client view on it).
+local function open_shelf_tab(n)
+  goto_line(('Shelved (%d)'):format(n))
+  child.type_keys('D')
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+end
+
+local function shown_right(file)
+  wait(([[(function()
+    local b = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_list_wins(0)[3])
+    return vim.fs.basename(vim.api.nvim_buf_get_name(b)) == %q
+      and vim.b[b].perforated_loaded == true
+  end)()]]):format(file))
+  H.wait_idle(child)
+end
+
+local function prints()
+  return #vim.tbl_filter(function(c)
+    return c:find('^print') ~= nil
+  end, child.lua_get('_G.CALLS'))
+end
+
+T['client view']['diff tab: the next files print in one call; stepping to them prints nothing'] = function()
+  four_file_shelf()
+  open_view_quiet()
+  track_batches()
+  open_shelf_tab(4)
+  shown_right('a.txt@=2')
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+  -- a.txt's two sides alone, then b to d (base and shelf) in one call.
+  H.eq(child.lua_get('_G.BATCHES'), {
+    {
+      '//depot/b.txt#1',
+      '//depot/b.txt@=2',
+      '//depot/c.txt#1', -- alice has #1 (stale)
+      '//depot/c.txt@=2',
+      '//depot/d.txt@=2', -- (d.txt#1 is cached already: d.txt's buffer read its base)
+    },
+  })
+  H.eq(prints(), 3)
+  for _, f in ipairs({ 'b', 'c', 'd' }) do
+    child.type_keys('<Tab>')
+    shown_right(f .. '.txt@=2')
+  end
+  H.eq(prints(), 3)
+  H.eq(buf_lines('//depot/c.txt@=2'), { 'c2' })
+  H.eq(buf_lines('//depot/c.txt#1'), { 'c1' })
+end
+
+T['client view']['diff tab: a file over the size limit prints alone when shown'] = function()
+  child.lua([[require('perforated.config').set({ diff = { prefetch = { file_max_kb = 1 } } })]])
+  four_file_shelf({ c = 3000 })
+  open_view_quiet()
+  track_batches()
+  open_shelf_tab(4)
+  shown_right('a.txt@=2')
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+  H.eq(child.lua_get('_G.BATCHES'), {
+    { '//depot/b.txt#1', '//depot/b.txt@=2', '//depot/d.txt@=2' },
+  })
+  child.type_keys('<Tab>')
+  shown_right('b.txt@=2')
+  local before = prints()
+  child.type_keys('<Tab>')
+  shown_right('c.txt@=2')
+  H.eq(prints(), before + 2) -- c.txt's base and shelf
+  H.eq(#buf_lines('//depot/c.txt@=2')[1], 2999)
+end
+
+T['client view']['diff tab: prefetch.files = 0 prints only the file shown'] = function()
+  child.lua([[require('perforated.config').set({ diff = { prefetch = { files = 0 } } })]])
+  four_file_shelf()
+  open_view_quiet()
+  track_batches()
+  open_shelf_tab(4)
+  shown_right('a.txt@=2')
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+  H.eq(child.lua_get('_G.BATCHES'), {})
+  H.eq(prints(), 2)
+end
+
+T['client view']['diff tab: closing it frees its revision buffers and cached revisions'] = function()
+  four_file_shelf()
+  open_view_quiet()
+  local key = child.lua_get([[require('perforated').workspace():server_key()]])
+  local cached = ([[require('perforated.core.cache').content():has(%q .. '|' .. ...)]]):format(key)
+  -- Loaded before the tab: it stays.
+  child.lua(
+    [[require('perforated.uri').buffer(require('perforated').workspace(), '//depot/b.txt#1')]]
+  )
+  wait([[(function()
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_get_name(b) == 'perforated:////depot/b.txt#1' then
+        return vim.b[b].perforated_loaded == true
+      end
+    end
+  end)()]])
+  open_shelf_tab(4)
+  shown_right('a.txt@=2')
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+  child.type_keys('<Tab>')
+  shown_right('b.txt@=2')
+  H.eq(child.lua_get(cached, { '//depot/c.txt#1' }), true) -- prefetched
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  vim.uv.sleep(100)
+  H.eq(buf_lines('//depot/a.txt@=2'), nil)
+  H.eq(buf_lines('//depot/a.txt#1'), nil)
+  H.eq(buf_lines('//depot/b.txt@=2'), nil)
+  H.eq(buf_lines('//depot/b.txt#1'), { 'b1' }) -- loaded before the tab
+  H.eq(child.lua_get(cached, { '//depot/c.txt#1' }), false)
+  H.eq(child.lua_get(cached, { '//depot/a.txt#1' }), false)
+  H.eq(child.lua_get(cached, { '//depot/d.txt#1' }), true) -- cached before the tab
+end
+
+T['p4.print_batch'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      if not P.available() then
+        MiniTest.skip('p4/p4d not available (make deps)')
+      end
+      setup()
+    end,
+    post_case = function()
+      child.stop()
+    end,
+  },
+})
+
+T['p4.print_batch']['matches answers to specs; a missing one prints alone and fails'] = function()
+  child.lua([[
+    local p4, ws = require('perforated.p4'), require('perforated').workspace()
+    _G.res = {}
+    p4.print_batch(ws, { '//depot/a.txt#1', '//depot/nope.txt#1', '//depot/a.txt@=2', '//depot/b.txt#head' }, {}, function(got)
+      _G.res.got = got
+    end)
+    -- Asked for meanwhile: waits for the batch's answer.
+    p4.print(ws, '//depot/a.txt@=2', {}, function(lines) _G.res.shelf = lines end)
+    p4.print(ws, '//depot/nope.txt#1', {}, function(lines, err) _G.res.nope = { lines = lines, err = err } end)
+  ]])
+  wait([[_G.res.got and _G.res.shelf and _G.res.nope]])
+  local res = child.lua_get('_G.res')
+  H.eq(res.got, {
+    ['//depot/a.txt#1'] = { 'a1' },
+    ['//depot/a.txt@=2'] = { 'a2' },
+    ['//depot/b.txt#head'] = { 'b1' },
+  })
+  H.eq(res.shelf, { 'a2' })
+  H.eq(res.nope.lines, nil)
+  H.neq(res.nope.err, nil)
+  H.eq(#vim.tbl_filter(function(e)
+    return e.argv[#e.argv] == '//depot/a.txt@=2'
+  end, child.lua_get([[require('perforated.core.log').entries()]])), 0)
+end
+
 T['client view']['merged events ask for the shelves of every changelist they list'] = function()
   local merged = child.lua_get([[(function()
     local m = require('perforated.views.client')._merge_what

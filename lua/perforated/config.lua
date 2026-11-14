@@ -40,6 +40,10 @@ local defaults = {
     --- Syntax colouring (Vim syntax, treesitter, LSP) in the diff sides. Off: plain text, so
     --- only the diff colours stand out. The buffers themselves keep it elsewhere.
     syntax = false,
+    --- The diff tab prints the files after the one shown ahead of time, several in one call:
+    --- up to `files` files, `max_kb` in all; a file over `file_max_kb` prints only when shown.
+    --- `files = 0` turns it off.
+    prefetch = { files = 10, max_kb = 2048, file_max_kb = 512 },
   },
   client_view = {
     kind = 'tab',

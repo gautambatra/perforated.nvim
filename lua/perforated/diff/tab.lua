@@ -23,6 +23,7 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 ---@field right perforated.DiffSide|{ path: string }
 ---@field client_file string?  set for opened files: what `r` reverts
 ---@field depot_file string?  the file's depot path (`opts.focus`)
+---@field size integer?  about how big each side is (bytes), for the prefetch's limits
 
 -- "Opening diff view…": shown as soon as a diff tab is asked for (fetching file lists and the
 -- identical-files check take a moment), closed when the tab opens or the request ends any
@@ -397,13 +398,58 @@ open_tab = function(ws, title, entries, listed, focus)
     dv.close_tab(tab)
   end
 
+  -- The files after the shown one print ahead, several in one `print` (`diff.prefetch`): the
+  -- next batch starts when one of the next `files` files hasn't been asked for.
+  local asked = {} ---@type table<integer, true|'alone'>  entry → in a batch, or too big for one
+  --- Prefetch after entry `i` (the one shown).
   local function prefetch(i)
-    local e = entries[i]
-    for _, side in ipairs(e and { e.left, e.right } or {}) do
-      if side.spec then
-        p4.print(ws, side.spec, { priority = 3, snapshot = snapshot }, function() end)
+    local cfg = require('perforated.config').get().diff.prefetch or {}
+    local max_files = cfg.files or 10
+    local file_max = (cfg.file_max_kb or 512) * 1024
+    local budget = (cfg.max_kb or 2048) * 1024
+    local cache = require('perforated.core.cache').content()
+    local specs, n, total = {}, 0, 0
+    for k = 1, math.min(max_files, #entries - 1) do
+      local j = (i - 1 + k) % #entries + 1
+      local e = entries[j]
+      if not asked[j] then
+        local size = e.size or file_max
+        if size > file_max then
+          asked[j] = 'alone' -- printed when shown
+        elseif total + 2 * size > budget and n > 0 then
+          break
+        else
+          asked[j], n, total = true, n + 1, total + 2 * size
+          for _, sd in ipairs({ e.left, e.right }) do
+            local spec = sd.spec
+            if
+              spec
+              and not snapshot.lines[spec]
+              and not (
+                require('perforated.uri').immutable(spec)
+                and cache:has(ws:server_key() .. '|' .. spec)
+              )
+            then
+              specs[#specs + 1] = spec
+            end
+          end
+        end
       end
     end
+    if #specs > 0 then
+      p4.print_batch(ws, specs, { priority = 3, snapshot = snapshot })
+    end
+  end
+
+  -- Revision buffers this tab loaded (not ones that were loaded already): freed when it closes.
+  local created = {} ---@type table<integer, true>
+  local function revision_buf(sd)
+    local existed = sd.spec and vim.fn.bufloaded(require('perforated.uri').name(sd.spec)) == 1
+    local b = dv.side_buf(ws, sd, snapshot)
+    if sd.spec and not existed then
+      created[b] = true
+    end
+    return b
   end
 
   local function side(s)
@@ -428,7 +474,7 @@ open_tab = function(ws, title, entries, listed, focus)
       end
     end
     local l, r = side(e.left), side(e.right)
-    local lbuf, rbuf = dv.side_buf(ws, l, snapshot), dv.side_buf(ws, r, snapshot)
+    local lbuf, rbuf = revision_buf(l), revision_buf(r)
     for _, pair in ipairs({ { lwin, lbuf, l }, { rwin, rbuf, r } }) do
       local w, b, sd = pair[1], pair[2], pair[3]
       if vim.api.nvim_win_is_valid(w) then
@@ -462,7 +508,8 @@ open_tab = function(ws, title, entries, listed, focus)
     require('perforated.diff.look').apply({ [lwin] = 'code', [rwin] = 'code' }, { rebuild = false })
     vim.api.nvim_buf_clear_namespace(panel_buf, ns_current, 0, -1)
     vim.api.nvim_buf_set_extmark(panel_buf, ns_current, i + 1, 0, { line_hl_group = 'Visual' })
-    prefetch(i + 1)
+    asked[i] = asked[i] or true -- its own sides print as it shows
+    prefetch(i)
   end
 
   state.select = show_entry
@@ -529,6 +576,14 @@ open_tab = function(ws, title, entries, listed, focus)
           end
         end
         close_tab()
+        -- What the tab read goes with it: its snapshot, the revisions cached for it, and the
+        -- revision buffers it loaded that no other window shows.
+        p4.release(snapshot)
+        for b in pairs(created) do
+          if vim.api.nvim_buf_is_valid(b) and #vim.fn.win_findbuf(b) == 0 then
+            pcall(vim.api.nvim_buf_delete, b, { force = true })
+          end
+        end
       end)
     end,
   })
@@ -715,6 +770,7 @@ local function opened_entries(ws, recs)
         -- Revertable here only when it's this workspace's file (not another client's CL).
         client_file = label ~= r.clientFile and r.clientFile or nil,
         depot_file = r.depotFile,
+        size = (vim.uv.fs_stat(r.clientFile) or {}).size, -- the base is about as big
       }
     end
   end
@@ -752,6 +808,7 @@ function M.open_change(ws, item, opts)
           depot_file = f.depotFile,
           left = added and { empty = 'added' } or { spec = f.depotFile .. '#' .. (rev - 1) },
           right = deleted and { empty = 'deleted' } or { spec = f.depotFile .. '#' .. rev },
+          size = tonumber(f.fileSize),
         }
       end
       M.open(ws, 'CL ' .. item.change, entries, opts)
@@ -782,6 +839,7 @@ function M.open_change(ws, item, opts)
       left = base and { spec = base, label = 'base' } or { empty = 'new file' },
       right = f.action == 'delete' and { empty = 'deleted' }
         or { spec = f.depotFile .. '@=' .. item.change },
+      size = tonumber(f.fileSize),
     }
   end
   M.open(ws, ('CL %s (shelved)'):format(item.change), entries, opts)
@@ -842,6 +900,7 @@ function M.open_shelf_vs_workspace(ws, change, shelved)
           or { spec = f.depotFile .. '@=' .. change },
         right = (path and vim.uv.fs_stat(path)) and { path = path }
           or { empty = 'not in workspace' },
+        size = tonumber(f.fileSize),
       }
     end
     table.sort(entries, function(a, b)

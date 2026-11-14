@@ -58,8 +58,10 @@ function M.shelved_files(ws, changes, cb)
     local out = {}
     for _, rec in ipairs(res.records) do
       if rec.change then
-        out[rec.change] =
-          require('perforated.core.parse').indexed(rec, { 'depotFile', 'action', 'rev', 'type' })
+        out[rec.change] = require('perforated.core.parse').indexed(
+          rec,
+          { 'depotFile', 'action', 'rev', 'type', 'fileSize' }
+        )
       end
     end
     -- A changelist deleted meanwhile is an error beside the others' records: still an answer.
@@ -85,7 +87,7 @@ function M.describe(ws, changes, opts, cb)
           rec = rec,
           files = require('perforated.core.parse').indexed(
             rec,
-            { 'depotFile', 'action', 'rev', 'type' }
+            { 'depotFile', 'action', 'rev', 'type', 'fileSize' }
           ),
         }
       end

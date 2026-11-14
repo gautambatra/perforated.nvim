@@ -283,6 +283,9 @@ only scans when you expand it (`l`).
   - Each shelved or `#head` file is read from the server once per diff tab, while you
     move between files or leave the tab and come back. It shows what it was when first
     shown: after someone re-shelves, close the tab and open it again to see the new shelf.
+  - While you look at one file, the next ones load in the background, several in one call
+    to the server (`diff.prefetch`: up to 10 files and 2 MB, files over 512 KB only when
+    shown; `files = 0` turns it off). Closing the tab frees what it loaded.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
     Each line shows the file name first, then its folder, so a narrow panel cuts off the
     folder rather than the name.
@@ -349,6 +352,11 @@ differ" for diff tools, so it only counts as a failure when the tool printed an 
 
 By default diff views use your colorscheme with syntax colouring turned off in the two sides,
 so only the diff colours stand out. `diff.syntax = true` brings syntax colouring back.
+
+`diff.prefetch = { files = 10, max_kb = 2048, file_max_kb = 512 }` sets how far ahead the
+diff tab loads files: how many files at most, how much content in all, and the largest file
+it loads ahead (a bigger one loads when you show it). On a slow server, more files ahead means
+fewer waits; `files = 0` loads only the file shown.
 
 `diff.colors = 'perforated'` switches the whole diff view (both sides, the file panel, the
 headers) to the plugin's own light palette, after onedark's light style, with crisp black
