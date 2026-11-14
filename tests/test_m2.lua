@@ -2369,6 +2369,87 @@ T['client view']['D on a changelist of new files only: nothing to diff, the file
   H.eq(#child.api.nvim_list_tabpages(), 2)
 end
 
+--- Put the cursor on the first line containing `text` below the line containing `after`.
+local function goto_line_after(after, text)
+  local from = goto_line(after)
+  for i, l in ipairs(lines()) do
+    if i > from and l:find(text, 1, true) then
+      child.api.nvim_win_set_cursor(0, { i, 0 })
+      return i
+    end
+  end
+  error('line not found: ' .. text)
+end
+
+--- `D` was pressed: the diff tab's title (its panel's name) and the file on the right.
+local function diff_tab_opened()
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+  return child.api.nvim_buf_get_name(0):gsub('^perforated://files/', ''), right_file()
+end
+
+T['client view']['D on an opened file diffs its changelist, starting on that file'] = function()
+  H.write(root .. '/b.txt', 'b2\n')
+  H.write(root .. '/c.txt', 'c-mine\n')
+  open_view()
+  goto_line_after('default', 'c.txt')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'default', 'c.txt' })
+  H.eq(child.api.nvim_win_get_cursor(0)[1], 4) -- the second file row: b.txt comes first
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  -- In "Needs attention", the changelist it is opened in.
+  goto_line_after('Needs attention', 'c.txt')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'default', 'c.txt' })
+end
+
+T['client view']['D on a shelved file diffs the shelf, on a submitted file its changelist'] = function()
+  open_view()
+  goto_line('Shelved (1)')
+  child.type_keys('l')
+  goto_line_after('Shelved (1)', '//depot/a.txt')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'CL 2 (shelved)', 'a.txt@=2' })
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+
+  server:p4({ 'edit', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  H.write(root .. '/d.txt', 'd2\n')
+  local cl = server
+    :p4({ 'submit', '-d', 'tweak d', root .. '/d.txt' }, { client = 'alice_ws', cwd = root }).stdout
+    :match('Change (%d+) submitted')
+  child.type_keys('<F5>')
+  local row = ('CL %s  '):format(cl) -- not the Sync CL line, which names it too
+  wait(
+    ([[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find(%q, 1, true) ~= nil]]):format(
+      row
+    )
+  )
+  goto_line(row)
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/d.txt#2', 1, true) ~= nil]]
+  )
+  goto_line('//depot/d.txt#2')
+  child.type_keys('D')
+  H.eq({ diff_tab_opened() }, { 'CL ' .. cl, 'd.txt#2' })
+  child.type_keys('q')
+
+  -- :P4 changes too.
+  child.cmd('P4 changes')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('tweak d', 1, true) ~= nil]]
+  )
+  goto_line('tweak d')
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('//depot/d.txt#2', 1, true) ~= nil]]
+  )
+  goto_line('//depot/d.txt#2')
+  child.type_keys('D')
+  wait([[vim.api.nvim_buf_get_name(0) == 'perforated://files/CL ]] .. cl .. [[']])
+end
+
 T['client view']['D opens the diff tab for a CL; <Tab> steps files'] = function()
   open_view()
   -- b.txt and c.txt are opened but unchanged: no diff tab, just a pop-up

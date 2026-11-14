@@ -1158,7 +1158,10 @@ lists the sections. `M.open`'s `opts.extra` adds more listed-only sections below
 `open_shelf_vs_workspace` runs `p4 where` on the shelved files and `fstat -Ro` (opened files)
 in parallel and passes every opened file the shelf doesn't hold as "Not in Shelf (N):" (named
 in the pop-up instead when every shelved file is identical). Sources: `open_change` (pending, shelved, submitted), `open_opened`
-(`:P4 diff -a`), `open_shelf_vs_workspace`.
+(`:P4 diff -a`), `open_shelf_vs_workspace`. `opts.focus` (a depot path, matched against
+the entries' `depot_file`) picks the diffed file shown first: `D` on a file row in the client
+view (whose `diff_all` takes the file's changelist row from `cl_node_of`: the parent, or in
+"Needs attention" the `cl:<client>|<change>` node), `:P4 changes` and describe.
 
 #### `diff/look.lua`
 How diff windows look (`diff.colors`, `diff.syntax`), done entirely with window highlight

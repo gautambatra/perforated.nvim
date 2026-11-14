@@ -302,9 +302,20 @@ local function actions(view)
       desc = 'Diff all files',
       keys = { 'D', '<CR>' },
       p4v = { '<C-d>' },
-      kinds = { submitted = true },
+      kinds = { submitted = true, submitted_file = true }, -- on a file: its changelist
       footer = 10,
-      run = function(items)
+      footer_when = function(_, node)
+        return node ~= nil and node.kind == 'submitted'
+      end,
+      run = function(items, ctx)
+        local node = ctx.node
+        if node and node.kind == 'submitted_file' then
+          return require('perforated.diff.tab').open_change(
+            ws,
+            node.parent.item,
+            { focus = items[1].depotFile }
+          )
+        end
         require('perforated.diff.tab').open_change(ws, items[1])
       end,
     },

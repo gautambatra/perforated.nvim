@@ -22,6 +22,7 @@ local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
 ---@field left perforated.DiffSide
 ---@field right perforated.DiffSide|{ path: string }
 ---@field client_file string?  set for opened files: what `r` reverts
+---@field depot_file string?  the file's depot path (`opts.focus`)
 
 -- "Opening diff view…": shown as soon as a diff tab is asked for (fetching file lists and the
 -- identical-files check take a moment), closed when the tab opens or the request ends any
@@ -209,10 +210,11 @@ end
 --- get a diff; new and deleted files are listed under "New Files" and "Deleted" (they can be
 --- opened and reverted there), identical ones under "Identical", at the end of the panel.
 --- `opts.extra` adds listed-only sections below them (shelf vs workspace: "Not in Shelf").
+--- `opts.focus` (a depot path): the file shown first, when it has a diff.
 ---@param ws perforated.Workspace
 ---@param title string
 ---@param entries perforated.DiffEntry[]
----@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]? }?
+---@param opts { extra: { title: string, entries: perforated.DiffEntry[] }[]?, focus: string? }?
 function M.open(ws, title, entries, opts)
   start_busy()
   if #entries == 0 then
@@ -282,7 +284,7 @@ function M.open(ws, title, entries, opts)
         listed[#listed + 1] = sec
       end
     end
-    open_tab(ws, title, differ, listed)
+    open_tab(ws, title, differ, listed, opts and opts.focus)
   end)
 end
 
@@ -291,7 +293,8 @@ end
 ---@param entries perforated.DiffEntry[]
 ---@param listed { title: string, entries: perforated.DiffEntry[], files: boolean? }[]  sections
 ---  listed, not diffed; `files`: the cursor can rest on its rows (open, revert)
-open_tab = function(ws, title, entries, listed)
+---@param focus string?  depot path of the file to show first
+open_tab = function(ws, title, entries, listed, focus)
   local origin_win = vim.api.nvim_get_current_win() -- where `o` opens a file
   vim.cmd('tabnew')
   local tab = vim.api.nvim_get_current_tabpage()
@@ -667,8 +670,14 @@ open_tab = function(ws, title, entries, listed)
   -- Panel keeps its width; the two diff windows share the rest equally.
   vim.cmd('wincmd =')
   vim.api.nvim_set_current_win(panel)
-  vim.api.nvim_win_set_cursor(panel, { 3, 0 })
-  show_entry(1)
+  local first = 1
+  for i, e in ipairs(entries) do
+    if focus and e.depot_file == focus then
+      first = i
+    end
+  end
+  vim.api.nvim_win_set_cursor(panel, { first + 2, 0 })
+  show_entry(first)
   vim.api.nvim_set_current_win(panel)
   state.update_footer()
   finish_busy()
@@ -703,6 +712,7 @@ local function opened_entries(ws, recs)
         right = deleted and { empty = 'deleted' } or { path = r.clientFile },
         -- Revertable here only when it's this workspace's file (not another client's CL).
         client_file = label ~= r.clientFile and r.clientFile or nil,
+        depot_file = r.depotFile,
       }
     end
   end
@@ -713,9 +723,11 @@ local function opened_entries(ws, recs)
 end
 
 --- Diff tab for a changelist node item from the client view (pending, shelf or submitted).
+--- `opts.focus`: the depot path of the file to show first (`D` on a file).
 ---@param ws perforated.Workspace
 ---@param item table
-function M.open_change(ws, item)
+---@param opts { focus: string? }?
+function M.open_change(ws, item, opts)
   start_busy()
   if item.status == 'submitted' or (item.rec == nil and item.files == nil and item.desc) then
     -- Submitted CL: #rev-1 ↔ #rev for every file.
@@ -735,25 +747,27 @@ function M.open_change(ws, item)
         entries[#entries + 1] = {
           label = f.depotFile,
           action = f.action,
+          depot_file = f.depotFile,
           left = added and { empty = 'added' } or { spec = f.depotFile .. '#' .. (rev - 1) },
           right = deleted and { empty = 'deleted' } or { spec = f.depotFile .. '#' .. rev },
         }
       end
-      M.open(ws, 'CL ' .. item.change, entries)
+      M.open(ws, 'CL ' .. item.change, entries, opts)
     end)
   end
   if item.files and #item.files > 0 then
     return M.open(
       ws,
       item.change == 'default' and 'default' or ('CL ' .. item.change),
-      opened_entries(ws, item.files)
+      opened_entries(ws, item.files),
+      opts
     )
   end
   local shelved = item.shelved
   if not shelved then
     -- A shelf node: fetch its files.
     return cls.shelved_files(ws, { item.change }, function(by)
-      M.open_change(ws, { change = item.change, shelved = by[item.change] or {}, files = {} })
+      M.open_change(ws, { change = item.change, shelved = by[item.change] or {}, files = {} }, opts)
     end)
   end
   local entries = {}
@@ -762,12 +776,13 @@ function M.open_change(ws, item)
     entries[#entries + 1] = {
       label = f.depotFile,
       action = f.action,
+      depot_file = f.depotFile,
       left = base and { spec = base, label = 'base' } or { empty = 'new file' },
       right = f.action == 'delete' and { empty = 'deleted' }
         or { spec = f.depotFile .. '@=' .. item.change },
     }
   end
-  M.open(ws, ('CL %s (shelved)'):format(item.change), entries)
+  M.open(ws, ('CL %s (shelved)'):format(item.change), entries, opts)
 end
 
 --- A shelf against the workspace: every shelved file (left) next to its workspace file (right).

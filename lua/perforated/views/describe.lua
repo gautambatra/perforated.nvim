@@ -408,7 +408,7 @@ local function actions(view)
       desc = 'Diff all files',
       keys = { 'D' },
       footer = 11,
-      run = function()
+      run = function(_, ctx)
         local it = vim.tbl_extend('force', {}, view.item)
         if it.status == 'pending' then
           it.files = vim.tbl_map(
@@ -430,7 +430,9 @@ local function actions(view)
             it.shelved = view.data.shelved
           end
         end
-        require('perforated.diff.tab').open_change(ws, it)
+        -- On a file: that file first.
+        local f = ctx.node and FILE[ctx.node.kind] and file_of(ctx.node.item)
+        require('perforated.diff.tab').open_change(ws, it, { focus = f and f.depotFile })
       end,
     },
     {

@@ -275,6 +275,8 @@ only scans when you expand it (`l`).
 - **Diff a whole changelist:** `D` opens a diff tab, with a file panel on the left and a
   side-by-side diff on the right. It works for pending changelists, shelves and submitted
   changelists, and `:P4 diff -a` opens it for every opened file.
+  - `D` on a file does the same for the changelist it is in (the shelf, for a shelved file),
+    and the tab starts on that file.
   - Moving through the panel switches files, as do `<Tab>` / `<S-Tab>` from any window.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
     Each line shows the file name first, then its folder, so a narrow panel cuts off the

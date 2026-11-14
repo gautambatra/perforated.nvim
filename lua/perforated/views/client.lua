@@ -805,6 +805,26 @@ end
 -- -------------------------------------------------------------------------------------------
 
 local FILE = { opened_file = true }
+-- Rows `D` diffs as a whole, and the file rows inside them.
+local CL_KINDS = { change = true, submitted = true, shelf = true, have_cl = true }
+local FILE_KINDS = { opened_file = true, shelved_file = true, submitted_file = true }
+
+--- The changelist (or shelf) row a file row belongs to: its parent, or for a file in "Needs
+--- attention", the changelist it is opened in.
+---@param view table
+---@param node perforated.TreeNode
+---@return perforated.TreeNode?
+local function cl_node_of(view, node)
+  local p = node.parent
+  if p and CL_KINDS[p.kind] then
+    return p
+  end
+  local f = node.item
+  if node.kind == 'opened_file' and f then
+    local client = f.client or view.ws:client() or ''
+    return view.tree.by_id['cl:' .. client .. '|' .. (f.change or 'default')]
+  end
+end
 
 ---@param items table[]
 ---@return string[]
@@ -1493,9 +1513,23 @@ local function actions(view)
       desc = 'Diff all files',
       keys = { 'D' },
       p4v = { '<C-d>' },
-      kinds = { change = true, submitted = true, shelf = true, have_cl = true },
+      kinds = vim.tbl_extend('force', CL_KINDS, FILE_KINDS),
       footer = 11,
-      run = function(items)
+      footer_when = function(_, node)
+        return node ~= nil and CL_KINDS[node.kind] == true
+      end,
+      when = function(_, node)
+        return node == nil or CL_KINDS[node.kind] or cl_node_of(view, node) ~= nil
+      end,
+      run = function(items, ctx)
+        local node = ctx.node
+        if node and not CL_KINDS[node.kind] then -- a file: its changelist, on that file
+          return require('perforated.diff.tab').open_change(
+            ws,
+            cl_node_of(view, node).item,
+            { focus = items[1].depotFile }
+          )
+        end
         require('perforated.diff.tab').open_change(ws, items[1])
       end,
     },

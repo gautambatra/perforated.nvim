@@ -93,7 +93,7 @@ vim.o.statusline = '%f %= %{v:lua.require("perforated").statusline()} '
 | Look at the sign column | Added / changed / deleted lines against your have revision; `]h` / `[h` jump between them |
 | `:P4` | The **client view**. Press `?` for its keys |
 | `d` on a file there, or `:P4 diff` | A side-by-side diff in a new tab; `q` closes it |
-| `D` on a changelist | Every file of the changelist in a diff tab; in its file panel `o` opens a file and `r` reverts it |
+| `D` on a changelist (or one of its files) | Every file of the changelist in a diff tab; in its file panel `o` opens a file and `r` reverts it |
 | `:P4 filelog`, or `gh` on a file in the client view | The file's history. `<CR>` on a revision for its actions; mark two with `m` and `D` diffs them |
 | `:P4 annotate` / `:P4 blame` | Who changed each line, coloured by age / on the current line |
 | `:P4 timelapse` | Step through every revision of the file with `h` / `l` |
