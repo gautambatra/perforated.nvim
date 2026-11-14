@@ -300,4 +300,51 @@ T['cancel']['a job without totals shows its plain count'] = function()
   H.wait(child, '#_G.jobs.list() == 0')
 end
 
+--- What `p4 resolve -am` streams for each file: the resolve record, a "Diff chunks" message
+--- and a "merge from" record (p4d 2025.2).
+local function resolve_records(names)
+  local out = {}
+  for _, n in ipairs(names) do
+    vim.list_extend(out, {
+      { clientFile = '/ws/' .. n, fromFile = '//d/' .. n, resolveType = 'content' },
+      { data = 'Diff chunks: 1 yours + 1 theirs + 0 both + 0 conflicting', level = 34 },
+      { fromFile = '//d/' .. n, how = 'merge from' },
+    })
+  end
+  return out
+end
+
+T['cancel']['a resolve counts each file once, not each record p4 sends'] = function()
+  setup({
+    {
+      match = '^resolve %-am',
+      records = resolve_records({ 'a.c', 'b.c', 'c.c', 'd.c' }),
+      hang_after = true,
+    },
+  })
+  child.lua([[require('perforated.resolve').run(_G.ws, nil)]])
+  H.wait(child, '#_G.jobs.list() == 1 and _G.jobs.list()[1].last == "//d/d.c"')
+  H.eq(child.lua_get('_G.jobs.list()[1].count'), 4)
+  child.cmd('P4 jobs')
+  local line = child.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+  H.neq(line:find('resolve workspace · %d+s · 4 file%(s%)'), nil, line)
+  child.lua('_G.jobs.cancel()')
+  H.wait(child, '#_G.jobs.list() == 0')
+end
+
+T['cancel']['resolving chosen files shows how many of them are done'] = function()
+  setup({
+    { match = '^resolve %-am', records = resolve_records({ 'a.c', 'b.c' }), hang_after = true },
+  })
+  child.lua(
+    [[require('perforated.resolve').run(_G.ws, { '/ws/a.c', '/ws/b.c', '/ws/c.c', '/ws/d.c' })]]
+  )
+  H.wait(child, '#_G.jobs.list() == 1 and _G.jobs.list()[1].last == "//d/b.c"')
+  child.cmd('P4 jobs')
+  local line = child.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+  H.neq(line:find('resolve 4 files · %d+s · 2/4 files'), nil, line)
+  child.lua('_G.jobs.cancel()')
+  H.wait(child, '#_G.jobs.list() == 0')
+end
+
 return T

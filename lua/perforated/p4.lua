@@ -294,6 +294,10 @@ local function file_cmd(ws, cmd, paths, cb, effect, busy, escape)
     busy = busy,
     effect = effect,
     single = #paths == 1,
+    -- A `<dir>/...` path: how many files it holds isn't known.
+    total = not vim.iter(paths):any(function(f)
+      return f:find('...', 1, true) ~= nil
+    end) and #paths or nil,
   }, cb)
 end
 

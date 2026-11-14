@@ -175,6 +175,7 @@ function M.reopen(ws, paths, change, cb, opts)
       delay = 500,
       effect = 'moved',
       single = #paths == 1,
+      total = #paths,
     },
     cb
   )

@@ -1286,8 +1286,11 @@ from a source path's history.
 Long-running operations register as jobs: `:P4 jobs` (a live float that updates twice a second
 with the file count, last file and elapsed time; `x` stops a job) and `:P4 cancel`.
 `start(ws, title)` returns run options (`timeout = 0`, `on_spawn`, `on_record`) to pass to
-`ws:run`. `on_record` counts every record, and for a sync reads `totalFileCount` and
-`totalFileSize` from the first one and adds up each file record's `fileSize` (messages have no
+`ws:run`. `on_record` counts files: a record naming one (`clientFile` or `depotFile`) unless
+it names the same file as the last counted one (`resolve -am` streams three records per file;
+messages name none). `start`'s `total` (from `jobs.run`'s `opts.total`: `file_cmd` without a
+`<dir>/...` path, `reopen`, resolve of chosen files) shows `done/total files`. For a sync it reads `totalFileCount` and
+`totalFileSize` from the first record and adds up each file record's `fileSize` (messages have no
 `action`, so they don't count as files); `percent(job)` is then files done out of the total,
 which goes to `progress.update` as the progress message's `percent`. Jobs without totals keep
 the plain count. With pop-ups (the default) a job reports a pop-up when it starts and one with its

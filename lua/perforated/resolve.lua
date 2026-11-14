@@ -198,7 +198,8 @@ function M.run(ws, paths, cb)
   local what = paths and #paths == 1 and vim.fn.fnamemodify(paths[1], ':t')
     or paths and ('%d files'):format(#paths)
     or 'workspace'
-  local job, run_opts = jobs.start(ws, 'resolve ' .. what, { quiet = true })
+  local job, run_opts =
+    jobs.start(ws, 'resolve ' .. what, { quiet = true, total = paths and #paths })
   local toast = require('perforated.ui.toast')
   local unbusy = toast.busy(
     paths and ('Resolving %s…'):format(#paths == 1 and what or (#paths .. ' file(s)'))

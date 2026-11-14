@@ -518,7 +518,9 @@ Afterwards:
 ### Watching and stopping jobs
 
 A sync or submit shows a pop-up when it starts and one with the result. `:P4 jobs` shows the
-live progress (files so far, the last file, the time taken), and `x` there stops a job;
+live progress (files so far, the last file, the time taken), and `x` there stops a job.
+Each file counts once, and a job on files you chose shows how many are done, as in
+`resolve 4 files · 3s · 2/4 files`;
 a sync also shows how far it has got, from the totals p4 sends first, as in
 `sync workspace · 12s · 340/1,200 files (28%) · 45.0/160.0 MB`. With
 `toast.backend = 'notify'`, the percentage reaches Neovim's progress messages, so fidget or

@@ -18,7 +18,9 @@ local progress = require('perforated.ui.progress')
 ---@field ws perforated.Workspace
 ---@field title string
 ---@field started number        hrtime
----@field count integer          records streamed so far
+---@field count integer          files streamed so far (records naming one; once per file)
+---@field total integer?         how many files the caller expects (`2/4 files`)
+---@field last_key string?       the file the last counted record named
 ---@field total_files integer?   `totalFileCount` of the first sync record
 ---@field total_bytes integer?   `totalFileSize` of the first sync record
 ---@field files integer          file records seen (each counts towards `total_files`)
@@ -82,6 +84,13 @@ local function describe(job)
     if job.total_bytes and job.total_bytes > 0 then
       s = s .. ' · ' .. bytes_of(math.min(job.bytes, job.total_bytes), job.total_bytes)
     end
+  elseif job.total then
+    s = ('%s · %s · %d/%d files'):format(
+      job.title,
+      elapsed(job),
+      math.min(job.count, job.total),
+      job.total
+    )
   else
     s = ('%s · %s · %d file(s)'):format(job.title, elapsed(job), job.count)
   end
@@ -133,7 +142,8 @@ end
 ---   ws:run(args, vim.tbl_extend('force', opts, job.run_opts), cb)
 ---@param ws perforated.Workspace
 ---@param title string
----@param opts { quiet: boolean? }?  quiet: no start / result pop-ups (the caller shows its own)
+---@param opts { quiet: boolean?, total: integer? }?  quiet: no start / result pop-ups (the
+---  caller shows its own); total: how many files it will touch, when known
 ---@return perforated.Job job, table run_opts
 function M.start(ws, title, opts)
   next_id = next_id + 1
@@ -143,6 +153,7 @@ function M.start(ws, title, opts)
     title = title,
     started = vim.uv.hrtime(),
     count = 0,
+    total = opts and opts.total,
     files = 0,
     bytes = 0,
     prog = not (opts and opts.quiet)
@@ -159,7 +170,13 @@ function M.start(ws, title, opts)
       end
     end,
     on_record = function(rec) -- fast context: plain Lua only
-      job.count = job.count + 1
+      -- A file counts once: p4 can stream several records for one (resolve: the resolve
+      -- record, a "Diff chunks" message, a "merge from" record), and messages name none.
+      local key = rec.clientFile or rec.depotFile
+      if key and key ~= job.last_key then
+        job.count = job.count + 1
+        job.last_key = key
+      end
       job.last = rec.depotFile or rec.clientFile or job.last
       -- p4 sync's first record carries the totals; each file's record its size. Messages
       -- (no action) aren't files.
@@ -189,11 +206,12 @@ end
 ---  * task table?: the caller's `toast.task` instead (which the caller closes)
 ---  * effect string?: past participle for the warning, e.g. 'reverted'; single boolean?: one file
 ---  * verb string?: names the command in the warning (default: `args[1]`)
+---  * total integer?: how many files it will touch, for `:P4 jobs` (`2/4 files`)
 ---@param cb fun(res: perforated.RunResult)
 function M.run(ws, title, args, opts, cb)
   opts = opts or {}
   local toast = require('perforated.ui.toast')
-  local job, run_opts = M.start(ws, title, { quiet = true })
+  local job, run_opts = M.start(ws, title, { quiet = true, total = opts.total })
   local function cancel()
     M.cancel(job)
   end
