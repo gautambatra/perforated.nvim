@@ -490,7 +490,9 @@ The commands are `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d` and
   `a` "replace all" (`p4 shelve -r`) makes the shelf exactly the opened files; the prompt lists
   the ones it would remove.
 - **Unshelving** goes back into the shelf's own changelist when that's yours; otherwise you
-  pick one. Files that need a resolve are listed in quickfix.
+  pick one. Files that need a resolve are listed in quickfix. When some workspace files are
+  writable but not opened, p4 unshelves the rest and the plugin asks whether to overwrite
+  those; only they are unshelved again.
 
 ### Submit
 

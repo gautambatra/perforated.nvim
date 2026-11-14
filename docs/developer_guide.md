@@ -1232,7 +1232,9 @@ one pass), `anchor`, `step`.
 Shelve (`shelve -f`, confirmation before replacing; when a whole changelist is re-shelved and
 one `opened -c` shows the shelf holding files no longer opened in it, a third choice "replace
 all" runs `shelve -r` and the prompt lists those files), delete shelved files, unshelve (into the
-shelf's own changelist when it's yours, else a picked one; `-f` only after confirming) — each
+shelf's own changelist when it's yours, else a picked one; `-f` only after confirming, and
+only for the files p4 refused, from its "Can't clobber writable file" messages: the others are
+unshelved already, and their records count once; a refused file's record doesn't) — each
 with a centred busy pop-up; shelve and unshelve show theirs from the start (`toast.task`), while
 they check the shelf or find the target, hidden while the confirmation or picker is up and shown
 again for p4's work; they move file content, so they run through `jobs.run`, like every command

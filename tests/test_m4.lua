@@ -539,6 +539,69 @@ T['m4']['problem lists keep paths with spaces and " - ", and leave p4\'s sentenc
   H.neq(paths[2][1][2]:find('is opened - and more', 1, true), nil)
 end
 
+--- A shelf of a.txt and b.txt, both reverted, b.txt then made writable with local text.
+local function shelf_with_writable_file()
+  local cl = new_change('two files')
+  p4({ 'edit', '-c', cl, root .. '/main/a.txt', root .. '/main/b.txt' })
+  H.write(root .. '/main/a.txt', 'a shelved\n')
+  H.write(root .. '/main/b.txt', 'b shelved\n')
+  p4({ 'shelve', '-c', cl })
+  p4({ 'revert', root .. '/main/...' })
+  vim.uv.fs_chmod(root .. '/main/b.txt', tonumber('644', 8))
+  H.write(root .. '/main/b.txt', 'b local\n')
+  return cl
+end
+
+--- Unshelve `cl` into itself; returns the result message and the unshelve commands run.
+local function unshelve_into_itself(cl)
+  child.lua([[_G.r = nil]])
+  child.lua(
+    ([[require('perforated.ops').unshelve(require('perforated').workspace(), %q, nil, %q, function(ok) _G.r = ok end)]]):format(
+      cl,
+      cl
+    )
+  )
+  wait('_G.r ~= nil')
+  local msg = child.lua_get([[(function()
+    for _, t in ipairs(require('perforated.ui.toast').history()) do
+      local s = t.title .. ' ' .. table.concat(t.lines, ' ')
+      if s:find('unshelved', 1, true) then return s end
+    end
+  end)()]])
+  local cmds = child.lua_get([[vim.tbl_map(function(e) return table.concat(e.argv, ' ') end,
+    vim.tbl_filter(function(e) return vim.tbl_contains(e.argv or {}, 'unshelve') end,
+      require('perforated.core.log').entries()))]])
+  return msg, cmds
+end
+
+T['m4']['unshelve: overwriting writable files unshelves only those again'] = function()
+  setup()
+  local cl = shelf_with_writable_file()
+  local msg, cmds = unshelve_into_itself(cl)
+  H.eq(#cmds, 2)
+  H.eq(cmds[2]:find(' -f ', 1, true) ~= nil, true, cmds[2])
+  H.eq(
+    cmds[2]:find('b.txt', 1, true) ~= nil and cmds[2]:find('a.txt', 1, true) == nil,
+    true,
+    cmds[2]
+  )
+  H.neq(msg:find('unshelved 2 file(s)', 1, true), nil, msg)
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b shelved')
+  H.eq(opened()['//depot/main/a.txt'], { action = 'edit', change = cl })
+  H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = cl })
+end
+
+T['m4']['unshelve: not overwriting a writable file counts only the others'] = function()
+  setup()
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 2 end]])
+  local cl = shelf_with_writable_file()
+  local msg, cmds = unshelve_into_itself(cl)
+  H.eq(#cmds, 1)
+  H.neq(msg:find('unshelved 1 file(s)', 1, true), nil, msg)
+  H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b local')
+  H.eq(opened()['//depot/main/b.txt'], nil)
+end
+
 T['m4']['unshelve: a file with spaces that must be resolved reaches quickfix'] = function()
   setup()
   local file = root .. '/main/my dir/a - b.txt'

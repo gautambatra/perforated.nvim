@@ -270,37 +270,63 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
   cb = cb or function() end
   -- From the command on, while the target is found too (hidden while a question is up).
   local task = require('perforated.ui.toast').task(('Unshelving CL %s…'):format(shelf))
-  local function run(into, force)
+  --- `force` (`-f`): the retry of the files p4 refused (`files`, local paths) after a
+  --- confirmation; `first` is what the first run did: its count, messages and depot files.
+  local function run(into, force, files, first)
     local args = { 'unshelve', '-s', shelf, '-c', into }
     if force then
       table.insert(args, 2, '-f')
     end
-    vim.list_extend(args, depot_files or {})
+    vim.list_extend(args, files and p4.escape_all(files) or depot_files or {})
     -- A job: unshelving downloads every file's content.
     local opts = { task = task, effect = 'unshelved' }
     require('perforated.jobs').run(ws, 'unshelve CL ' .. shelf, args, opts, function(res)
       task.done()
       local texts = messages(res)
-      if #clobbered(res.errors) > 0 and not force and not res.stopped then
-        if
-          confirm(
-            'Some workspace files are writable but not opened. Overwrite them with the shelved versions?',
-            '&Overwrite\n&Cancel'
-          )
-        then
-          return run(into, true)
-        end
-      end
+      local refused = clobbered(res.errors)
       local unshelved = 0
       for _, t in ipairs(texts) do
         if t:find(' %- unshelved') then
           unshelved = unshelved + 1
         end
       end
-      unshelved = math.max(unshelved, #res.records)
-      local resolve = file_items(ws, texts, 'must resolve', 'unresolved')
+      -- A refused file has a record too: it isn't unshelved.
+      unshelved = math.max(unshelved, #res.records) - #refused
+      local depot = {}
+      for _, r in ipairs(res.records) do
+        depot[#depot + 1] = r.depotFile -- (nil for a message: not added)
+      end
       if res.stopped then
         unshelved = 0
+      end
+      if first then
+        unshelved = unshelved + first.unshelved
+        texts = vim.list_extend(vim.list_extend({}, first.texts), texts)
+        depot = vim.list_extend(vim.list_extend({}, first.depot), depot)
+      end
+      if #refused > 0 and not force and not res.stopped then
+        if
+          confirm(
+            'Some workspace files are writable but not opened. Overwrite them with the shelved versions?',
+            '&Overwrite\n&Cancel'
+          )
+        then
+          -- Only those: the others are unshelved already (again would download them twice).
+          local done = {
+            unshelved = unshelved,
+            texts = vim.tbl_filter(function(t)
+              return not t:match("^[Cc]an't clobber writable file ")
+            end, texts),
+            depot = depot,
+          }
+          return run(into, true, refused, done)
+        end
+      end
+      local resolve = file_items(ws, texts, 'must resolve', 'unresolved')
+      if res.stopped then
+        if first then
+          notify(('unshelved %d file(s) from CL %s, then stopped'):format(first.unshelved, shelf))
+        end
       elseif #res.errors > 0 and unshelved == 0 then
         notify('unshelve failed: ' .. res.errors[1], vim.log.levels.ERROR)
       else
@@ -321,10 +347,6 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       end
       -- Only the unshelved files and the changelists changed: not the have list or the
       -- other opened files (a full refresh re-reads both, slow on a large workspace).
-      local depot = {}
-      for _, r in ipairs(res.records) do
-        depot[#depot + 1] = r.depotFile -- (nil for a message: not added)
-      end
       co.changed(ws, { files = depot, changes = true })
       refresh_depot(ws, depot)
       cb(unshelved > 0)
