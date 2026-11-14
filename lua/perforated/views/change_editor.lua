@@ -21,7 +21,12 @@ end
 
 --- Open the description float, or turn an existing float into it (`opts.win`: the `K` popup's
 --- edit mode keeps its place and size).
----@param opts { title: string, lines: string[], insert: boolean?, win: integer?, on_save: fun(desc: string, close: fun()), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
+---
+--- `on_save(desc, saved)` starts the save; the caller calls `saved(ok)` when p4 answers. The
+--- float may be gone by then (left, closed, discarded): the save still counts. A failed save
+--- whose float was closed without discarding opens the float again with the text, so it isn't
+--- lost; `saved` then returns true. One save at a time: `:w` while one runs is ignored.
+---@param opts { title: string, lines: string[], insert: boolean?, win: integer?, modified: boolean?, on_save: fun(desc: string, saved: fun(ok: boolean): boolean?), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
 ---@return integer buf, integer win
 local function open_float(opts)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -30,7 +35,7 @@ local function open_float(opts)
   vim.bo[buf].swapfile = false
   pcall(vim.api.nvim_buf_set_name, buf, ('perforated://description/%d'):format(buf))
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, opts.lines)
-  vim.bo[buf].modified = false
+  vim.bo[buf].modified = opts.modified == true
   vim.bo[buf].filetype = 'perforated-description'
   vim.bo[buf].textwidth = 0
 
@@ -70,7 +75,7 @@ local function open_float(opts)
   -- Soft ruler where Swarm/P4V truncate the summary line.
   vim.wo[win][0].colorcolumn = '73'
 
-  local closed = false
+  local closed, saving, discarded = false, false, false
   local function close()
     if closed then
       return
@@ -80,15 +85,51 @@ local function open_float(opts)
       pcall(vim.api.nvim_win_close, win, true)
     end
   end
+  -- Still on screen: `closed` alone misses a window closed from outside (`:q`, <C-w>c).
+  local function shown()
+    return not closed and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf
+  end
+  local function set_footer(text)
+    if shown() then
+      pcall(vim.api.nvim_win_set_config, win, { footer = text, footer_pos = 'right' })
+    end
+  end
   local function save()
+    if saving then
+      return
+    end
     local desc = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
     desc = vim.trim(desc)
     if desc == '' then
       return notify('description is empty', vim.log.levels.WARN)
     end
-    opts.on_save(desc, function()
-      vim.bo[buf].modified = false
-      close()
+    saving = true
+    set_footer(' saving… ')
+    opts.on_save(desc, function(ok)
+      saving = false
+      if ok then
+        -- The float may have closed while p4 worked (bufhidden=wipe: the buffer is gone too).
+        if vim.api.nvim_buf_is_valid(buf) then
+          vim.bo[buf].modified = false
+        end
+        close()
+        return false
+      end
+      if shown() then
+        set_footer(frame.footer)
+        return false
+      end
+      if discarded then
+        return false
+      end
+      -- Closed while saving, and the save failed: bring the text back.
+      open_float(vim.tbl_extend('force', opts, {
+        lines = vim.split(desc, '\n', { plain = true }),
+        win = false,
+        insert = false,
+        modified = true,
+      }))
+      return true
     end)
   end
   local function cancel()
@@ -101,6 +142,7 @@ local function open_float(opts)
       if c ~= 1 then
         return
       end
+      discarded = true
     end
     vim.bo[buf].modified = false
     close()
@@ -118,6 +160,7 @@ local function open_float(opts)
   if opts.on_full then
     vim.keymap.set('n', 'gS', function()
       vim.bo[buf].modified = false
+      discarded = true -- the full spec takes over
       close()
       opts.on_full()
     end, { buffer = buf, nowait = true })
@@ -245,12 +288,12 @@ function M.edit(ws, change, opts)
       on_full = function()
         M.full(ws, change, opts)
       end,
-      on_save = function(new_desc, close)
+      on_save = function(new_desc, saved)
         local text = cls.spec_set_description(spec, new_desc)
         local submitted = status == 'submitted'
         cls.save_spec(ws, text, { submitted = submitted }, function(ok, msg)
           if ok then
-            close()
+            saved(true)
             notify(('CL %s description saved'):format(change))
             remember(ws, change, new_desc)
             done(true)
@@ -265,17 +308,19 @@ function M.edit(ws, change, opts)
             if c == 1 then
               return cls.save_spec(ws, text, { force = true }, function(ok2, msg2)
                 if ok2 then
-                  close()
+                  saved(true)
                   notify(('CL %s description saved (forced)'):format(change))
                   remember(ws, change, new_desc)
                   done(true)
                 else
                   notify('forced save failed: ' .. msg2, vim.log.levels.ERROR)
+                  saved(false)
                 end
               end)
             end
           end
           notify(('saving CL %s failed: %s'):format(change, msg), vim.log.levels.ERROR)
+          saved(false)
         end)
       end,
     })
@@ -307,18 +352,20 @@ function M.new(ws, opts)
       or template and vim.split(template, '\n', { plain = true })
       or { '' },
     insert = not opts.desc, -- a copied description: start in normal mode, to read it first
-    on_save = function(desc, close)
+    on_save = function(desc, saved)
       saving = true
       p4.new_change(ws, desc, function(cl, err)
         saving = false
         if not cl then
           notify('could not create changelist: ' .. tostring(err), vim.log.levels.ERROR)
-          if cancelled then
+          if saved(false) then
+            cancelled = false -- the float is back with the text
+          elseif cancelled then
             finish(nil)
           end
           return
         end
-        close()
+        saved(true)
         notify('created CL ' .. cl)
         remember(ws, cl, desc)
         finish(cl, desc)

@@ -619,6 +619,81 @@ T['client view']['gm on a changelist moves all its files; the picker offers the 
   H.neq(o['//depot/a.txt'], '2')
 end
 
+-- The description save waits for `_G.answer(ok, msg)`: p4 answering late, as from a remote
+-- server. `ok == nil` lets the real save run.
+local HOLD_SAVE = [[
+  _G.saves = 0
+  local cls = require('perforated.changelists')
+  local real = cls.save_spec
+  cls.save_spec = function(ws, text, o, cb)
+    _G.saves = _G.saves + 1
+    _G.answer = function(ok, msg)
+      if ok == nil then
+        real(ws, text, o, cb)
+      else
+        cb(ok, msg)
+      end
+    end
+  end
+]]
+
+--- `i` on CL 2, the first line changed: returns the editor float.
+local function edit_cl2()
+  open_view()
+  child.lua(HOLD_SAVE)
+  goto_line('CL 2  Fix parser')
+  child.type_keys('i')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  child.type_keys('ccFix the parser', '<Esc>')
+  return child.api.nvim_get_current_win()
+end
+
+T['client view']['description: the float closing during the save is no error'] = function()
+  local win = edit_cl2()
+  child.cmd('write')
+  local footer = child.lua_get(
+    ([[table.concat(vim.tbl_map(function(c) return c[1] end, vim.api.nvim_win_get_config(%d).footer), '')]]):format(
+      win
+    )
+  )
+  H.neq(footer:find('saving', 1, true), nil)
+  child.api.nvim_win_close(win, true) -- e.g. the cursor left it
+  child.lua('_G.answer()')
+  H.eq(H.wait_message(child, 'CL 2 description saved', 5000), true)
+  H.eq(H.messages(child):find('Invalid buffer', 1, true), nil)
+  local spec = server:p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
+  H.neq(spec:find('\tFix the parser\n', 1, true), nil)
+end
+
+T['client view']['description: a failed save after the float closed brings the text back'] = function()
+  local win = edit_cl2()
+  child.cmd('write')
+  child.api.nvim_win_close(win, true)
+  child.lua([[_G.answer(false, 'server said no')]])
+  wait([[vim.bo.filetype == 'perforated-description']])
+  H.eq(child.api.nvim_buf_get_lines(0, 0, -1, false), { 'Fix the parser', 'second line' })
+  H.eq(child.bo.modified, true) -- q asks before dropping it
+  H.eq(H.wait_message(child, 'server said no', 1000), true)
+  -- Saving again works.
+  child.cmd('write')
+  child.lua('_G.answer()')
+  H.eq(H.wait_message(child, 'CL 2 description saved', 5000), true)
+  wait([[vim.bo.filetype == 'perforated']])
+end
+
+T['client view']['description: one save at a time; discarding during it keeps a failure closed'] = function()
+  local win = edit_cl2()
+  child.cmd('write')
+  child.cmd('write') -- ignored while the first runs
+  H.eq(child.lua_get('_G.saves'), 1)
+  child.lua([[require('perforated.ui.prompt').confirm = function() return 1 end]]) -- Discard
+  child.type_keys('q')
+  H.eq(child.api.nvim_win_is_valid(win), false)
+  child.lua([[_G.answer(false, 'server said no')]])
+  H.eq(H.wait_message(child, 'server said no', 1000), true)
+  H.neq(child.bo.filetype, 'perforated-description')
+end
+
 T['client view']['K popup: i edits the description in place, then comes back'] = function()
   open_view()
   goto_line('CL 2  Fix parser')

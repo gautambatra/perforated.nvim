@@ -1613,7 +1613,13 @@ the content once fetched, cached per changelist for that picker, and written onl
 buffer still previews that changelist; `i` (or the older `C`) turns the same float into the description editor, and a save or cancel
 comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save;
 only the Description field of the spec is replaced, so the file list can't be edited by
-accident; submitted changelists use `change -u`, with an opt-in `-f` retry).
+accident; submitted changelists use `change -u`, with an opt-in `-f` retry). `open_float`'s
+`on_save(desc, saved)` starts the save and the caller calls `saved(ok)` when p4 answers: the
+float may be gone by then (bufhidden=wipe wipes its buffer), so the result touches the buffer
+only if it's still valid, and checks the window shows it rather than trusting its own `closed`
+flag (a window closed from outside never sets it). A failed save whose float was closed without
+discarding reopens the float with the text (`saved` returns true). One save at a time; the
+footer says `saving…` meanwhile.
 
 ### Other
 

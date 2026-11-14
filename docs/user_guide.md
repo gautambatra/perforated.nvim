@@ -255,6 +255,9 @@ only scans when you expand it (`l`).
   Only the description changes, so the file list can't be edited by accident. `gS` in the
   editor, or `:P4 change! N`, opens the full spec instead. The default changelist has no
   description: move its files to a numbered changelist instead.
+- **While a description saves**, the editor's footer says `saving…` and another `:w` waits
+  for it. If the editor closes before the server answers, the save still goes through; if it
+  fails, the editor opens again with your text (unless you chose to discard it).
 - **Delete one:** `dd`, or `:P4 change -d N`. In the client view `dd` is offered only on a
   changelist with no opened files. One confirmation says what's in it; its opened files move to
   the default changelist (or are reverted, if you choose that), its shelved files are deleted,
