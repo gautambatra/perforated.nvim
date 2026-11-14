@@ -475,7 +475,7 @@ local function merge_what(a, b)
 end
 M._merge_what = merge_what
 
---- Changed markers after re-checking `files` (local paths): their keys take the new answer,
+--- Changed markers after re-checking `files` (local or depot paths): their keys take the new answer,
 --- other opened files keep the old one, and files no longer opened drop out.
 ---@param ws perforated.Workspace
 ---@param old table<string, true>
@@ -484,9 +484,13 @@ M._merge_what = merge_what
 ---@param opened table[]  opened records
 ---@return table<string, true>
 local function merge_modified(ws, old, files, set, opened)
-  local asked = {}
+  local asked, asked_depot = {}, {} -- files are local paths, or depot paths (just unshelved)
   for _, f in ipairs(files) do
-    asked[p4.key(ws, f)] = true
+    if f:sub(1, 2) == '//' then
+      asked_depot[f] = true
+    else
+      asked[p4.key(ws, f)] = true
+    end
   end
   local out = {}
   for _, r in ipairs(opened) do
@@ -494,7 +498,7 @@ local function merge_modified(ws, old, files, set, opened)
     if k then
       if set[k] then
         out[k] = true
-      elseif not asked[k] then
+      elseif not (asked[k] or asked_depot[r.depotFile]) then
         out[k] = old[k]
       end
     end

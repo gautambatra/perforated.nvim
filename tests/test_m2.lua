@@ -2947,6 +2947,45 @@ T['client view']['a changelist change re-reads pending CLs and shelves, not file
   H.neq(row_of('a.txt'):find('●', 1, true), nil)
 end
 
+T['client view']['after an unshelve the view asks for those files only, not the Sync CL'] = function()
+  server:p4({ 'revert', root .. '/a.txt' }, { client = 'alice_ws', cwd = root })
+  child.cmd('edit ' .. root .. '/a.txt') -- a buffer of the file: it becomes opened
+  wait(
+    [[require('perforated.buffer').get(0) and require('perforated.buffer').get(0).status == 'clean']]
+  )
+  open_view_quiet()
+  H.eq(row_of('a.txt  #'), nil) -- not opened: only the shelf lists it
+  child.lua(
+    [[require('perforated.ops').unshelve(require('perforated').workspace(), '2', nil, '2', function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r == true')
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('a.txt  #', 1, true) then return l:find('●', 1, true) ~= nil end end end)()]]):format(
+      view_expr(root)
+    )
+  )
+  vim.uv.sleep(800)
+  -- No `changes -m1 #have` (the whole have list), no submitted list; `diff -sa` for a.txt.
+  H.eq(
+    count_calls(SECTIONS),
+    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1, ['describe -S'] = 1 }
+  )
+  -- (given a file list, `-x -`: not every opened file)
+  H.eq(
+    child.lua_get([[(function()
+      local diffs = vim.tbl_filter(function(e)
+        return vim.tbl_contains(e.argv or {}, 'diff')
+      end, require('perforated.core.log').entries())
+      return vim.tbl_contains(diffs[#diffs].argv, '-x')
+    end)()]]),
+    true
+  )
+  wait([[(function() for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    local st = require('perforated.buffer').get(b)
+    if st and st.path:find('a.txt', 1, true) then return st.status == 'opened' end end end)()]])
+end
+
 T['client view']['<F5> and events that name nothing re-run every section'] = function()
   open_view_quiet()
   child.type_keys('<F5>')

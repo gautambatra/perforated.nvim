@@ -820,9 +820,13 @@ why keys, menus and help never disagree.
    toggle and the first refresh re-run everything. A query that fails leaves its section's
    previous answer in place (pending changelists and opened files only ever change
    together) and puts `refresh failed: <res.err>` at the top of Pending; every run result
-   carries `err`, a one-line reason even for a timeout or an exit with nothing on stderr. `checkout.changed(ws, what)` turns depot paths into local ones and sends no
-   `files` (a full refresh) for more than `CHANGED_FILES_MAX` (500) files or an unknown depot
-   path. Unshelve, submit, sync and integrate send nothing (they can change any section).
+   carries `err`, a one-line reason even for a timeout or an exit with nothing on stderr. `checkout.changed(ws, what)` turns depot paths of opened files into local ones, passes other
+   depot paths on as they are (`modified.query` takes them, `merge_modified` matches them by
+   the opened records' `depotFile`), and sends no `files` (a full refresh) for more than
+   `CHANGED_FILES_MAX` (500) files or a `<dir>/...` path. Unshelve sends the depot files it
+   unshelved and `changes` (it touches no have revision and no other opened file: a full
+   refresh would re-read the have list and every opened file); submit, sync and integrate
+   send nothing (they can change any section).
    The view takes its opened files from `poll.refresh` (no toast: the view shows stale files
    itself; with `runner.timeout`, not the background one the poll's own calls use), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
    poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls.

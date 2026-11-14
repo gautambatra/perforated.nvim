@@ -102,6 +102,23 @@ local function refresh(ws, paths)
   end
 end
 
+--- Refresh the buffers of depot files: those whose record names one, and those without a
+--- record (a file unshelved for add had none).
+---@param ws perforated.Workspace
+---@param depot_files string[]
+local function refresh_depot(ws, depot_files)
+  local want = {}
+  for _, f in ipairs(depot_files) do
+    want[f] = true
+  end
+  local buffer = require('perforated.buffer')
+  for b, st in pairs(buffer.all()) do
+    if st.ws == ws and (not st.rec or want[st.rec.depotFile]) then
+      buffer.refresh(b)
+    end
+  end
+end
+
 local function confirm(msg, choices, default)
   return require('perforated.ui.prompt').confirm(msg, choices or '&Yes\n&No', default or 2) == 1
 end
@@ -302,8 +319,14 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
           items = resolve,
         })
       end
-      co.changed(ws)
-      refresh(ws)
+      -- Only the unshelved files and the changelists changed: not the have list or the
+      -- other opened files (a full refresh re-reads both, slow on a large workspace).
+      local depot = {}
+      for _, r in ipairs(res.records) do
+        depot[#depot + 1] = r.depotFile -- (nil for a message: not added)
+      end
+      co.changed(ws, { files = depot, changes = true })
+      refresh_depot(ws, depot)
       cb(unshelved > 0)
     end)
   end
