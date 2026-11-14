@@ -216,7 +216,9 @@ function M.revert(ws, paths, unchanged, cb)
     or busy('Reverting %s…', 'Reverting %d files…', paths)
   p4.revert(ws, paths, { unchanged = unchanged, busy = msg }, function(res)
     report(unchanged and 'revert unchanged' or 'revert', res, #res.records)
-    changed(ws, { files = paths })
+    -- Reverted files leave the opened list (and their markers with them); the others weren't
+    -- touched: no `diff -sa` of them.
+    changed(ws, { files = paths, keep_markers = true })
     local reverted = {}
     for _, rec in ipairs(res.records) do
       if rec.clientFile then

@@ -3511,6 +3511,68 @@ T['client view']['merged events ask for the shelves of every changelist they lis
     }
   end)()]])
   H.eq(merged, { { '2', '3' }, true, {} })
+  -- Markers are kept only when every merged event with files kept them.
+  local keep = child.lua_get([[(function()
+    local m = require('perforated.views.client')._merge_what
+    return {
+      m({ files = { 'a' }, keep_markers = true }, { files = { 'b' }, keep_markers = true }).keep_markers,
+      m({ files = { 'a' }, keep_markers = true }, { files = { 'b' } }).keep_markers or false,
+      m({ files = { 'a' }, keep_markers = true }, { changes = { '2' } }).keep_markers,
+    }
+  end)()]])
+  H.eq(keep, { true, false, true })
+end
+
+--- Whether the view's row of `file` (`<name>  #`) shows the changed marker; nil: no row.
+local function marked(file)
+  local l = row_of(file .. '  #')
+  return l and l:find('●', 1, true) ~= nil
+end
+
+T['client view']['after a revert the view re-checks no changed markers'] = function()
+  H.write(root .. '/b.txt', 'b2\n') -- changed; c.txt isn't
+  open_view_quiet()
+  H.eq({ marked('a.txt'), marked('b.txt'), marked('c.txt') }, { true, true, false })
+  track_calls()
+  child.lua(
+    ([[require('perforated.checkout').revert(require('perforated').workspace(), { %q }, false, function(ok) _G.r = ok end)]]):format(
+      root .. '/c.txt'
+    )
+  )
+  wait('_G.r == true')
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('c.txt  #', 1, true) then return false end end return true end)()]]):format(
+      view_expr(root)
+    )
+  )
+  vim.uv.sleep(800)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1 })
+  H.eq({ marked('a.txt'), marked('b.txt'), marked('c.txt') }, { true, true, nil })
+end
+
+T['client view']['after revert -a the changed file it keeps keeps its marker'] = function()
+  H.write(root .. '/b.txt', 'b2\n')
+  open_view_quiet()
+  track_calls()
+  child.lua(
+    ([[require('perforated.checkout').revert(require('perforated').workspace(), { %q, %q }, true, function(ok) _G.r = ok end)]]):format(
+      root .. '/b.txt',
+      root .. '/c.txt'
+    )
+  )
+  wait('_G.r ~= nil')
+  wait(
+    ([[(function() for _, l in ipairs(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false)) do
+    if l:find('c.txt  #', 1, true) then return false end end return true end)()]]):format(
+      view_expr(root)
+    )
+  )
+  vim.uv.sleep(800)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(count_calls(SECTIONS)['diff -sa'], nil)
+  H.eq({ marked('b.txt'), marked('c.txt') }, { true, nil })
 end
 
 T['client view']['<F5> and events that name nothing re-run every section'] = function()

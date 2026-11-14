@@ -813,7 +813,9 @@ why keys, menus and help never disagree.
    150 ms after the first of a burst (the burst's events are merged). Only what the events
    name is asked again: `files` re-runs the pending changelists, the opened files and
    `diff -sa` of those files (`merge_modified` keeps the other files' markers and drops files
-   no longer opened); `changes` re-runs the pending changelists, the opened files and the
+   no longer opened; with `keep_markers`, sent by a revert, no `diff -sa` at all: the files'
+   content didn't change, so `merge_modified` keeps every marker and only drops files no
+   longer opened; merged events keep markers only if all of them did); `changes` re-runs the pending changelists, the opened files and the
    shelves: `true` every changelist's, a list (`{ '1234' }`) only those changelists'
    (`describe -S -s` of them, merged into the others' previous answer; a listed changelist
    with no shelf left drops out), an empty list none. Shelve, delete shelved and delete

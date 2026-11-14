@@ -477,7 +477,9 @@ local function merge_what(a, b)
   elseif a.changes == true or b.changes == true then
     changes = true
   end
-  return { files = files, changes = changes }
+  -- Markers kept only when every merged event kept them.
+  local keep = files and (a.keep_markers or not a.files) and (b.keep_markers or not b.files)
+  return { files = files, changes = changes, keep_markers = keep or nil }
 end
 M._merge_what = merge_what
 
@@ -546,6 +548,8 @@ function M.refresh(view, what)
   local with_have = not view.data or (what.full and not what.keep_have)
   -- Markers of some files only: needs the full set from before.
   local some = not full and type(prev.modified) == 'table' and what.files or nil
+  -- A revert: the files' markers stay (reverted ones drop out with the opened list).
+  local keep_markers = some and what.keep_markers
   -- Shelves to ask for: true = all; a list = those, the others keep their previous answer.
   local shelves = full or what.changes
   if type(shelves) == 'table' then
@@ -558,7 +562,7 @@ function M.refresh(view, what)
   ws:ensure_info(function()
     local data, got = {}, {}
     local left = full and (with_have and 6 or 5)
-      or 2 + (shelves and 1 or 0) + (what.files and 1 or 0)
+      or 2 + (shelves and 1 or 0) + (what.files and not keep_markers and 1 or 0)
     local function set(k, v)
       data[k], got[k] = v, true
     end
@@ -581,7 +585,10 @@ function M.refresh(view, what)
       end
       shown.have, shown.submitted = field('have'), field('submitted')
       shown.shelved = field('shelved')
-      if some and got.modified and got.opened then
+      if keep_markers then
+        shown.modified = got.opened and merge_modified(ws, prev.modified, {}, {}, data.opened)
+          or prev.modified
+      elseif some and got.modified and got.opened then
         shown.modified = merge_modified(ws, prev.modified, some, data.modified, data.opened)
       elseif some then
         shown.modified = prev.modified
@@ -681,7 +688,7 @@ function M.refresh(view, what)
         done()
       end)
     end
-    if full or what.files then
+    if full or (what.files and not keep_markers) then
       require('perforated.modified').query(ws, some, function(changed)
         set('modified', changed or false) -- false: unknown (no markers)
         done()
@@ -2348,7 +2355,7 @@ function M.open(ws, opts)
       end
       local what = (d.files or d.changes)
           and not d.source
-          and { files = d.files, changes = d.changes }
+          and { files = d.files, changes = d.changes, keep_markers = d.keep_markers }
         or d.source == 'poll' and POLLED
         or FULL
       if owed then

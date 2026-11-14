@@ -120,13 +120,14 @@ M.CHANGED_FILES_MAX = 500
 --- content), `changes` (changelists: descriptions, and the shelves of the changelists listed,
 --- or of all of them for `true`). Without it, anything may have
 --- changed. Depot paths are named by their local path when it is known (an opened file), else
---- passed on as they are (a file just unshelved isn't in `ws.opened` yet).
+--- passed on as they are (a file just unshelved isn't in `ws.opened` yet). `keep_markers`: the
+--- files' content didn't change (a revert), so their changed markers need no new check.
 ---@param ws perforated.Workspace
----@param what { files: string[]?, changes: boolean|string[]? }?
+---@param what { files: string[]?, changes: boolean|string[]?, keep_markers: boolean? }?
 local function changed(ws, what)
   local data = { ws = ws.key }
   if what then
-    data.changes = what.changes
+    data.changes, data.keep_markers = what.changes, what.keep_markers
     local files = what.files and #what.files <= M.CHANGED_FILES_MAX and {} or nil
     for _, f in ipairs(what.files or {}) do
       local local_path = not f:find('...', 1, true) and f or nil -- a wildcard: refresh all
