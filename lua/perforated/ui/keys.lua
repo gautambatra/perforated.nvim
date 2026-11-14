@@ -494,6 +494,7 @@ function M.help(actions, title, sections)
   end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
+  require('perforated.ui.bufname').set(buf, 'help/' .. title)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   for _, m in ipairs(marks) do

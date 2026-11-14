@@ -304,6 +304,7 @@ function M.show()
   end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
+  require('perforated.ui.bufname').set(buf, 'jobs')
   local width = math.min(100, vim.o.columns - 4)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = 'editor',

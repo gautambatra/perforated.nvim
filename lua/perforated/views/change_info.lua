@@ -188,6 +188,7 @@ function M.show(ws, item, d, shelved)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
+  require('perforated.ui.bufname').set(buf, 'changelist/' .. rec.change)
   fill(buf, lines, hls)
   vim.bo[buf].modifiable = false
   vim.bo[buf].filetype = 'perforated-changelist'

@@ -102,6 +102,11 @@ function M.open(spec, finish)
     vim.bo[b].bufhidden = 'wipe'
     vim.bo[b].swapfile = false
     vim.b[b].perforated_picker = name
+    -- The filter is the one you type in: it gets the plain name.
+    require('perforated.ui.bufname').set(
+      b,
+      'picker/' .. spec.title .. (name == 'filter' and '' or '/' .. name)
+    )
     return b
   end
   local filter_buf, list_buf = scratch('filter'), scratch('list')

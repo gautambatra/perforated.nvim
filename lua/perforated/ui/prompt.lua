@@ -70,6 +70,7 @@ function M.input(opts, on_confirm)
   width = math.min(width, vim.o.columns - 6)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
+  require('perforated.ui.bufname').set(buf, 'input')
   vim.bo[buf].filetype = 'perforated-input'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { default })
   local win = vim.api.nvim_open_win(buf, true, {

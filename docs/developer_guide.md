@@ -569,6 +569,7 @@ lua/perforated/
     toast_history.lua        :P4 messages, the history window (loaded on first use)
     prompt.lua               confirmations and text input (pop-ups, or confirm()/vim.ui.input)
     icons.lua                file icons (mini.icons/devicons) and status glyphs
+    bufname.lua              perforated://<what> names for scratch buffers
     progress.lua             progress messages (0.12) + final notification
   picker/
     init.lua                 picker abstraction over telescope/fzf-lua/snacks/mini/select
@@ -1464,6 +1465,17 @@ is an empty answer, `<Esc>`/`<C-c>`/leaving cancels with nil, `<Tab>` completes 
 `opts.completion` is set), or `vim.ui.input` with the notify backend. Never call
 `vim.fn.confirm` / `vim.ui.input` directly, and always call these through the module at call
 time: tests replace them (`require('perforated.ui.prompt').confirm = function() return 1 end`).
+
+#### `ui/bufname.lua`
+`set(buf, name)` names a scratch buffer `perforated://<name>`, adding ` (2)`, ` (3)`, … when
+another buffer has that name (Neovim refuses a name in use, which would leave the buffer
+unnamed). Every buffer the cursor can enter gets one, so `:ls`, a statusline or a buffer
+picker shows what it is: `description/<CL>` (or `new`), `change/<CL>` (the full spec),
+`changelist/<CL>` (`K`), `files/<title>` (the diff tab's panel), `help/<title>`, `jobs`,
+`timings`, `input`, `picker/<title>` (its list and preview `…/list`, `…/preview`) and
+`hunk/<file>`; the views name theirs through `views/base.lua`. Pop-ups the cursor never
+enters (toasts, the footer, menus) stay unnamed. None of these start with `perforated:////`,
+so the revision `BufReadCmd` leaves them alone.
 
 #### `ui/qf.lua`
 The quickfix sink: `set(spec)` makes one `setqflist` call with a title and a

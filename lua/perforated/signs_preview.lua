@@ -103,6 +103,10 @@ function M.preview()
     hls[#lines] = 'PerforatedPreviewAdd'
   end
   local pbuf = vim.api.nvim_create_buf(false, true)
+  require('perforated.ui.bufname').set(
+    pbuf,
+    'hunk/' .. vim.fs.basename(vim.api.nvim_buf_get_name(buf))
+  )
   vim.api.nvim_buf_set_lines(pbuf, 0, -1, false, lines)
   -- The line colours as ranged highlights to the end of the line, not `line_hl_group`: that
   -- one is drawn over ranged highlights whatever their priority, hiding the changed words.

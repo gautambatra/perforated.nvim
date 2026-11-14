@@ -26,14 +26,14 @@ end
 --- float may be gone by then (left, closed, discarded): the save still counts. A failed save
 --- whose float was closed without discarding opens the float again with the text, so it isn't
 --- lost; `saved` then returns true. One save at a time: `:w` while one runs is ignored.
----@param opts { title: string, lines: string[], insert: boolean?, win: integer?, modified: boolean?, on_save: fun(desc: string, saved: fun(ok: boolean): boolean?), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
+---@param opts { title: string, name: string, lines: string[], insert: boolean?, win: integer?, modified: boolean?, on_save: fun(desc: string, saved: fun(ok: boolean): boolean?), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
 ---@return integer buf, integer win
 local function open_float(opts)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = 'acwrite'
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
-  pcall(vim.api.nvim_buf_set_name, buf, ('perforated://description/%d'):format(buf))
+  require('perforated.ui.bufname').set(buf, opts.name)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, opts.lines)
   vim.bo[buf].modified = opts.modified == true
   vim.bo[buf].filetype = 'perforated-description'
@@ -222,7 +222,7 @@ function M.full(ws, change, opts)
     vim.bo[buf].buftype = 'acwrite'
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].swapfile = false
-    pcall(vim.api.nvim_buf_set_name, buf, 'perforated://change/' .. change)
+    require('perforated.ui.bufname').set(buf, 'change/' .. change)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(spec, '\n', { plain = true }))
     vim.bo[buf].modified = false
     vim.bo[buf].filetype = 'perforated-spec'
@@ -280,6 +280,7 @@ function M.edit(ws, change, opts)
     end
     open_float({
       title = ('CL %s · %s · %s'):format(change, status, user),
+      name = 'description/' .. change,
       lines = vim.split(desc, '\n', { plain = true }),
       win = opts.win,
       on_cancel = function(how)
@@ -348,6 +349,7 @@ function M.new(ws, opts)
   end
   open_float({
     title = 'New changelist',
+    name = 'description/new',
     lines = opts.desc and vim.split(vim.trim(opts.desc), '\n', { plain = true })
       or template and vim.split(template, '\n', { plain = true })
       or { '' },

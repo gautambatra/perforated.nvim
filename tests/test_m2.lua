@@ -795,6 +795,49 @@ T['client view']['description: one save at a time; discarding during it keeps a 
   H.neq(child.bo.filetype, 'perforated-description')
 end
 
+T['client view']['the plugin names the buffers you can enter'] = function()
+  local function name()
+    return child.api.nvim_buf_get_name(0)
+  end
+  open_view()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('K')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  H.eq(name(), 'perforated://changelist/2')
+  child.type_keys('i')
+  wait([[vim.bo.filetype == 'perforated-description']])
+  H.eq(name(), 'perforated://description/2')
+  child.type_keys('q') -- back to the changelist
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  H.eq(name(), 'perforated://changelist/2')
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  child.type_keys('?')
+  wait([[vim.api.nvim_win_get_config(0).relative ~= '']])
+  H.eq(name(), 'perforated://help/Perforce')
+  child.type_keys('q')
+  wait([[vim.bo.filetype == 'perforated']])
+  child.cmd('P4 jobs')
+  H.eq(name(), 'perforated://jobs')
+  child.type_keys('q')
+  child.lua([[require('perforated.ui.prompt').input({ prompt = 'Name:' }, function() end)]])
+  H.eq(name(), 'perforated://input')
+  child.type_keys('<Esc>', '<Esc>')
+  -- A name in use gets a number, rather than no name.
+  H.eq(
+    child.lua_get([[(function()
+      local bufname, out = require('perforated.ui.bufname'), {}
+      for i = 1, 2 do
+        local b = vim.api.nvim_create_buf(false, true)
+        bufname.set(b, 'same')
+        out[i] = vim.api.nvim_buf_get_name(b)
+      end
+      return out
+    end)()]]),
+    { 'perforated://same', 'perforated://same (2)' }
+  )
+end
+
 T['client view']['K popup: i edits the description in place, then comes back'] = function()
   open_view()
   goto_line('CL 2  Fix parser')

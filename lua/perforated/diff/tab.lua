@@ -302,7 +302,7 @@ open_tab = function(ws, title, entries, listed, focus)
   vim.bo[panel_buf].buftype = 'nofile'
   vim.bo[panel_buf].bufhidden = 'wipe'
   vim.bo[panel_buf].swapfile = false
-  pcall(vim.api.nvim_buf_set_name, panel_buf, 'perforated://files/' .. title)
+  require('perforated.ui.bufname').set(panel_buf, 'files/' .. title)
   local panel = vim.api.nvim_get_current_win()
 
   -- Panel content: the title, a row per file that differs (rows 3 … #entries + 2), then the

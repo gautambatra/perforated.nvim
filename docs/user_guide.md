@@ -375,6 +375,11 @@ For settings that should apply to every diff (`nvim -d`, `:diffsplit`, `:P4 diff
 Any depot revision opens as a read-only buffer, e.g.
 `:e perforated:////depot/path/file.c\#3` (escape `#` in `:e`).
 
+The plugin's other buffers are named after what they show, so `:ls`, your statusline or a
+buffer picker tells them apart: `perforated://client/<client>`, `perforated://description/1234`
+(the description editor), `perforated://changelist/1234` (`K`), `perforated://files/CL 1234`
+(a diff tab's file panel), `perforated://jobs` and so on.
+
 ## Describe, history, annotate, blame
 
 ### Describe

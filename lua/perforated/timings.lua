@@ -98,6 +98,7 @@ end
 function M.show()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
+  require('perforated.ui.bufname').set(buf, 'timings')
   local function fill()
     local lines = M.lines()
     vim.bo[buf].modifiable = true
