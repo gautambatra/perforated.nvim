@@ -498,6 +498,7 @@ keys):
       client_view = {
         kind = "tab",
         reconcile = {
+          mtime = true,
           paths = {}
         },
         submitted_limit = 20

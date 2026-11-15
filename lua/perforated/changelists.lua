@@ -199,9 +199,25 @@ function M.status(ws, path, cb, run_opts)
     end)
   end
   local opts = vim.tbl_extend('force', { timeout = 0, priority = 3 }, run_opts or {})
-  ws:run(vim.list_extend({ 'status' }, paths), opts, function(res)
+  -- `-m`: p4 hashes only the files whose mtime differs from the have list's (an edit that kept
+  -- its mtime, like `cp -p`, is missed). `client_view.reconcile.mtime = false`: hash them all.
+  local cfg = require('perforated.config').get().client_view.reconcile or {}
+  local mtime = cfg.mtime ~= false and not ws.status_no_mtime
+  local args = mtime and { 'status', '-m' } or { 'status' }
+  ws:run(vim.list_extend(args, paths), opts, function(res)
     if res.cancelled then
       return cb(nil, 'cancelled')
+    end
+    local err = res.errors[1] or ''
+    if
+      mtime
+      and res.code ~= 0
+      and #res.records == 0
+      and err:find('Invalid option: -m', 1, true)
+    then
+      -- An older server or client without `-m`: hash every file from now on.
+      ws.status_no_mtime = true
+      return M.status(ws, path, cb, run_opts)
     end
     if res.code ~= 0 and #res.records == 0 then
       return cb(nil, res.errors[1] or vim.trim(res.stderr))

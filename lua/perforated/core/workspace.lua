@@ -39,6 +39,7 @@ M.CONNECTION_KEY = '<connection>'
 ---@field fstat_at table<string, { t: integer, gen: integer }>  path → `p4.stamp` of its `fstat` record
 ---@field markers table<string, { changed: boolean, stat: string|false, base: string }>?  key → changed marker (`modified.markers`)
 ---@field pending_kept { stamp: { t: integer, gen: integer }, records: table[] }?  (`p4.keep_pending`)
+---@field status_no_mtime boolean?        the server or client rejected `p4 status -m` (`changelists.status`)
 ---@field clmemo table<string, table>     change → { user, client, time, desc }
 ---@field sticky_cl string?
 ---@field idle boolean

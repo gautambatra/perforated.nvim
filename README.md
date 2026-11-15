@@ -290,7 +290,10 @@ opts = {
   client_view = {
     kind = 'tab', -- 'tab' | 'float' | 'split'
     submitted_limit = 20, -- "Recent submitted": how many of your latest (gn: the full list)
-    reconcile = { paths = {} }, -- paths to scan (relative to the client root); {} = whole client
+    reconcile = {
+      paths = {}, -- paths to scan (relative to the client root); {} = whole client
+      mtime = true, -- hash only files whose mtime moved (`p4 status -m`); false = hash every file
+    },
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
   timelapse = {

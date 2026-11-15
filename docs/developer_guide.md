@@ -825,7 +825,10 @@ why keys, menus and help never disagree.
    nodes; the tree renders with one `set_lines`), so a slow query never holds back the rest.
    Until then a section shows what the previous refresh found, or "loading…" the first time.
 3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop. `a`
-   removes a file from it only once p4's records confirm it was opened.
+   removes a file from it only once p4's records confirm it was opened. The scan passes `-m`
+   (p4 hashes only files whose mtime differs from the have list), unless
+   `client_view.reconcile.mtime = false`; a server that answers `Invalid option: -m` gets the
+   scan again without it, and `ws.status_no_mtime` keeps it off for the session.
 4. Any `User PerforatedChanged` event (check-out, revert, submit…) refreshes a visible view,
    150 ms after the first of a burst (the burst's events are merged). Only what the events
    name is asked again: `files` re-runs the pending changelists, the opened files and
@@ -1093,7 +1096,7 @@ loads with them, keeping its code out of the startup memory (`make bench`). `pri
 #### `changelists.lua`
 Changelist queries used by views and operations: `describe` (files, optionally shelved),
 `shelved_files`, `submitted_changes` (paged, scoped to the client by default; `anywhere` for
-every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `W`), `status` (`p4 status` for reconcile, with job options),
+every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `W`), `status` (`p4 status [-m]` for reconcile, with job options),
 `reopen`, `opened_by_user` (the "all my clients" scope), `change_status`, and the change spec
 helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_description`,
 `spec_set_description`).

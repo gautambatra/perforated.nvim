@@ -270,6 +270,11 @@ only scans when you expand it (`l`).
 - To scan only the parts you work on, set `client_view.reconcile.paths`, e.g.
   `{ 'src/myteam' }`. Paths are relative to the client root; local and depot paths work too.
   `p` on the section changes them for the session.
+- The scan reads only files whose modification time moved since they were synced
+  (`p4 status -m`), so it doesn't hash the whole workspace. A tool that rewrites a file but keeps
+  its old mtime (`cp -p`, `rsync -t`, some archive tools) slips past it: set
+  `client_view.reconcile.mtime = false` to hash every file, or run `p4 status` in a terminal. On
+  a server too old for `-m`, the scan hashes every file by itself.
 
 ## Changelists
 

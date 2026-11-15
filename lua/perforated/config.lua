@@ -52,8 +52,10 @@ local defaults = {
     submitted_limit = 20,
     -- Paths the reconcile section scans (relative to the client root, local or depot paths;
     -- or a function(ws) returning them). Empty = the whole client. `p` in the view overrides
-    -- it for the session.
-    reconcile = { paths = {} },
+    -- it for the session. `mtime`: skip hashing files whose modification time matches the
+    -- have list (`p4 status -m`, much faster); false hashes every file, finding edits made by
+    -- tools that keep the old mtime (`cp -p`, some archive tools).
+    reconcile = { paths = {}, mtime = true },
   },
   sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
   timelapse = {
