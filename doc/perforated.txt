@@ -546,6 +546,7 @@ keys):
       picker = "auto",
       picker_mode = "normal",
       poll = {
+        bufenter_max_age = 600,
         bufenter_throttle = 60,
         focus_throttle = 2,
         interval = 30,

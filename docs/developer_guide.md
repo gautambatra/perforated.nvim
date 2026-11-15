@@ -539,6 +539,7 @@ lua/perforated/
   poll.lua                   stale/unresolved detection (cheap probe, full refresh on news)
   poll_follow.lua            following the plugin's changes: the follow-up refresh, `settled` (lazy)
   poll_news.lua              what the poll's news names: changed files, changelists' shelves (lazy)
+  bufenter.lua               BufEnter while the poll runs: has the file moved on disk? (lazy)
   stale_toast.lua            the toast for newly stale opened files (lazy)
   changelists.lua            changelist queries: describe, shelved files, submitted, reopen…
   lists.lua                  quickfix producers: opened files, status, hunks
@@ -810,7 +811,14 @@ why keys, menus and help never disagree.
    files of a full refresh (`ws.opened_stamp`), and this client's pending changelists
    (`ws.pending_kept`, from the probe or `pending_changes`; a new changelist drops it).
    A buffer attaching with a fresh record applies it (`buffer.reuse`, no fstat), `BufEnter`
-   skips its fstat, and `pending_changes(…, { reuse = true })` / `fstat_opened(ws, { reuse =
+   skips its fstat (and, while the poll timer runs, also skips it while the file hasn't moved
+   on disk since the buffer's last fstat and that is younger than `poll.bufenter_max_age`,
+   600 s: the fstat batch keeps each buffer's `st.seen`, `buffer.disk_sig` (mtime, size) taken
+   just before it asked, and `bufenter.lua`, loaded on the first such BufEnter, compares the
+   file with it. Not `st.disk`: Neovim re-reading a file changed outside moves that. Your own
+   save moves `st.seen.sig` (checkout.lua's `BufWritePost`). A moved file is asked about at
+   once, past `bufenter_throttle`. The mode isn't compared: `p4 edit` / `revert` elsewhere are
+   the probe's `opened` query's to see), and `pending_changes(…, { reuse = true })` / `fstat_opened(ws, { reuse =
    true })` answer from them: the pickers, the check-out and changelist prompts and the
    unshelve target. The client view never reuses (its refreshes follow a change or `<F5>`).
 

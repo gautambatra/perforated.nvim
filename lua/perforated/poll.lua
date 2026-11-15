@@ -389,8 +389,15 @@ local function ensure_autocmds()
       if not st or p4.fresh(st.ws, st.ws.fstat_at[st.key]) then
         return -- (its record was fetched moments ago)
       end
-      local now = vim.uv.now()
-      if now - (last_enter[ev.buf] or -math.huge) >= cfg().bufenter_throttle * 1000 then
+      local c, now = cfg(), vim.uv.now()
+      -- While the poll runs (it sees newer submits and changes to the opened files), a file
+      -- that didn't move on disk since its record needn't be asked about again until the
+      -- record is `bufenter_max_age` old; one that moved is asked right away.
+      local seen = st.seen
+      if (c.interval or 0) > 0 and seen and now - seen.t < (c.bufenter_max_age or 0) * 1000 then
+        return require('perforated.bufenter').check(ev.buf, st, last_enter)
+      end
+      if now - (last_enter[ev.buf] or -math.huge) >= c.bufenter_throttle * 1000 then
         last_enter[ev.buf] = now
         require('perforated.buffer').refresh(ev.buf)
       end

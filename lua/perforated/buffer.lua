@@ -31,6 +31,8 @@ local M = {}
 ---@field status_sig string? what the statusline last showed (status.lua skips no-op updates)
 ---@field disk { sec: integer, nsec: integer, size: integer }? the file's mtime and size when last
 ---  read or written (checkout.lua: tells a permission-only change from a real one)
+---@field seen { sig: string|false, t: integer }? the file's `disk_sig` taken just before its
+---  last fstat, and when (vim.uv.now): BufEnter asks again only once it moved (bufenter.lua)
 
 local states = {} ---@type table<integer, perforated.BufState>
 local warned = {} ---@type table<string, true>  messages shown once per session
@@ -57,6 +59,13 @@ local batches = {} ---@type table<string, { paths: table<string, true>, timer: b
 
 M.BATCH_MS = 30
 
+--- A file's mtime and size (`st.disk`'s shape) as one string; false when it's missing.
+---@param d { sec: integer, nsec: integer, size: integer }?
+---@return string|false
+function M.disk_sig(d)
+  return d and ('%d.%09d:%d'):format(d.sec, d.nsec, d.size) or false
+end
+
 ---@param ws perforated.Workspace
 ---@param cb fun(ok: boolean)?  after the results are applied (false: p4 couldn't answer)
 local function flush(ws, cb)
@@ -68,7 +77,11 @@ local function flush(ws, cb)
   local paths = vim.tbl_keys(b.paths)
   table.sort(paths)
   dbg.debug('buffer', 'fstat batch of %d path(s) for %s', #paths, ws.key)
-  local stamp = p4.stamp(ws)
+  local stamp, sigs = p4.stamp(ws), {}
+  for _, path in ipairs(paths) do -- (before p4 answers: an edit meanwhile is news)
+    local s = vim.uv.fs_stat(path)
+    sigs[path] = M.disk_sig(s and { sec = s.mtime.sec, nsec = s.mtime.nsec, size = s.size })
+  end
   p4.fstat(ws, paths, { priority = 2 }, function(r)
     if not r.res.ok and next(r.files) == nil and next(r.missing) == nil then
       return cb and cb(false) -- connection trouble; conn state/statusline already reflect it
@@ -82,6 +95,7 @@ local function flush(ws, cb)
       for buf, st in pairs(states) do
         if st.ws == ws and st.key == k then
           M.apply(buf, rec, missing)
+          st.seen = { sig = sigs[path], t = stamp.t }
           shown = true
         end
       end

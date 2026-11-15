@@ -498,6 +498,10 @@ function M.attach(attached)
   on('BufWritePre', before_write)
   on('BufWritePost', function(b, ev)
     remember_disk(b)
+    local st = tracked(b) -- your own save isn't news from p4 (bufenter.lua)
+    if st and st.seen then
+      st.seen.sig = require('perforated.buffer').disk_sig(st.disk)
+    end
     after_write(b, ev)
   end)
   -- Re-reading the file (:e!) starts over: a skipped/cancelled buffer prompts again.

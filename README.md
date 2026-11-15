@@ -319,7 +319,9 @@ opts = {
   commands = { aliases = true }, -- :P4edit-style aliases (read at startup via vim.g.perforated)
   qf = { open = true }, -- open the quickfix window when a list has results
   startup_check = true, -- check opened files for stale/unresolved when a workspace activates
-  poll = { interval = 30, focus_throttle = 2, bufenter_throttle = 60, reuse = 5 }, -- seconds; 0 disables the timer
+  -- seconds; interval = 0 disables the timer. bufenter_max_age: while the timer runs, entering
+  -- a buffer whose file is untouched asks p4 again only once its status is this old
+  poll = { interval = 30, focus_throttle = 2, bufenter_throttle = 60, bufenter_max_age = 600, reuse = 5 },
   -- reuse: state fetched this recently (and no change made since) answers again without a p4 call
   toast = { timeout = 3000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
   statusline = {

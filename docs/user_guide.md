@@ -706,6 +706,13 @@ and the pickers and changelist prompts right after the background check or a vie
 Any change you make from the plugin ends that at once. A change made outside Neovim in
 those seconds shows at the next check or on `<F5>`; `poll.reuse = 0` always asks.
 
+Entering a buffer asks for its file's status only when the file changed on disk since it was
+last asked (a sync from a terminal rewrites it), and right away then; your own saves don't
+count. A check-out or revert from elsewhere shows at the next background check. An untouched file is asked again after 10 minutes (`poll.bufenter_max_age`), which
+catches what leaves the file alone: a `p4 flush` from elsewhere, or another user opening or
+locking it. With `poll.interval = 0` (no background check), entering a buffer asks at most once
+a minute (`poll.bufenter_throttle`), as before.
+
 **`:P4 refresh`** asks everything again at once: the status of every open buffer, your opened
 files, and the server details. It says `refreshed (N buffers)` when done, or warns if p4
 didn't answer. Use it with `poll.interval = 0`, or after changing files outside Neovim.

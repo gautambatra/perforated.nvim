@@ -3047,6 +3047,82 @@ T['client view']['opening a file just refreshed asks nothing; an older record is
   H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
 end
 
+--- Set `poll` options in the child (a long interval: the timer never fires in a test).
+local function set_poll(opts)
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { poll = ... })
+    require('perforated.config').reload()]],
+    { opts }
+  )
+end
+
+--- Enter d.txt, then `rel`'s buffer again, and let what that asks finish.
+local function reenter(rel)
+  child.cmd('buffer ' .. root .. '/d.txt')
+  child.cmd('buffer ' .. root .. '/' .. rel)
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+end
+
+T['client view']['entering an untouched file asks nothing while the poll runs; a moved one at once'] = function()
+  set_poll({ interval = 3600, reuse = 0, bufenter_throttle = 1 })
+  open_file('b.txt', 'opened')
+  vim.uv.sleep(1100) -- (past the throttle: it isn't what holds the fstat back)
+  track_calls()
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat' }), {})
+  -- Rewritten outside Neovim (a sync from a terminal): asked on entering, the throttle or not.
+  set_poll({ bufenter_throttle = 60 })
+  local t = os.time() + 5
+  vim.uv.fs_utime(root .. '/b.txt', t, t)
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
+end
+
+T['client view']['a file rewritten outside and reloaded by Neovim is asked about on entering'] = function()
+  set_poll({ interval = 3600, reuse = 0 })
+  open_file('b.txt', 'opened')
+  H.write(root .. '/b.txt', 'rewritten elsewhere\n')
+  local t = os.time() + 5
+  vim.uv.fs_utime(root .. '/b.txt', t, t)
+  child.cmd('checktime') -- (autoread: the buffer reloads)
+  H.eq(child.lua_get('vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]'), 'rewritten elsewhere')
+  track_calls()
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
+end
+
+T['client view']['saving a file yourself is no reason to ask about it on entering'] = function()
+  set_poll({ interval = 3600, reuse = 0, bufenter_throttle = 1 })
+  open_file('b.txt', 'opened')
+  child.cmd('call setline(1, "b2") | write')
+  vim.uv.sleep(1100)
+  H.wait_idle(child)
+  track_calls()
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat' }), {})
+end
+
+T['client view']['an untouched file is asked again once its record is bufenter_max_age old'] = function()
+  set_poll({ interval = 3600, reuse = 0, bufenter_max_age = 1, bufenter_throttle = 1 })
+  open_file('b.txt', 'opened')
+  vim.uv.sleep(1100)
+  track_calls()
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 }) -- (one batch: d.txt's too)
+end
+
+T['client view']['with the poll off, entering a buffer asks as before (throttled)'] = function()
+  set_poll({ interval = 0, reuse = 0, bufenter_throttle = 1 })
+  open_file('b.txt', 'opened')
+  vim.uv.sleep(1100)
+  track_calls()
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 }) -- (one batch: b.txt and d.txt)
+  reenter('b.txt')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 }) -- (within bufenter_throttle)
+end
+
 T['client view']['after a change, a file just refreshed is asked again'] = function()
   open_view_quiet()
   -- A change that names no file's state still means the records may be out of date.
