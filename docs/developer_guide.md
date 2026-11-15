@@ -1103,7 +1103,11 @@ loads with them, keeping its code out of the startup memory (`make bench`). `pri
 
 #### `changelists.lua`
 Changelist queries used by views and operations: `describe` (files, optionally shelved),
-`shelved_files`, `submitted_changes` (paged, scoped to the client by default; `anywhere` for
+`shelved_files`, `shelf` (one `describe -S -s CL`: a pending changelist's header — status,
+client, description — and its shelf, shelved files or not), `fstat_change` (`fstat -Ro -e CL
+//client/...`: this client's files opened in one changelist, `default` too), `all(fns, cb)`
+(runs queries at once and answers when every one has: the pre-checks before a pop-up never
+wait on each other), `submitted_changes` (paged, scoped to the client by default; `anywhere` for
 every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `W`), `status` (`p4 status [-m]` for reconcile, with job options),
 `reopen`, `opened_by_user` (the "all my clients" scope), `change_status`, and the change spec
 helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_description`,
@@ -1376,6 +1380,12 @@ one pass), `anchor`, `step`.
 ### Operations
 
 #### `ops.lua`
+The checks before a confirmation run at once (`changelists.all`): submit asks
+`fstat_change` (the stale / unresolved warnings, fresh) with `shelf` (description, shelf count);
+delete asks `shelf` (status, client, description, shelf) with `fstat_change` (the files to move
+or revert), plus a `describe -s` only for another client's changelist (`change.allow_force`),
+whose opened files only it sees; re-shelving a whole changelist asks `shelved_files` with
+`opened -c`.
 Shelve (`shelve -f`, confirmation before replacing; when a whole changelist is re-shelved and
 one `opened -c` shows the shelf holding files no longer opened in it, a third choice "replace
 all" runs `shelve -r` and the prompt lists those files), delete shelved files, unshelve (into the
@@ -1744,7 +1754,9 @@ environment, waiting for `p4 info`) is waited for, on a 20 ms timer for up to `D
 (3 s); a newer `d` replaces a waiting one.
 
 #### `views/describe.lua`
-`:P4 describe N`: header, description, files and shelved files; `<Tab>` expands a file's
+`:P4 describe N`: header, description, files and shelved files (after `describe -s`, a pending
+changelist's shelf and, for this client's, `fstat_change` — workspace paths and bases — are
+asked at once; markers from the cache, `modified.markers`); `<Tab>` expands a file's
 unified diff inline (two prints, computed only when expanded; files above 20k lines say "use
 `d`"). Pending changelists of this client diff against the workspace file; shelved files
 against their base (`w` workspace, `gH` head). Actions include submit, delete, integrate,

@@ -293,7 +293,9 @@ only scans when you expand it (`l`).
 - **Delete one:** `dd`, or `:P4 change -d N`. In the client view `dd` is offered only on a
   changelist with no opened files. One confirmation says what's in it; its opened files move to
   the default changelist (or are reverted, if you choose that), its shelved files are deleted,
-  then the changelist is. The default changelist can't be deleted.
+  then the changelist is. The default changelist can't be deleted. What the confirmation says is
+  asked at once (the changelist with its shelf, and its opened files), as for submit, re-shelve,
+  `K` on a pending changelist and its describe view.
 - **Another client's changelist** needs `change.allow_force = true`, which retries with `-f`
   after a confirmation. It's meant for admins.
 - **Move files:** `gm`. Pick a changelist (the default one included) or create one. On a file it
@@ -543,8 +545,9 @@ The commands are `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d` and
 ### Submit
 
 `P` / `<C-s>`, or `:P4 submit [CL]`, opens a confirmation with the description and file
-count. It warns about out-of-date, unresolved or shelved files. `s` submits; `e` edits the
-description first. Failures (e.g. out of date) go to quickfix with p4's reason.
+count. It warns about out-of-date, unresolved or shelved files, checked fresh: the changelist's
+files and its shelf are asked at the same time, so the confirmation waits for one answer from
+the server, not three. `s` submits; `e` edits the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
 
 ### Sync
 

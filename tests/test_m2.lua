@@ -3320,6 +3320,101 @@ local function opened_items()
   wait('_G.items ~= nil')
 end
 
+--- From now on, record the changelist queries sent (describe, fstat, opened) and the most of
+--- them in flight at once (`_G.MAXIN`: 1 = one after another).
+local function track_overlap()
+  child.lua([=[_G.SENT, _G.IN, _G.MAXIN = {}, 0, 0
+    if _G.OVERLAP_HOOKED then return end
+    _G.OVERLAP_HOOKED = true
+    local ws = require('perforated').workspace()
+    local run = ws.run
+    local WATCH = { describe = true, fstat = true, opened = true }
+    ws.run = function(self, args, opts, cb)
+      if not WATCH[args[1]] then
+        return run(self, args, opts, cb)
+      end
+      table.insert(_G.SENT, table.concat(args, ' '))
+      _G.IN = _G.IN + 1
+      _G.MAXIN = math.max(_G.MAXIN, _G.IN)
+      return run(self, args, opts, function(res)
+        _G.IN = _G.IN - 1
+        cb(res)
+      end)
+    end]=])
+end
+
+--- The recorded queries that start with `prefix`.
+local function sent(prefix)
+  return vim.tbl_filter(function(c)
+    return c:sub(1, #prefix) == prefix
+  end, child.lua_get('_G.SENT'))
+end
+
+T['client view']['the submit confirmation asks the files and the shelf at once'] = function()
+  track_overlap()
+  child.lua([[_G.menu = nil
+    require('perforated.ui.float').menu = function(o) _G.menu = o end
+    require('perforated.ops').submit(require('perforated').workspace(), '2')]])
+  wait('_G.menu ~= nil')
+  local header = table.concat(child.lua_get('_G.menu.header'), '\n')
+  H.neq(header:find('Fix parser', 1, true), nil)
+  H.neq(header:find('1 file(s)', 1, true), nil)
+  H.neq(header:find('1 shelved file(s)', 1, true), nil)
+  H.eq(child.lua_get('_G.MAXIN'), 2)
+  -- Only the changelist's files, not every opened file.
+  H.eq(#sent('fstat -Ro -e 2 '), 1)
+  H.eq(#sent('fstat'), 1)
+end
+
+T['client view']['deleting a changelist asks it, its shelf and its files at once'] = function()
+  track_overlap()
+  child.lua([[_G.msg = nil
+    require('perforated.ui.prompt').confirm = function(msg) _G.msg = msg; return 3 end
+    require('perforated.ops').delete_change(require('perforated').workspace(), '2')]])
+  wait('_G.msg ~= nil')
+  local msg = child.lua_get('_G.msg')
+  H.neq(msg:find('Delete CL 2 (Fix parser)?', 1, true), nil)
+  H.neq(msg:find('1 opened file(s) and 1 shelved file(s)', 1, true), nil)
+  H.eq(child.lua_get('_G.MAXIN'), 2)
+  H.eq(sent('describe'), { 'describe -S -s 2' })
+  H.eq(opened()['//depot/a.txt'], '2') -- (cancelled: nothing changed)
+end
+
+T['client view']['re-shelving a changelist asks its shelf and its files at once'] = function()
+  track_overlap()
+  child.lua([[_G.msg = nil
+    require('perforated.ui.prompt').confirm = function(msg) _G.msg = msg; return 2 end
+    require('perforated.ops').shelve(require('perforated').workspace(), '2')]])
+  wait('_G.msg ~= nil')
+  H.neq(child.lua_get('_G.msg'):find('already has 1 shelved file(s)', 1, true), nil)
+  H.eq(child.lua_get('_G.MAXIN'), 2)
+  H.eq(#sent('opened -c 2'), 1)
+end
+
+T['client view']['K on a pending changelist asks it and its shelf at once'] = function()
+  track_overlap()
+  child.lua([[_G.got = nil
+    require('perforated.views.change_info').fetch(require('perforated').workspace(),
+      { change = '2', status = 'pending' }, function(d, shelved)
+        _G.got = { desc = d.rec.desc, files = #d.files, shelved = #shelved }
+      end)]])
+  wait('_G.got ~= nil')
+  H.eq(child.lua_get('_G.got'), { desc = 'Fix parser\nsecond line\n', files = 1, shelved = 1 })
+  H.eq(child.lua_get('_G.MAXIN'), 2)
+end
+
+T['client view']['the describe view of a pending changelist asks only its own files'] = function()
+  track_overlap()
+  child.cmd('P4 describe 2')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('a.txt', 1, true) ~= nil]]
+  )
+  H.wait_idle(child)
+  H.eq(#sent('fstat -Ro -e 2 '), 1)
+  H.eq(#sent('fstat'), 1)
+  H.eq(child.lua_get('_G.MAXIN'), 2) -- (its shelf and its files)
+end
+
 T['client view']['the opened-files list and the describe view take markers from the cache'] = function()
   open_view_cached() -- (its markers went to the workspace's cache)
   track_marker_queries()

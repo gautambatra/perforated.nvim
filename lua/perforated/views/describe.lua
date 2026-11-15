@@ -244,40 +244,42 @@ local function load(view, cb)
     }
     cb()
   end
-  local function opened(rec, fallback, shelved)
-    if ws.mode == 'connection' or rec.client ~= ws:client() then
+  -- A pending changelist of this client: its files' fstat records (`recs`, from
+  -- `fstat -Ro -e CL`) give workspace paths and bases.
+  local function opened(rec, fallback, shelved, recs)
+    local p4 = require('perforated.p4')
+    local files, mine = {}, {}
+    for _, r in ipairs(recs or {}) do
+      if (r.change or 'default') == rec.change then
+        mine[#mine + 1] = r
+        files[#files + 1] = {
+          depotFile = r.depotFile,
+          clientFile = r.clientFile,
+          action = r.action,
+          rev = r.haveRev,
+          base_spec = p4.base_spec(r),
+        }
+      end
+    end
+    if #files == 0 then
       return finish(rec, fallback, shelved)
     end
-    local p4 = require('perforated.p4')
-    p4.fstat_opened(ws, {}, function(recs)
-      local files, mine = {}, {}
-      for _, r in ipairs(recs or {}) do
-        if (r.change or 'default') == rec.change then
-          mine[#mine + 1] = r
-          files[#files + 1] = {
-            depotFile = r.depotFile,
-            clientFile = r.clientFile,
-            action = r.action,
-            rev = r.haveRev,
-            base_spec = p4.base_spec(r),
-          }
-        end
-      end
-      if #files == 0 then
-        return finish(rec, fallback, shelved)
-      end
-      -- (the workspace's marker cache: only files edited since are asked)
-      require('perforated.modified').markers(ws, mine, {}, function(set)
-        finish(rec, files, shelved, set or false)
-      end)
+    -- (the workspace's marker cache: only files edited since are asked)
+    require('perforated.modified').markers(ws, mine, {}, function(set)
+      finish(rec, files, shelved, set or false)
     end)
   end
+  local function ours(rec)
+    return ws.mode ~= 'connection' and rec.client == ws:client()
+  end
   if change == 'default' then
-    return opened(
-      { change = 'default', status = 'pending', user = ws:user(), client = ws:client() },
-      {},
-      {}
-    )
+    local rec = { change = 'default', status = 'pending', user = ws:user(), client = ws:client() }
+    if not ours(rec) then
+      return finish(rec, {}, {})
+    end
+    return cls.fstat_change(ws, 'default', function(recs)
+      opened(rec, {}, {}, recs)
+    end)
   end
   cls.describe(ws, { change }, {}, function(by)
     local d = by[change]
@@ -288,8 +290,23 @@ local function load(view, cb)
     if d.rec.status ~= 'pending' then
       return finish(d.rec, d.files, {})
     end
-    cls.shelved_files(ws, { change }, function(sh)
-      opened(d.rec, d.files, sh[change] or {})
+    -- At once: the shelf and (this client's changelist) its opened files.
+    local asks = {
+      function(done)
+        cls.shelved_files(ws, { change }, done)
+      end,
+    }
+    if ours(d.rec) then
+      asks[2] = function(done)
+        cls.fstat_change(ws, change, done)
+      end
+    end
+    cls.all(asks, function(r)
+      local shelved = r[1][1][change] or {}
+      if not r[2] then
+        return finish(d.rec, d.files, shelved)
+      end
+      opened(d.rec, d.files, shelved, r[2][1])
     end)
   end)
 end

@@ -39,6 +39,21 @@ function M.fetch(ws, item, cb)
   end
   -- A client-view item carries its shelved files; a `p4 changes` record only a "shelved" flag.
   local shelved = type(item.shelved) == 'table' and item.shelved or nil
+  -- Known to be pending (a client-view item, a `p4 changes` record): its shelf is asked at
+  -- the same time.
+  if not shelved and item.status == 'pending' then
+    return cls.all({
+      function(done)
+        cls.describe(ws, { change }, {}, done)
+      end,
+      function(done)
+        cls.shelved_files(ws, { change }, done)
+      end,
+    }, function(r)
+      local d = r[1][1][change]
+      cb(d, d and (r[2][1][change] or {}))
+    end)
+  end
   cls.describe(ws, { change }, {}, function(by)
     local d = by[change]
     if not d then

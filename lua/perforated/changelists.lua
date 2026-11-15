@@ -69,6 +69,74 @@ function M.shelved_files(ws, changes, cb)
   end)
 end
 
+--- A pending changelist and its shelf in one call (`describe -S -s CL`: the header — status,
+--- client, description — comes with it, shelved files or not).
+---@param ws perforated.Workspace
+---@param change string
+---@param cb fun(rec: table?, shelved: table[])  rec nil: no such changelist (or p4 answered nothing)
+function M.shelf(ws, change, cb)
+  ws:run({ 'describe', '-S', '-s', change }, {}, function(res)
+    local rec = res.records[1]
+    if not (rec and rec.change) then
+      return cb(nil, {})
+    end
+    cb(
+      rec,
+      require('perforated.core.parse').indexed(
+        rec,
+        { 'depotFile', 'action', 'rev', 'type', 'fileSize' }
+      )
+    )
+  end)
+end
+
+--- fstat of this client's files opened in one changelist (`fstat -Ro -e CL //client/...`).
+---@param ws perforated.Workspace
+---@param change string  a number or 'default'
+---@param cb fun(recs: table[]?, res: perforated.RunResult)  nil when p4 couldn't answer
+function M.fstat_change(ws, change, cb)
+  local client = ws:client()
+  if not client then
+    return vim.schedule(function()
+      cb(nil, { ok = false, errors = { 'unknown client' }, records = {}, warnings = {} })
+    end)
+  end
+  local args = {
+    'fstat',
+    '-Ro',
+    '-e',
+    change,
+    '-T',
+    require('perforated.p4').FSTAT_FIELDS,
+    ('//%s/...'):format(client),
+  }
+  ws:run(args, {}, function(res)
+    -- "file(s) not opened in that changelist" is a warning: an empty changelist, still ok.
+    cb(res.ok and vim.tbl_filter(function(r)
+      return r.depotFile ~= nil and (r.change or 'default') == change
+    end, res.records) or nil, res)
+  end)
+end
+
+--- Run `fns` at once; `cb` gets each one's results (packed, in order) once all have answered.
+---@param fns fun(done: fun(...))[]
+---@param cb fun(results: table[])
+function M.all(fns, cb)
+  local out, left = {}, #fns
+  if left == 0 then
+    return cb(out)
+  end
+  for i, fn in ipairs(fns) do
+    fn(function(...)
+      out[i] = vim.F.pack_len(...)
+      left = left - 1
+      if left == 0 then
+        cb(out)
+      end
+    end)
+  end
+end
+
 --- Describe changelists (files without diffs): change → { rec, files = { … } }.
 ---@param ws perforated.Workspace
 ---@param changes string[]

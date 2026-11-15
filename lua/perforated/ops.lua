@@ -200,28 +200,37 @@ function M.shelve(ws, change, paths, cb)
     cb(false)
   end
 
-  cls.shelved_files(ws, { change }, function(sh)
-    local existing = sh[change] or {}
+  -- At once: the shelf, and (a whole changelist) the files opened in it, for "replace all".
+  local asks = {
+    function(done)
+      cls.shelved_files(ws, { change }, done)
+    end,
+  }
+  if not paths then
+    asks[2] = function(done)
+      ws:run({ 'opened', '-c', change }, {}, done)
+    end
+  end
+  cls.all(asks, function(r)
+    local existing = r[1][1][change] or {}
     if #existing == 0 then
       return run(false)
     end
     if paths then
       return ask(existing, nil) -- `-r` acts on the whole shelf: not offered for some files
     end
-    ws:run({ 'opened', '-c', change }, {}, function(res)
-      local open = {}
-      for _, r in ipairs(res.records) do
-        open[r.depotFile or ''] = true
+    local open = {}
+    for _, rec in ipairs(r[2][1].records) do
+      open[rec.depotFile or ''] = true
+    end
+    local extra = {}
+    for _, f in ipairs(existing) do
+      if f.depotFile and not open[f.depotFile] then
+        extra[#extra + 1] = f.depotFile
       end
-      local extra = {}
-      for _, f in ipairs(existing) do
-        if f.depotFile and not open[f.depotFile] then
-          extra[#extra + 1] = f.depotFile
-        end
-      end
-      table.sort(extra)
-      ask(existing, extra)
-    end)
+    end
+    table.sort(extra)
+    ask(existing, extra)
   end)
 end
 
@@ -393,155 +402,157 @@ function M.delete_change(ws, change, cb)
     task.done()
     outer(ok)
   end
-  cls.describe(ws, { change }, {}, function(by)
-    local d = by[change]
-    if not d or d.rec.status ~= 'pending' then
+  -- At once: the changelist and its shelf (`describe -S -s`), and its opened files here.
+  cls.all({
+    function(done)
+      cls.shelf(ws, change, done)
+    end,
+    function(done)
+      cls.fstat_change(ws, change, done)
+    end,
+  }, function(r)
+    local rec, shelved, recs = r[1][1], r[1][2], r[2][1]
+    if not rec or rec.status ~= 'pending' then
       notify(('CL %s is not a pending changelist'):format(change), vim.log.levels.ERROR)
       return cb(false)
     end
-    local force = d.rec.client ~= ws:client()
+    local force = rec.client ~= ws:client()
     if force and not require('perforated.config').get().change.allow_force then
       notify(
         ('CL %s belongs to client %s: deleting it needs change.allow_force (p4 change -d -f)'):format(
           change,
-          d.rec.client or '?'
+          rec.client or '?'
         ),
         vim.log.levels.WARN
       )
       return cb(false)
     end
-    if force and #d.files > 0 then
-      -- Their opened files belong to the other client: they can't be moved or reverted from
-      -- here, and p4 refuses to delete a changelist that still has them.
-      notify(
-        ('CL %s has %d file(s) opened in client %s: revert or move them there first'):format(
-          change,
-          #d.files,
-          d.rec.client or '?'
-        ),
-        vim.log.levels.WARN
-      )
-      return cb(false)
-    end
-    -- The changelist's opened files, as workspace paths (none: no need to ask the server).
-    local function opened(k)
-      if #d.files == 0 then
-        return k({})
+    -- Another client's changelist: only `describe` sees the files opened there.
+    local function others(k)
+      if not force then
+        return k(0)
       end
-      ws:run(
-        { 'fstat', '-Ro', '-e', change, '-T', p4.FSTAT_FIELDS, ('//%s/...'):format(ws:client()) },
-        {},
-        function(res)
-          local paths = {}
-          for _, r in ipairs(res.records) do
-            if r.change == change and r.clientFile then
-              paths[#paths + 1] = r.clientFile
-            end
-          end
-          k(paths)
-        end
-      )
+      cls.describe(ws, { change }, {}, function(by)
+        k(#((by[change] or {}).files or {}))
+      end)
     end
-    opened(function(paths)
-      cls.shelved_files(ws, { change }, function(sh)
-        local nshelved = #(sh[change] or {})
-        local what = {}
-        if #paths > 0 then
-          what[#what + 1] = ('%d opened file(s)'):format(#paths)
-        end
-        if nshelved > 0 then
-          what[#what + 1] = ('%d shelved file(s), which will be deleted'):format(nshelved)
-        end
-        local title = ('Delete CL %s (%s)?'):format(
-          change,
-          vim.trim((d.rec.desc or ''):match('[^\n]*') or '')
+    others(function(nothers)
+      if nothers > 0 then
+        -- Their opened files belong to the other client: they can't be moved or reverted from
+        -- here, and p4 refuses to delete a changelist that still has them.
+        notify(
+          ('CL %s has %d file(s) opened in client %s: revert or move them there first'):format(
+            change,
+            nothers,
+            rec.client or '?'
+          ),
+          vim.log.levels.WARN
         )
-        local msg = #what > 0 and (title .. '\nIt has ' .. table.concat(what, ' and ') .. '.')
-          or title
-        local mode
-        task.pause()
-        if #paths > 0 then
-          local choice = require('perforated.ui.prompt').confirm(
-            msg .. '\nIts opened files:',
-            '&Move them to the default changelist\n&Revert them (edits are lost)\n&Cancel',
-            3
-          )
-          mode = ({ 'move', 'revert' })[choice]
-        else
-          mode = confirm(msg, '&Delete\n&Cancel') and 'delete' or nil
+        return cb(false)
+      end
+      local paths = {}
+      for _, f in ipairs(recs or {}) do
+        if f.clientFile then
+          paths[#paths + 1] = f.clientFile
         end
-        if not mode then
-          return cb(false)
-        end
-        task.resume() -- p4 runs several commands (shelf, files, the changelist itself)
-        local function delete()
-          local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
-          ws:run(args, {}, function(res)
-            -- "Change N has … open file(s) … and can't be deleted." is not an error message.
-            local refusal = vim.iter(res.warnings):find(function(t)
-              return t:find("can't be deleted", 1, true) ~= nil
-            end)
-            local ok = #res.errors == 0 and not refusal
-            if ok then
-              notify(('deleted CL %s'):format(change))
-              if ws.sticky_cl == change then
-                ws.sticky_cl, ws.sticky_desc = nil, nil
-              end
-            else
-              notify(
-                ('could not delete CL %s: %s'):format(change, vim.trim(res.errors[1] or refusal)),
-                vim.log.levels.ERROR
-              )
+      end
+      local nshelved = #shelved
+      local what = {}
+      if #paths > 0 then
+        what[#what + 1] = ('%d opened file(s)'):format(#paths)
+      end
+      if nshelved > 0 then
+        what[#what + 1] = ('%d shelved file(s), which will be deleted'):format(nshelved)
+      end
+      local title = ('Delete CL %s (%s)?'):format(
+        change,
+        vim.trim((rec.desc or ''):match('[^\n]*') or '')
+      )
+      local msg = #what > 0 and (title .. '\nIt has ' .. table.concat(what, ' and ') .. '.')
+        or title
+      local mode
+      task.pause()
+      if #paths > 0 then
+        local choice = require('perforated.ui.prompt').confirm(
+          msg .. '\nIts opened files:',
+          '&Move them to the default changelist\n&Revert them (edits are lost)\n&Cancel',
+          3
+        )
+        mode = ({ 'move', 'revert' })[choice]
+      else
+        mode = confirm(msg, '&Delete\n&Cancel') and 'delete' or nil
+      end
+      if not mode then
+        return cb(false)
+      end
+      task.resume() -- p4 runs several commands (shelf, files, the changelist itself)
+      local function delete()
+        local args = force and { 'change', '-d', '-f', change } or { 'change', '-d', change }
+        ws:run(args, {}, function(res)
+          -- "Change N has … open file(s) … and can't be deleted." is not an error message.
+          local refusal = vim.iter(res.warnings):find(function(t)
+            return t:find("can't be deleted", 1, true) ~= nil
+          end)
+          local ok = #res.errors == 0 and not refusal
+          if ok then
+            notify(('deleted CL %s'):format(change))
+            if ws.sticky_cl == change then
+              ws.sticky_cl, ws.sticky_desc = nil, nil
             end
-            -- Files moved to the default changelist are announced here (reverted ones were).
-            local moved = mode == 'move' and #paths > 0 and paths or nil
-            co.changed(ws, { files = moved, changes = { change } })
-            cb(ok)
+          else
+            notify(
+              ('could not delete CL %s: %s'):format(change, vim.trim(res.errors[1] or refusal)),
+              vim.log.levels.ERROR
+            )
+          end
+          -- Files moved to the default changelist are announced here (reverted ones were).
+          local moved = mode == 'move' and #paths > 0 and paths or nil
+          co.changed(ws, { files = moved, changes = { change } })
+          cb(ok)
+        end)
+      end
+      local function empty_files()
+        if #paths == 0 then
+          return delete()
+        end
+        if mode == 'revert' then
+          return co.revert(ws, paths, false, function()
+            delete()
           end)
         end
-        local function empty_files()
-          if #paths == 0 then
-            return delete()
-          end
-          if mode == 'revert' then
-            return co.revert(ws, paths, false, function()
-              delete()
-            end)
-          end
-          cls.reopen(ws, paths, 'default', function(res)
-            if #res.errors > 0 then
-              notify('could not move the files: ' .. res.errors[1], vim.log.levels.ERROR)
-              co.changed(ws, { files = paths, changes = { change } })
-              return cb(false)
-            end
-            co.refresh_bufs(ws, co.bufs_for(ws, paths))
-            if res.stopped then
-              co.changed(ws, { files = paths, changes = { change } })
-              return cb(false)
-            end
-            delete()
-          end, { quiet = true })
-        end
-        if nshelved == 0 then
-          return empty_files()
-        end
-        local args = force and { 'shelve', '-d', '-f', '-c', change }
-          or { 'shelve', '-d', '-c', change }
-        -- No Ctrl+c: the busy pop-up outlives this step (`:P4 cancel` stops it).
-        local opts = { effect = 'deleted from the shelf' }
-        local job = ('delete shelved CL %s'):format(change)
-        require('perforated.jobs').run(ws, job, args, opts, function(res)
-          if res.stopped then
-            co.changed(ws, { changes = { change } })
-            return cb(false)
-          end
+        cls.reopen(ws, paths, 'default', function(res)
           if #res.errors > 0 then
-            notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
-            co.changed(ws, { changes = { change } })
+            notify('could not move the files: ' .. res.errors[1], vim.log.levels.ERROR)
+            co.changed(ws, { files = paths, changes = { change } })
             return cb(false)
           end
-          empty_files()
-        end)
+          co.refresh_bufs(ws, co.bufs_for(ws, paths))
+          if res.stopped then
+            co.changed(ws, { files = paths, changes = { change } })
+            return cb(false)
+          end
+          delete()
+        end, { quiet = true })
+      end
+      if nshelved == 0 then
+        return empty_files()
+      end
+      local args = force and { 'shelve', '-d', '-f', '-c', change }
+        or { 'shelve', '-d', '-c', change }
+      -- No Ctrl+c: the busy pop-up outlives this step (`:P4 cancel` stops it).
+      local opts = { effect = 'deleted from the shelf' }
+      local job = ('delete shelved CL %s'):format(change)
+      require('perforated.jobs').run(ws, job, args, opts, function(res)
+        if res.stopped then
+          co.changed(ws, { changes = { change } })
+          return cb(false)
+        end
+        if #res.errors > 0 then
+          notify('could not delete the shelf: ' .. res.errors[1], vim.log.levels.ERROR)
+          co.changed(ws, { changes = { change } })
+          return cb(false)
+        end
+        empty_files()
       end)
     end)
   end)
@@ -724,28 +735,28 @@ function M.submit(ws, change, cb)
     end
     M.run_submit(ws, change, nil, cb, files, task)
   end
-  -- Fresh state for the warnings: `fstat -Ro` of opened files (stale / unresolved).
-  p4.fstat_opened(ws, {}, function(recs, res)
-    if not recs then
+  -- Fresh state for the warnings (stale / unresolved): `fstat -Ro` of the changelist's files,
+  -- and at the same time its description and shelf (one `describe -S -s`).
+  local asks = {
+    function(done)
+      cls.fstat_change(ws, change, done)
+    end,
+  }
+  if change ~= 'default' then
+    asks[2] = function(done)
+      cls.shelf(ws, change, done)
+    end
+  end
+  cls.all(asks, function(r)
+    local files, res = r[1][1], r[1][2]
+    if not files then
       -- Offline, logged out…: not the same as an empty changelist.
       task.done()
       notify("can't submit: " .. (res.errors[1] or vim.trim(res.stderr or '')), vim.log.levels.WARN)
       return cb(false)
     end
-    local files = {}
-    for _, r in ipairs(recs) do
-      if (r.change or 'default') == change then
-        files[#files + 1] = r
-      end
-    end
-    if change == 'default' then
-      return show(nil, files, 0)
-    end
-    cls.describe(ws, { change }, {}, function(by)
-      cls.shelved_files(ws, { change }, function(sh)
-        show(by[change] and by[change].rec.desc, files, #(sh[change] or {}))
-      end)
-    end)
+    local rec, shelved = unpack(r[2] or {})
+    show(rec and rec.desc, files, #(shelved or {}))
   end)
 end
 
