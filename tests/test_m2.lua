@@ -2885,6 +2885,57 @@ local function open_view_quiet()
   track_calls()
 end
 
+--- Record the p4 commands run from now on, each as "subcommand args…" (global flags left out).
+--- Calling it again starts a new record.
+local function track_calls()
+  child.lua([=[_G.CALLS = {}
+    if _G.CALLS_HOOKED then return end
+    _G.CALLS_HOOKED = true
+    local VALUE = { ['-c'] = true, ['-u'] = true, ['-p'] = true, ['-x'] = true, ['-H'] = true,
+      ['-d'] = true, ['-P'] = true, ['-C'] = true }
+    local log = require('perforated.core.log')
+    local add = log.add
+    log.add = function(e)
+      local i = 2
+      while e.argv[i] and e.argv[i]:sub(1, 1) == '-' do
+        i = i + (VALUE[e.argv[i]] and 2 or 1)
+      end
+      table.insert(_G.CALLS, table.concat(vim.list_slice(e.argv, i), ' '))
+      add(e)
+    end]=])
+end
+
+--- How many recorded commands start with each prefix.
+local function count_calls(prefixes)
+  local out = {}
+  for _, c in ipairs(child.lua_get('_G.CALLS')) do
+    for _, p in ipairs(prefixes) do
+      if c:sub(1, #p) == p then
+        out[p] = (out[p] or 0) + 1
+      end
+    end
+  end
+  return out
+end
+
+local SECTIONS = {
+  'changes -s pending',
+  'fstat -Ro',
+  'diff -sa',
+  'describe -S',
+  'changes -m1 -s submitted -l #have',
+  'changes -s submitted -l -m',
+}
+
+--- Open the view and let every startup query finish before counting.
+local function open_view_quiet()
+  open_view()
+  H.wait_idle(child)
+  vim.uv.sleep(500)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  track_calls()
+end
+
 --- Wrap p4 so that, once the flag file exists, each `fstat -Ro` answers `secs` after it asked
 --- the server (its answer is as of the start).
 local function slow_opened(secs, runner)
@@ -2915,12 +2966,13 @@ T['client view']['a sync with the view open asks for the opened files once'] = f
   H.eq(count_calls({ 'fstat -Ro' }), { ['fstat -Ro'] = 1 })
 end
 
-T['client view']['a change while the opened files are being asked for asks again'] = function()
+T['client view']['a change while the opened files are being asked for: the older answer is not kept'] = function()
   local flag = slow_opened(1)
   open_view_quiet()
   H.write(flag, '')
-  -- Started before the edit, so its answer doesn't have d.txt: the view mustn't share it.
-  -- (With the view's timeout, so only the change keeps it from sharing.)
+  -- Started before the edit, so its answer doesn't have d.txt: neither the view nor the
+  -- opened files may take it. (With the view's timeout, so only the change keeps the view
+  -- from sharing it.)
   child.lua([[require('perforated.poll').refresh(require('perforated').workspace(),
     { timeout = require('perforated.config').get().runner.timeout })]])
   child.lua(
@@ -2928,13 +2980,23 @@ T['client view']['a change while the opened files are being asked for asks again
       root .. '/d.txt'
     )
   )
-  wait(
-    ([[(function() local d = (%s).data
+  local in_view = ([[(function() local d = (%s).data
     for _, r in ipairs(d.opened or {}) do if r.depotFile == '//depot/d.txt' then return true end end
-  end)()]]):format(view_expr(root)),
-    8000
+    return false
+  end)()]]):format(view_expr(root))
+  wait(in_view, 8000)
+  -- The older query ends after the change's answer: d.txt stays.
+  wait(
+    [[#vim.tbl_filter(function(e) return vim.tbl_contains(e.argv, '-Ro') end,
+    require('perforated.core.log').entries()) > 0]],
+    5000
   )
-  H.eq(count_calls({ 'fstat -Ro' }), { ['fstat -Ro'] = 2 })
+  H.wait_idle(child)
+  vim.uv.sleep(500)
+  H.eq(child.lua_get(in_view), true)
+  H.eq(child.lua_get([[require('perforated').workspace().opened['//depot/d.txt'] ~= nil]]), true)
+  -- (and no news from the older answer, which would re-read every opened file again)
+  H.eq(count_calls({ 'fstat -Ro' }), { ['fstat -Ro'] = 1 })
 end
 
 T['client view']['F5 during a background query of the opened files keeps its own timeout'] = function()
@@ -2955,7 +3017,56 @@ local function row_of(text)
   end
 end
 
-T['client view']['after an edit the view asks for pending CLs, opened files and that file only'] = function()
+T['client view']['with the view closed, an edit and a revert ask for that file once each'] = function()
+  child.cmd('edit ' .. root .. '/d.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  -- The opened files known (the startup check's refresh; off in these tests).
+  child.lua([[require('perforated.poll').refresh(require('perforated').workspace())]])
+  wait([[require('perforated').workspace().opened ~= nil]])
+  H.wait_idle(child)
+  vim.uv.sleep(500)
+  local function status_after(fn, status)
+    track_calls()
+    child.lua(
+      ("require('perforated.checkout').%s(require('perforated').workspace(), { %q })"):format(
+        fn,
+        root .. '/d.txt'
+      )
+    )
+    wait(([[(require('perforated.buffer').get() or {}).status == %q]]):format(status))
+    vim.uv.sleep(800) -- room for anything else that would run
+    -- One `fstat` of d.txt (the poll's follow-up), for its buffer and the opened files alike.
+    H.eq(count_calls({ 'fstat' }), { fstat = 1 })
+    H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
+  end
+  status_after('edit', 'opened')
+  H.eq(child.lua_get([[require('perforated').workspace().opened['//depot/d.txt'].action]]), 'edit')
+  status_after('revert', 'clean')
+  H.eq(child.lua_get([[require('perforated').workspace().opened['//depot/d.txt'] == nil]]), true)
+end
+
+T['client view']['after a move the view shows the new name, asking for the two files only'] = function()
+  child.cmd('edit ' .. root .. '/b.txt')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  open_view_quiet()
+  child.lua(
+    ([[_G.r = nil; require('perforated.ops').move(vim.fn.bufnr(%q), %q, function(ok) _G.r = ok end)]]):format(
+      root .. '/b.txt',
+      root .. '/b2.txt'
+    )
+  )
+  wait('_G.r == true')
+  wait(([[(function() local d = (%s).data
+    for _, r in ipairs(d.opened or {}) do if r.depotFile == '//depot/b2.txt' then return true end end
+  end)()]]):format(view_expr(root)))
+  vim.uv.sleep(800)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.neq(row_of('b2.txt'):find('move/add', 1, true), nil, view_text())
+  H.neq(row_of('b.txt  #'):find('move/delete', 1, true), nil, view_text())
+  H.eq(count_calls({ 'fstat -Ro' }), {})
+end
+
+T['client view']['after an edit the view asks for pending CLs and that file only'] = function()
   open_view_quiet()
   child.lua(
     ("require('perforated.checkout').edit(require('perforated').workspace(), { %q })"):format(
@@ -2966,7 +3077,9 @@ T['client view']['after an edit the view asks for pending CLs, opened files and 
     for _, r in ipairs(d.opened or {}) do if r.depotFile == '//depot/d.txt' then return true end end
   end)()]]):format(view_expr(root)))
   vim.uv.sleep(800) -- room for anything else that would run
-  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1 })
+  -- The opened files: one `fstat` of d.txt (the poll's follow-up), not of every opened file.
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['diff -sa'] = 1 })
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
   H.eq(row_of('d.txt'):find('●', 1, true), nil)
   H.neq(row_of('a.txt'):find('●', 1, true), nil) -- markers of other files stay
 end
@@ -3004,10 +3117,9 @@ T['client view']['a changelist change re-reads pending CLs and shelves, not file
     )
   )
   vim.uv.sleep(800)
-  H.eq(
-    count_calls(SECTIONS),
-    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['describe -S'] = 1 }
-  )
+  -- (no opened files either: a changelist change leaves them as they were)
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['describe -S'] = 1 })
+  H.eq(count_calls({ 'fstat' }), {})
   H.neq(row_of('a.txt'):find('●', 1, true), nil)
 end
 
@@ -3030,8 +3142,10 @@ T['client view']['after an unshelve the view asks for those files only, not the 
     )
   )
   vim.uv.sleep(800)
-  -- No `changes -m1 #have` (the whole have list), no submitted list; `diff -sa` for a.txt.
-  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['diff -sa'] = 1 })
+  -- No `changes -m1 #have` (the whole have list), no submitted list; `diff -sa` for a.txt,
+  -- and one `fstat` of it for the view and its buffer.
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['diff -sa'] = 1 })
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
   -- (given a file list, `-x -`: not every opened file)
   H.eq(
     child.lua_get([[(function()
@@ -3085,10 +3199,8 @@ T['client view']['shelving one changelist re-reads its shelf only; the others st
   vim.uv.sleep(800)
   wait(('not (%s).loading'):format(view_expr(root)))
   -- (one `describe -S` is the shelve's own look at the shelf it may replace)
-  H.eq(
-    count_calls(SECTIONS),
-    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1, ['describe -S'] = 2 }
-  )
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['describe -S'] = 2 })
+  H.eq(count_calls({ 'fstat' }), {}) -- shelving leaves the opened files as they were
   H.eq(last_describe_cls(), { cl })
 end
 
@@ -3613,7 +3725,8 @@ T['client view']['after a revert the view re-checks no changed markers'] = funct
   )
   vim.uv.sleep(800)
   wait(('not (%s).loading'):format(view_expr(root)))
-  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1, ['fstat -Ro'] = 1 })
+  H.eq(count_calls(SECTIONS), { ['changes -s pending'] = 1 })
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 }) -- of c.txt
   H.eq({ marked('a.txt'), marked('b.txt'), marked('c.txt') }, { true, true, nil })
 end
 

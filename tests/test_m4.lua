@@ -301,6 +301,9 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
   H.eq(changes_pending():find('doomed', 1, true), nil)
   H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = 'default' })
   H.eq(table.concat(vim.fn.readfile(root .. '/main/b.txt'), '\n'), 'b2') -- edits kept
+  -- The plugin's opened files follow (the change names the moved files).
+  wait([[(require('perforated').workspace().opened or {})['//depot/main/b.txt'] ~= nil
+    and require('perforated').workspace().opened['//depot/main/b.txt'].change == 'default']])
 end
 
 T['m4']['delete changelist: revert choice, empty CL, default refused'] = function()
@@ -676,6 +679,35 @@ T['m4']['sync: every unresolved file in quickfix, then the resolve prompt'] = fu
   H.neq(child.lua_get([[vim.fn.getqflist({ title = 1 }).title]]):find('all resolved$'), nil)
   -- Empty now: its window closes (it would keep the focus and the space).
   wait([[vim.fn.getqflist({ winid = 0 }).winid == 0]])
+end
+
+T['m4']['the resolve list re-checks only the files a change names'] = function()
+  setup()
+  -- b.txt unresolved (synced outside the plugin), in a list of files to resolve
+  p4({ 'edit', root .. '/main/b.txt' })
+  bob_submits('main/b.txt', 'bob b\n')
+  p4({ 'sync', root .. '/main/b.txt' })
+  child.lua(([[local qf = require('perforated.ui.qf')
+    qf.set({ title = 'P4 · must resolve', kind = 'unresolved', items = {
+      qf.item(%q, 'must resolve', { kind = 'unresolved' }) } })]]):format(root .. '/main/b.txt'))
+  -- Resolved outside the plugin; then a change naming another file: b.txt isn't asked about.
+  p4({ 'resolve', '-ay', root .. '/main/b.txt' })
+  local function changed(rel)
+    child.lua(
+      ([[local ws = require('perforated').workspace(vim.fn.bufnr(%q))
+        require('perforated.checkout').changed(ws, { files = { %q } })]]):format(
+        root .. '/main/a.txt',
+        root .. '/' .. rel
+      )
+    )
+  end
+  changed('main/a.txt')
+  vim.uv.sleep(1000)
+  H.wait_idle(child)
+  H.eq(child.lua_get('#vim.fn.getqflist()'), 1)
+  -- A change naming it: the list follows.
+  changed('main/b.txt')
+  wait([[#vim.fn.getqflist() == 0]])
 end
 
 T['m4']['reconcile scans only the configured paths; p changes them'] = function()

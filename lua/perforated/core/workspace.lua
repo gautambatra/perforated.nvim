@@ -34,6 +34,7 @@ M.CONNECTION_KEY = '<connection>'
 ---@field buffers table<integer, true>
 ---@field fstat table<string, table>      path → fstat record
 ---@field opened_gen integer?             bumped when the opened files may have changed (`p4.opened_changed`)
+---@field opened_at integer?              when the refresh whose answer `opened` holds was asked (hrtime)
 ---@field clmemo table<string, table>     change → { user, client, time, desc }
 ---@field sticky_cl string?
 ---@field idle boolean

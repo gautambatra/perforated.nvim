@@ -22,13 +22,6 @@ local timer ---@type uv.uv_timer_t?
 local started = {} ---@type table<string, boolean>
 local last_focus_probe = 0
 local last_enter = {} ---@type table<integer, integer>
--- Following the plugin's own changes, per workspace key: the settle timer, whether a refresh
--- is running or owed, when the newest event came, and when the last refresh started.
-local follow = {} ---@type table<string, { timer: uv.uv_timer_t, running: boolean, again: boolean, event: integer, started: integer }>
-
---- How long a burst of `Changed` events may last before the opened files are asked again.
-M.FOLLOW_MS = 300
-
 local function cfg()
   return require('perforated.config').get().poll
 end
@@ -127,23 +120,48 @@ local function toast_for(ws, recs, initial)
   end)
 end
 
---- Full refresh of opened-file state (one `fstat -Ro`), updating counts, buffers and toasts.
+--- Refresh of opened-file state, updating counts, buffers and toasts: one `fstat -Ro` of
+--- every opened file, or with `opts.files` (and opened files known) one `fstat` of those.
 ---@param ws perforated.Workspace
----@param opts { initial: boolean?, notify: boolean?, timeout: integer? }?  timeout: ms (default: background)
+---@param opts { initial: boolean?, notify: boolean?, timeout: integer?, files: string[]? }?  timeout: ms (default: background)
 ---@param cb fun(recs: table[]?, res: perforated.RunResult)?  the opened records (nil: failed)
 function M.refresh(ws, opts, cb)
   opts = opts or {}
-  local f = follow[ws.key]
-  -- A plugin change since the last refresh explains what this one finds: its listeners
-  -- already heard of it, so no `poll` news (one more view refresh) for it.
-  local explained = f and f.event > f.started
-  if f then
-    f.started = vim.uv.hrtime() -- answers every event before this moment
-  end
-  p4.fstat_opened(ws, { priority = 3, timeout = opts.timeout }, function(recs, res)
-    if not recs then
-      return cb and cb(nil, res)
+  -- Following the plugin's changes (loaded with the first one): a change since the last
+  -- refresh explains what this one finds, its listeners already heard of it, so no `poll`
+  -- news (one more view refresh) for it.
+  local follow = package.loaded['perforated.poll_follow']
+  local explained = follow and follow.begin(ws)
+  local function finish(recs, res)
+    if follow then
+      follow.finish(ws, recs, res)
     end
+    if cb then
+      cb(recs, res)
+    end
+  end
+  local function fetch(got)
+    if opts.files and ws.opened then
+      return require('perforated.poll_follow').opened_with(ws, opts.files, opts, got)
+    end
+    p4.fstat_opened(ws, { priority = 3, timeout = opts.timeout }, got)
+  end
+  local asked = vim.uv.hrtime()
+  fetch(function(recs, res, named)
+    if not recs then
+      return finish(nil, res)
+    end
+    if (ws.opened_at or 0) > asked then
+      -- A refresh asked later has answered already (the quick one after a change that came
+      -- while this one ran): this older answer mustn't undo it.
+      dbg.debug('poll', '%s refresh: answer older than the one applied, dropped', ws.key)
+      local now = vim.tbl_values(ws.opened)
+      table.sort(now, function(a, b)
+        return a.depotFile < b.depotFile
+      end)
+      return finish(now, res)
+    end
+    ws.opened_at = asked
     local opened, stale, unres = {}, 0, 0
     ws.stale_seen = ws.stale_seen or {}
     local fresh = {}
@@ -186,10 +204,27 @@ function M.refresh(ws, opts, cb)
       #fresh
     )
     -- Push fresh records into loaded buffers (cheap: no base refetch unless the have rev moved).
+    local shown, by_key = {}, {}
+    for _, r in ipairs(recs) do
+      if r.clientFile then
+        by_key[p4.key(ws, r.clientFile)] = r
+      end
+    end
     for buf, st in pairs(require('perforated.buffer').all()) do
-      if st.ws == ws and st.rec and opened[st.rec.depotFile] then
-        local r = opened[st.rec.depotFile]
-        if r.haveRev ~= st.rec.haveRev or r.action ~= st.rec.action then
+      local n = named and st.ws == ws and named[st.key]
+      if n then
+        shown[st.key] = true
+        local r = n.rec
+        if not (r and st.rec) or r.haveRev ~= st.rec.haveRev or r.action ~= st.rec.action then
+          require('perforated.buffer').apply(buf, r, n.missing)
+        else
+          st.rec = r
+          require('perforated.status').update(buf)
+        end
+      elseif st.ws == ws and (st.rec and opened[st.rec.depotFile] or by_key[st.key]) then
+        -- (by its path: a file just added has no record yet)
+        local r = st.rec and opened[st.rec.depotFile] or by_key[st.key]
+        if not st.rec or r.haveRev ~= st.rec.haveRev or r.action ~= st.rec.action then
           require('perforated.buffer').apply(buf, r)
         else
           st.rec = r
@@ -197,6 +232,12 @@ function M.refresh(ws, opts, cb)
         end
       elseif st.ws == ws and st.rec and st.rec.action then
         require('perforated.buffer').refresh(buf) -- no longer opened (reverted, submitted)
+      end
+    end
+    -- A named file that isn't opened: its record is kept while a buffer shows it.
+    for k, n in pairs(named or {}) do
+      if n.rec and not n.rec.action then
+        ws.fstat[k] = shown[k] and n.rec or nil
       end
     end
     require('perforated.status').update_ws(ws)
@@ -222,10 +263,22 @@ function M.refresh(ws, opts, cb)
       require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
     end
     ws.poll_sig = key
-    if cb then
-      cb(recs, res)
-    end
+    finish(recs, res)
   end)
+end
+
+--- The opened files once the plugin's changes so far are answered (see `poll_follow`).
+---@param ws perforated.Workspace
+---@param cb fun(recs: table[]?, res: perforated.RunResult?)
+function M.settled(ws, cb)
+  return require('perforated.poll_follow').settled(ws, cb)
+end
+
+--- Whether this workspace's changes are followed (`settled` answers after them).
+---@param ws perforated.Workspace
+---@return boolean
+function M.following(ws)
+  return started[ws.key] == true
 end
 
 --- Cheap probe; escalates to a full refresh (plus loaded clean buffers) only on news.
@@ -348,56 +401,6 @@ local function ensure_timer()
   end)
 end
 
---- After the plugin changed something (`User PerforatedChanged`), one `fstat -Ro` brings the
---- opened-file counts, buffers and statuslines up to date, once the burst has settled. Skipped
---- when a refresh already started after the newest event (a sync runs its own).
----@param ws perforated.Workspace
-local function follow_up(ws)
-  local f = follow[ws.key]
-  if f.running then
-    f.again = true
-    return
-  end
-  if f.started >= f.event then
-    return
-  end
-  f.running = true
-  M.refresh(ws, {}, function()
-    f.running = false
-    if f.again then
-      f.again = false
-      follow_up(ws)
-    end
-  end)
-end
-
----@param data { ws: string?, source: string? }?
-local function on_changed(data)
-  data = data or {}
-  -- `poll` and `refresh` events come from a full refresh that just ran.
-  if not data.ws or data.source == 'poll' or data.source == 'refresh' or not started[data.ws] then
-    return
-  end
-  local ws = require('perforated.core.workspace').get(data.ws)
-  if not ws then
-    return
-  end
-  local f = follow[ws.key]
-  if not f then
-    f = { timer = vim.uv.new_timer(), running = false, again = false, event = 0, started = 0 }
-    follow[ws.key] = f
-  end
-  f.event = vim.uv.hrtime()
-  f.timer:stop()
-  f.timer:start(
-    M.FOLLOW_MS,
-    0,
-    vim.schedule_wrap(function()
-      follow_up(ws)
-    end)
-  )
-end
-
 --- Whether Neovim has focus: polling runs only while it does. Tracked here from the first
 --- workspace on (the toast module tracks it only once a toast has been shown).
 M.focused = true
@@ -445,7 +448,18 @@ local function ensure_autocmds()
     group = group,
     pattern = 'PerforatedChanged',
     callback = function(ev)
-      on_changed(ev.data)
+      local d = ev.data or {}
+      -- `poll` and `refresh` events come from a full refresh that just ran; `no_files`: only
+      -- changelists changed (a shelf, a description), not the opened files.
+      if
+        d.ws
+        and started[d.ws]
+        and not d.no_files
+        and d.source ~= 'poll'
+        and d.source ~= 'refresh'
+      then
+        require('perforated.poll_follow').on_changed(d)
+      end
     end,
   })
   vim.api.nvim_create_autocmd('BufWipeout', {
@@ -482,11 +496,11 @@ function M._reset()
     timer:close()
     timer = nil
   end
-  for _, f in pairs(follow) do
-    f.timer:stop()
-    f.timer:close()
+  local follow = package.loaded['perforated.poll_follow']
+  if follow then
+    follow._reset()
   end
-  started, last_enter, last_focus_probe, follow = {}, {}, 0, {}
+  started, last_enter, last_focus_probe = {}, {}, 0
 end
 
 return M

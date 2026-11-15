@@ -348,7 +348,9 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
       -- Only the unshelved files and the changelists changed: not the have list or the
       -- other opened files (a full refresh re-reads both, slow on a large workspace).
       co.changed(ws, { files = depot })
-      refresh_depot(ws, depot)
+      if not require('perforated.poll').following(ws) then
+        refresh_depot(ws, depot) -- (else the poll's follow-up to the change does)
+      end
       cb(unshelved > 0)
     end)
   end
@@ -491,7 +493,9 @@ function M.delete_change(ws, change, cb)
                 vim.log.levels.ERROR
               )
             end
-            co.changed(ws, { changes = { change } })
+            -- Files moved to the default changelist are announced here (reverted ones were).
+            local moved = mode == 'move' and #paths > 0 and paths or nil
+            co.changed(ws, { files = moved, changes = { change } })
             cb(ok)
           end)
         end
@@ -510,8 +514,9 @@ function M.delete_change(ws, change, cb)
               co.changed(ws, { files = paths, changes = { change } })
               return cb(false)
             end
-            refresh(ws, paths)
+            co.refresh_bufs(ws, co.bufs_for(ws, paths))
             if res.stopped then
+              co.changed(ws, { files = paths, changes = { change } })
               return cb(false)
             end
             delete()

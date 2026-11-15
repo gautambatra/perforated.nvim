@@ -285,9 +285,14 @@ end
 local RESOLVE_KINDS = { unresolved = true, sync_attention = true }
 
 --- Re-check the files of every quickfix list of files to resolve (the whole quickfix history)
---- and drop entries that no longer need resolving (resolved elsewhere, reverted…). One fstat
---- per workspace and list; entries whose state is unknown are kept.
-function M.prune_resolved()
+--- and drop entries that no longer need resolving (resolved elsewhere, reverted…), from the
+--- opened files the poll has after the change (one fstat per workspace and list where it
+--- doesn't follow the workspace); entries whose state is unknown are kept. `owed`: what the
+--- changes since the last check named, per workspace key (`all`: everything, `files`: paths):
+--- a list's files they didn't name aren't checked. Without it, or after an event naming no
+--- workspace, every file is (with an fstat).
+---@param owed { any: boolean?, all: table<string, true>, files: table<string, table<string, true>> }?
+function M.prune_resolved(owed)
   local p4 = require('perforated.p4')
   local last = vim.fn.getqflist({ nr = '$' }).nr
   for nr = 1, last do
@@ -308,11 +313,47 @@ function M.prune_resolved()
           end
         end
       end
-      for ws, paths in pairs(by_ws) do
-        p4.fstat(ws, paths, { priority = 3 }, function(r)
+      for ws, all_paths in pairs(by_ws) do
+        local paths = all_paths
+        if owed and not owed.any and not owed.all[ws.key] then
+          local named = owed.files[ws.key] or {}
+          paths = vim.tbl_filter(function(path)
+            return named[p4.key(ws, path)] ~= nil
+          end, all_paths)
+        end
+        -- Unresolved files are opened files: the poll's answer to the change has them (from
+        -- the follow-up's `fstat`), so no query of our own while it follows the workspace.
+        local function check(cb)
+          if #paths == 0 then
+            return
+          end
+          local poll = require('perforated.poll')
+          if not owed or owed.any or not poll.following(ws) then
+            return p4.fstat(ws, paths, { priority = 3 }, function(r)
+              cb(function(path)
+                return r.files[p4.key(ws, path)]
+              end)
+            end)
+          end
+          poll.settled(ws, function(recs)
+            if not recs then
+              return -- unknown: the entries stay
+            end
+            local by_key = {}
+            for _, rec in ipairs(recs) do
+              if rec.clientFile then
+                by_key[p4.key(ws, rec.clientFile)] = rec
+              end
+            end
+            cb(function(path)
+              return by_key[p4.key(ws, path)] or { depotFile = path } -- not opened
+            end)
+          end)
+        end
+        check(function(rec_of)
           local done = {} -- bufnr → true: no longer needs resolving
           for _, path in ipairs(paths) do
-            local rec = r.files[p4.key(ws, path)]
+            local rec = rec_of(path)
             if rec and not rec.unresolved then
               done[buf_of[path]] = true
             end
@@ -354,6 +395,8 @@ function M.prune_resolved()
 end
 
 local prune_timer ---@type uv.uv_timer_t?
+-- What the changes since the last check named (see `prune_resolved`).
+local prune_owed ---@type { any: boolean?, all: table<string, true>, files: table<string, table<string, true>> }?
 
 local did_setup = false
 
@@ -370,10 +413,35 @@ function M.setup()
   vim.api.nvim_create_autocmd('User', {
     group = group,
     pattern = 'PerforatedChanged',
-    callback = function()
+    callback = function(ev)
+      local d = ev.data or {}
+      if d.no_files then
+        return -- only changelists changed
+      end
+      prune_owed = prune_owed or { all = {}, files = {} }
+      local ws = d.ws and require('perforated.core.workspace').get(d.ws)
+      if not ws then
+        prune_owed.any = true
+      elseif not d.files or d.source then
+        prune_owed.all[ws.key] = true
+      else
+        local set = prune_owed.files[ws.key] or {}
+        prune_owed.files[ws.key] = set
+        for _, f in ipairs(d.files) do
+          set[require('perforated.p4').key(ws, f)] = true
+        end
+      end
       prune_timer = prune_timer or vim.uv.new_timer()
       prune_timer:stop()
-      prune_timer:start(300, 0, vim.schedule_wrap(M.prune_resolved))
+      prune_timer:start(
+        300,
+        0,
+        vim.schedule_wrap(function()
+          local owed = prune_owed
+          prune_owed = nil
+          M.prune_resolved(owed)
+        end)
+      )
     end,
   })
   vim.api.nvim_create_autocmd('FileType', {

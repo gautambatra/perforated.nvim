@@ -158,9 +158,10 @@ After that it refreshes itself:
 - when the background check finds news, such as a file becoming stale or someone resolving one.
 
 After an action it asks again only for what the action can change: checking out or reverting
-a file re-reads your changelists, opened files and that file's changed marker (a revert skips
-the marker: it can't change a file's content), and unshelving does the same for the
-unshelved files. Editing a description re-reads only the changelists;
+a file re-reads your changelists, that file's state and its changed marker (a revert skips
+the marker: it can't change a file's content), not every opened file; unshelving, moving or
+resolving does the same for the files involved. The file's buffer, the statusline counts and
+any list of files to resolve take their state from that same answer. Editing a description re-reads only the changelists;
 shelving, deleting shelved files or deleting a changelist re-reads them and that one
 changelist's shelf. The Sync CL and Recent submitted are asked
 again after a submit or sync. News from the background check re-reads everything but the Sync

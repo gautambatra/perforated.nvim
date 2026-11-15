@@ -152,8 +152,8 @@ function M.edit(ws, paths, cl, cb)
       if ok and vim.api.nvim_buf_is_valid(b) then
         vim.bo[b].readonly = false
       end
-      require('perforated.buffer').refresh(b)
     end
+    co.refresh_bufs(ws, bufs)
     if cb then
       cb(ok, res)
     end
@@ -174,9 +174,7 @@ function M.add(ws, paths, cl, cb, reconcile)
     local ok = #res.records > 0 and #res.errors == 0 and not res.stopped
     report('add', res, #res.records)
     changed(ws, { files = paths })
-    for _, b in ipairs(bufs) do
-      require('perforated.buffer').refresh(b)
-    end
+    co.refresh_bufs(ws, bufs)
     if cb then
       cb(ok, res)
     end
@@ -233,8 +231,8 @@ function M.revert(ws, paths, unchanged, cb)
           vim.cmd('silent! edit!')
         end)
       end
-      require('perforated.buffer').refresh(b)
     end
+    co.refresh_bufs(ws, bufs)
     if cb then
       cb(res.ok)
     end

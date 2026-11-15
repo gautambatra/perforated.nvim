@@ -536,6 +536,7 @@ lua/perforated/
   checkout_ops.lua           the edit/add/revert operations (loaded on first use)
   checkout_prompt.lua        the check-out menu and changelist picker (loaded on first use)
   poll.lua                   stale/unresolved detection (cheap probe, full refresh on news)
+  poll_follow.lua            following the plugin's changes: the follow-up refresh, `settled` (lazy)
   changelists.lua            changelist queries: describe, shelved files, submitted, reopen…
   lists.lua                  quickfix producers: opened files, status, hunks
   uri.lua                    perforated:// buffers (any depot revision)
@@ -834,10 +835,18 @@ why keys, menus and help never disagree.
    `CHANGED_FILES_MAX` (500) files or a `<dir>/...` path. Unshelve sends the depot files it
    unshelved (it touches no have revision, no shelf and no other opened file: a full
    refresh would re-read the have list and every opened file); submit, sync and integrate
-   send nothing (they can change any section).
-   The view takes its opened files from `poll.refresh` (no toast: the view shows stale files
-   itself; with `runner.timeout`, not the background one the poll's own calls use), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
-   poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls.
+   send nothing (they can change any section). A `what` without `files` (a shelf, a
+   description, `changes` only) says no file's opened state changed: the event carries
+   `no_files`, and nothing re-reads the opened files for it. Deleting a changelist names the
+   files it moved to the default changelist.
+   After an event, the view takes its opened files from `poll.settled(ws)`: the poll's
+   follow-up to the event ([`poll.lua`](#polllua)) fstats only the files it named, merges
+   them into `ws.opened` and updates their buffers, counts and statuslines, and the view
+   waits for that answer instead of asking again. A full refresh (the first, `<F5>`, an
+   event naming nothing) runs `poll.refresh` itself (no toast: the view shows stale files
+   itself; with `runner.timeout`, not the background one the poll's own calls use), and the
+   poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls:
+   `changes -s pending`, the follow-up's `fstat` of the file and its `diff -sa`.
    Concurrent `fstat_opened` calls share one (queue key `fstat-opened:<opened_gen>`), but
    not across a change: `p4.opened_changed(ws)` bumps `ws.opened_gen` in
    `checkout.changed` before listeners run, and when the probe sees changes made
@@ -1106,12 +1115,27 @@ Stale/unresolved detection ([§18.6](#186-stale-files)). It tracks focus itself
 (`M.focused`, from `FocusLost`/`FocusGained`), so polling pauses in an unfocused Neovim from
 the start and the toast module isn't loaded on the activation path. `refresh(ws)` also keeps the fstat
 cache honest (drops entries of files no longer opened) and pushes fresh records into loaded
-buffers; a buffer whose file is no longer opened gets its own fstat. It also follows the
-plugin's own changes: one `User PerforatedChanged` listener waits `FOLLOW_MS` (300 ms) for a
-burst to settle, then runs one `refresh(ws)`, so counts and statuslines don't wait for the next
-poll (which never comes with `poll.interval = 0`). It ignores `poll` and `refresh` events, skips
-when a refresh already started after the newest event (a sync runs its own), and while one
-runs, later events only owe one more. A refresh that follows a plugin event emits no `poll`
+buffers (matched by depot file, or by path for a file that had no record); a buffer whose
+file is no longer opened gets its own fstat. With `opts.files` (and `ws.opened` known) it runs
+one `fstat` of those files instead of `fstat -Ro` of every opened file (`opened_with`): the
+answers are merged into `ws.opened` (a file not opened, or not in the depot, drops out), and
+the named files' buffers take their records from it. An answer older than the one applied
+(`ws.opened_at`: when that refresh was asked) is dropped: a full refresh that started before
+a change can end after the quick follow-up to it, and must not undo it. It also follows the plugin's own
+changes: one `User PerforatedChanged` listener collects what a burst of events named and
+waits for it to settle, `FOLLOW_FILES_MS` (30 ms) when every event named its files,
+`FOLLOW_MS` (300 ms) otherwise, then runs one `refresh(ws)`, of those files or of everything,
+with `runner.timeout` (an action asked for it), so buffers, counts and statuslines don't wait
+for the next poll (which never comes with `poll.interval = 0`). Actions therefore don't
+refresh their buffers themselves (`checkout.refresh_bufs` does only for a workspace the poll
+doesn't follow, `poll.following(ws)`). It ignores `poll` and `refresh` events and `no_files`
+ones, skips a full one when a refresh already started after the newest event (a sync runs
+its own), and while one runs, later events only owe one more. `settled(ws, cb)` answers with
+the opened files once no event is owed an answer and no refresh runs (the client view and
+the resolve lists after a change). The following (`opened_with`, `settled`, the follow-up
+and its state) lives in `poll_follow.lua`, loaded with the first change: `poll.refresh` finds
+it in `package.loaded` (`begin`/`finish` count refreshes for `settled`), keeping it out of the
+startup memory (`make bench`). A refresh that follows a plugin event emits no `poll`
 news for what it finds: the event's listeners already heard of it (else the client view would
 refresh twice). `refresh(ws, opts, cb)` passes the opened records to `cb` (nil on failure). The per-buffer `BufEnter` throttle table is cleaned on `BufWipeout` (another soak
 test finding).
@@ -1551,8 +1575,11 @@ aligns columns; perforated lists get buffer-local keys in the qf window (`d` dif
 Entries of kind `unresolved` end with a dimmed `RESOLVE_HINT` ("· R resolves", added by the
 text function, not stored). `prune_resolved()` runs 300 ms after the last `User
 PerforatedChanged`: for every list of kind `unresolved` / `sync_attention` in the quickfix
-history it fstats the entries' files (one call per workspace) and drops those no longer
-unresolved, matching entries by buffer; when the current list is left with no entries its
+history it checks the entries' files the events named (all of them after an event naming
+none, none after `no_files` ones) and drops those no longer unresolved, matching entries by
+buffer. Unresolved files are opened files, so the check reads `poll.settled` (the follow-up's
+answer to the change); only for a workspace the poll doesn't follow, or an event naming no
+workspace, it fstats them (one call per workspace); when the current list is left with no entries its
 window is closed (`cclose`), so an empty window doesn't keep the focus and the space.
 
 #### `ui/toast.lua`

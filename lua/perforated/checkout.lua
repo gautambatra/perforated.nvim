@@ -122,12 +122,14 @@ M.CHANGED_FILES_MAX = 500
 --- changed. Depot paths are named by their local path when it is known (an opened file), else
 --- passed on as they are (a file just unshelved isn't in `ws.opened` yet). `keep_markers`: the
 --- files' content didn't change (a revert), so their changed markers need no new check.
+--- `what` without `files` says no file's opened state changed (`no_files` in the event).
 ---@param ws perforated.Workspace
 ---@param what { files: string[]?, changes: boolean|string[]?, keep_markers: boolean? }?
 local function changed(ws, what)
   local data = { ws = ws.key }
   if what then
     data.changes, data.keep_markers = what.changes, what.keep_markers
+    data.no_files = what.files == nil or nil
     local files = what.files and #what.files <= M.CHANGED_FILES_MAX and {} or nil
     for _, f in ipairs(what.files or {}) do
       local local_path = not f:find('...', 1, true) and f or nil -- a wildcard: refresh all
@@ -149,6 +151,20 @@ end
 M.changed = changed
 
 M.bufs_for = bufs_for
+
+--- After a change announced with its files (`changed`): the poll's follow-up to it fstats
+--- those files and updates their buffers, so only a workspace it doesn't follow needs a
+--- buffer refresh of its own.
+---@param ws perforated.Workspace
+---@param bufs integer[]
+function M.refresh_bufs(ws, bufs)
+  if require('perforated.poll').following(ws) then
+    return
+  end
+  for _, b in ipairs(bufs) do
+    require('perforated.buffer').refresh(b)
+  end
+end
 M._tree = tree
 
 -- ---------------------------------------------------------------------------------------------

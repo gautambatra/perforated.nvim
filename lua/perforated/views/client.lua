@@ -694,9 +694,18 @@ function M.refresh(view, what)
         done()
       end)
     end
-    -- The opened files come from the poll's refresh, so buffers, counts and statuslines
-    -- update from the same `fstat -Ro` (and its follow-up to this change is not needed).
+    -- The opened files come from the poll, so buffers, counts and statuslines update from the
+    -- same answer. After a change, that's the poll's follow-up to it (an `fstat` of the files
+    -- it named, or of every opened file): the view waits for it rather than asking again.
     local function fstat_opened(cb)
+      if not full then
+        return require('perforated.poll').settled(ws, function(recs, res)
+          if not recs then
+            failed(res)
+          end
+          cb(recs)
+        end)
+      end
       -- No toast for stale files: the view shows them. Asked for the view, so with the
       -- interactive timeout: a slow server mustn't empty it.
       local timeout = require('perforated.config').get().runner.timeout
