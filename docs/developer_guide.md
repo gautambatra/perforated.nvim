@@ -879,16 +879,17 @@ why keys, menus and help never disagree.
    news reaches the view and the quickfix resolve lists without a timer of their own. It
    keeps a signature per file (`ws.poll_sigs`) and names the files that differ; the
    resolve lists re-check only those.
-   Edits outside Neovim change no Perforce record, so no news names them. Instead, each
-   marker answer carries the files' local stats taken just before `diff -sa` ran
-   (`modified.query_stat`: `mtime` in ns and size, `view.data.mstat`), and every probe runs
-   `poll.on_probe` hooks: a visible view's `recheck_touched` stats the opened files
-   (`modified.touched`, `vim.uv.fs_stat`, no p4 call) and runs `diff -sa` of only those whose
-   stats differ or have none, updating their markers and stats in place. Taking the stats
-   before the diff means an edit during it shows as a difference next time rather than being
-   missed. A first full refresh with `ws.opened` not known yet (`:P4` in a fresh Neovim)
-   records no stats, so the first probe re-checks every file once. `<F5>` and `:P4 refresh`
-   stay a full `diff -sa` (tools such as `cp -p` keep the mtime). `:P4 refresh`
+   Edits outside Neovim change no Perforce record, so no news names them. The changed
+   markers come from the workspace's marker cache (`modified.markers`, see
+   [`modified.lua`](#modifiedlua)): every answer is kept with the file's local stats taken
+   just before p4 compared it and its base revision. Every probe runs `poll.on_probe` hooks:
+   a visible view's `recheck_touched` asks the cache about every opened file, which stats
+   them (`vim.uv.fs_stat`, no p4 call) and runs `diff -sa` of only those whose stats or base
+   moved, and redraws when a marker changed. The view's full refreshes take markers from the
+   cache too (with `ws.opened`'s records, in parallel with the opened-files query); a scoped
+   refresh asks its files (`query_stat`) and `remember`s the answers once the opened records
+   (their bases) are in. `<F5>` and `:P4 refresh` (`FRESH`) ask every marker anew and refill
+   the cache (tools such as `cp -p` keep the mtime). `:P4 refresh`
    emits one (`source = 'refresh'`) after re-checking every open buffer (`buffer.refresh_all`,
    one batched fstat) and the opened files (`poll.refresh`). Other events also make `poll.lua` run one
    `poll.refresh` once they settle, for the counts and statuslines (see `poll.lua` below).
@@ -1177,9 +1178,23 @@ test finding).
 
 #### `modified.lua`
 "Changed vs unchanged" for opened files: `query(ws, paths)` runs `p4 diff -sa` (p4 compares
-locally); `query_stat` adds the files' local stats taken before it (`mtime` ns and size), and
-`touched(ws, baseline)` lists the opened files whose stats differ from a baseline (local
-`fs_stat` only, no p4 call); `overlay(ws)` uses loaded buffers' own diff state for unsaved edits; `is_changed`
+locally). The marker cache, `ws.markers` (key → `changed`, `stat`, `base`), keeps every
+answer with the file's local stats taken just before p4 compared it (`mtime` in ns and size,
+`stats`) and its base revision (`p4.base_spec`). `markers(ws, recs, opts)` answers from it:
+`valid` keeps the entries whose stats and base still match (an edit anywhere moves the stats,
+a sync or resolve the base), one `diff -sa` asks the rest and `store`s them; `opts.fresh`
+asks all, `opts.all` (every opened file) drops other entries (`prune`). Its users: the client
+view, the opened-files picker and `:P4 opened` (`lists.opened_items`, started with
+`ws.opened`, then the files its answer adds), the describe view of a pending changelist,
+`:P4 hunks` (prints and diffs only files not known unchanged) and `same.check` (an opened
+file against its base: from the cache, else `diff -sr`, whose answers are stored too).
+`query_stat` is `query` with the stats taken before it and the time it asked; `remember`
+stores such answers once the records are known. A file without stats from before (not in
+`ws.opened` yet: the first refresh in a fresh Neovim) is stored only when its mtime is
+`SETTLED_S` (2 s) older than the query, so it can't have changed while p4 compared it. A
+check-out starts its file's entry with one `diff -sa` of it: storing "unchanged" without asking
+would be wrong after `sync -k`, `flush` or on an allwrite client. Idle workspaces and a
+case-folding change clear the cache. `overlay(ws)` uses loaded buffers' own diff state for unsaved edits; `is_changed`
 combines them (adds/deletes/moves always count as changed); `marker(changed)` returns the `●`
 chunk and the row highlight.
 

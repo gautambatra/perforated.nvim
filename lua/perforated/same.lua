@@ -135,21 +135,51 @@ function M.check(ws, list, cb, opts)
   local paths = vim.tbl_keys(sr_paths)
   if #paths > 0 then
     todo = todo + 1
-    local run_opts = { globals = { '-x', '-' }, stdin = p4.escape_all(paths) }
-    ws:run({ 'diff', '-sr' }, run_opts, function(res)
-      local same = {}
-      for _, rec in ipairs(res.records) do
-        if rec.clientFile then
-          same[p4.key(ws, rec.clientFile)] = true
-        end
-      end
+    -- The workspace's marker cache answers files untouched since their last comparison; one
+    -- `diff -sr` the rest, and its answers go to the cache.
+    local mod = require('perforated.modified')
+    local recs = {}
+    for _, path in ipairs(paths) do
+      recs[path] = ws.fstat[p4.key(ws, path)]
+    end
+    mod.valid(ws, vim.tbl_values(recs), function(valid, stats)
+      local ask = {}
       for path, idxs in pairs(sr_paths) do
-        for _, i in ipairs(idxs) do
-          result[i] = same[p4.key(ws, path)] == true
+        local changed = valid[p4.key(ws, path)]
+        if changed ~= nil then
+          for _, i in ipairs(idxs) do
+            result[i] = not changed
+          end
+        else
+          ask[#ask + 1] = path
         end
       end
-      todo = todo - 1
-      done()
+      if #ask == 0 then
+        todo = todo - 1
+        return done()
+      end
+      table.sort(ask)
+      local run_opts = { globals = { '-x', '-' }, stdin = p4.escape_all(ask) }
+      ws:run({ 'diff', '-sr' }, run_opts, function(res)
+        local same = {}
+        for _, rec in ipairs(res.records) do
+          if rec.clientFile then
+            same[p4.key(ws, rec.clientFile)] = true
+          end
+        end
+        local answered = res.ok or #res.records > 0
+        for _, path in ipairs(ask) do
+          local k = p4.key(ws, path)
+          for _, i in ipairs(sr_paths[path]) do
+            result[i] = same[k] == true
+          end
+          if answered and stats[k] ~= nil then
+            mod.store(ws, recs[path], not same[k], stats[k])
+          end
+        end
+        todo = todo - 1
+        done()
+      end)
     end)
   end
 

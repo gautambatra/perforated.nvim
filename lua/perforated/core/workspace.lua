@@ -37,6 +37,7 @@ M.CONNECTION_KEY = '<connection>'
 ---@field opened_at integer?              when the refresh whose answer `opened` holds was asked (hrtime)
 ---@field opened_stamp { t: integer, gen: integer }?  `p4.stamp` of the last full refresh (`opened`)
 ---@field fstat_at table<string, { t: integer, gen: integer }>  path → `p4.stamp` of its `fstat` record
+---@field markers table<string, { changed: boolean, stat: string|false, base: string }>?  key → changed marker (`modified.markers`)
 ---@field pending_kept { stamp: { t: integer, gen: integer }, records: table[] }?  (`p4.keep_pending`)
 ---@field clmemo table<string, table>     change → { user, client, time, desc }
 ---@field sticky_cl string?
@@ -343,7 +344,7 @@ function Workspace:_set_info(rec)
     -- Keys are case-folded on case-insensitive servers (the macOS default). Buffers attached
     -- before `p4 info` answered carry unfolded keys: recompute them.
     self.icase = icase
-    self.fstat, self.fstat_at = {}, {}
+    self.fstat, self.fstat_at, self.markers = {}, {}, nil
     local buffer = package.loaded['perforated.buffer']
     if buffer then
       buffer.rekey(self)
@@ -433,7 +434,7 @@ function Workspace:_maybe_idle()
   self.idle = true
   dbg.info('workspace', '%s idle (no buffers, cwd outside)', self.key)
   self.conn:dispose()
-  self.fstat, self.fstat_at, self.pending_kept = {}, {}, nil
+  self.fstat, self.fstat_at, self.pending_kept, self.markers = {}, {}, nil, nil
   self.clmemo = {}
   events.emit('WorkspaceIdle', { ws = self.key })
 end

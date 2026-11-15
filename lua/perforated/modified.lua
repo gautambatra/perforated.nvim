@@ -47,7 +47,7 @@ end
 
 --- Local stats of `paths` (local paths), all at once: key → `mtime(ns):size`, false when the
 --- file is missing. A marker answered after these were taken holds while they still match:
---- a file whose stats didn't change needn't be asked again (`touched`).
+--- a file whose stats didn't change needn't be asked again (`valid`).
 ---@param ws perforated.Workspace
 ---@param paths string[]
 ---@param cb fun(stats: table<string, string|false>)
@@ -72,10 +72,11 @@ function M.stats(ws, paths, cb)
   end
 end
 
---- `query`, with the files' stats taken before it asked (`stats`).
+--- `query`, with the files' stats taken before it asked (`stats`) and when it asked (`t0`,
+--- seconds since the epoch: `remember` judges files with no stats by it).
 ---@param ws perforated.Workspace
 ---@param paths string[]?  nil = every opened file (stats of those `ws.opened` knows)
----@param cb fun(set: table<string, true>?, stats: table<string, string|false>)
+---@param cb fun(set: table<string, true>?, stats: table<string, string|false>, t0: number)
 function M.query_stat(ws, paths, cb)
   local files = paths
       and vim.tbl_filter(function(p)
@@ -83,11 +84,17 @@ function M.query_stat(ws, paths, cb)
       end, paths)
     or M.opened_paths(ws)
   M.stats(ws, files, function(stats)
+    local t0 = os.time()
     M.query(ws, paths, function(set)
-      cb(set, stats)
+      cb(set, stats, t0)
     end)
   end)
 end
+
+--- A file with no stats from before its query (not known to be opened then) is remembered
+--- only when it was last modified this long before the query: it can't have changed while
+--- p4 compared it (and a little clock skew between the disk and here doesn't matter).
+M.SETTLED_S = 2
 
 --- This client's opened files as local paths.
 ---@param ws perforated.Workspace
@@ -103,20 +110,166 @@ function M.opened_paths(ws)
   return out
 end
 
---- The opened files whose local stats differ from `baseline` (or have none): edited since
---- their marker was answered, inside Neovim or out. Their stats now, for the next baseline.
+-- The marker cache (`ws.markers`): key → { changed, stat, base }. An answer holds while the
+-- file's local stats (taken before p4 compared it) and its base revision are unchanged: an
+-- edit anywhere moves the stats, a sync or resolve the base. `<F5>` / `:P4 refresh` ask anew.
+
+--- This client's opened records with a local file (those a marker applies to).
 ---@param ws perforated.Workspace
----@param baseline table<string, string|false>
----@param cb fun(paths: string[], stats: table<string, string|false>)
-function M.touched(ws, baseline, cb)
-  local paths = M.opened_paths(ws)
-  M.stats(ws, paths, function(stats)
-    local out = vim.tbl_filter(function(p)
-      local k = p4.key(ws, p)
-      return baseline[k] == nil or baseline[k] ~= stats[k]
-    end, paths)
-    cb(out, stats)
+---@param recs table[]
+---@return table[]
+local function own(ws, recs)
+  local client = ws:client()
+  return vim.tbl_filter(function(r)
+    return r.clientFile ~= nil and r.action ~= nil and (r.client == nil or r.client == client)
+  end, recs)
+end
+
+--- Remember one answer.
+---@param ws perforated.Workspace
+---@param rec table  its opened record (the base it was compared with)
+---@param changed boolean
+---@param stat string|false  its stats taken before p4 compared it
+function M.store(ws, rec, changed, stat)
+  ws.markers = ws.markers or {}
+  ws.markers[p4.key(ws, rec.clientFile)] =
+    { changed = changed, stat = stat, base = p4.base_spec(rec) or '' }
+end
+
+--- The cached answers of `recs` that still hold (same stats, same base): key → changed; and
+--- every file's stats now (the baseline for answers asked after).
+---@param ws perforated.Workspace
+---@param recs table[]  opened records
+---@param cb fun(valid: table<string, boolean>, stats: table<string, string|false>)
+function M.valid(ws, recs, cb)
+  recs = own(ws, recs)
+  M.stats(
+    ws,
+    vim.tbl_map(function(r)
+      return r.clientFile
+    end, recs),
+    function(stats)
+      local out, cache = {}, ws.markers or {}
+      for _, r in ipairs(recs) do
+        local k = p4.key(ws, r.clientFile)
+        local e = cache[k]
+        if e and stats[k] ~= nil and e.stat == stats[k] and e.base == (p4.base_spec(r) or '') then
+          out[k] = e.changed
+        end
+      end
+      cb(out, stats)
+    end
+  )
+end
+
+--- Markers of these opened records, as `query`'s set: cached answers that still hold, one
+--- `diff -sa` for the rest (none when nothing moved). `opts.fresh`: ask every one;
+--- `opts.all`: `recs` are every opened file (entries of other files are dropped).
+---@param ws perforated.Workspace
+---@param recs table[]
+---@param opts { fresh: boolean?, all: boolean? }?
+---@param cb fun(set: table<string, true>?)  nil when the query failed
+function M.markers(ws, recs, opts, cb)
+  opts = opts or {}
+  recs = own(ws, recs)
+  if opts.all then
+    M.prune(ws, recs)
+  end
+  M.valid(ws, recs, function(valid, stats)
+    if opts.fresh then
+      valid = {}
+    end
+    local need, paths = {}, {}
+    for _, r in ipairs(recs) do
+      if valid[p4.key(ws, r.clientFile)] == nil then
+        need[#need + 1], paths[#paths + 1] = r, r.clientFile
+      end
+    end
+    local out = {}
+    for k, c in pairs(valid) do
+      out[k] = c or nil
+    end
+    if #need == 0 then
+      return cb(out)
+    end
+    require('perforated.core.debug').debug(
+      'modified',
+      '%s: %d of %d marker(s) asked, the rest cached',
+      ws.key,
+      #need,
+      #recs
+    )
+    M.query(ws, paths, function(set)
+      if not set then
+        return cb(nil)
+      end
+      for _, r in ipairs(need) do
+        local k = p4.key(ws, r.clientFile)
+        M.store(ws, r, set[k] == true, stats[k])
+        out[k] = set[k]
+      end
+      cb(out)
+    end)
   end)
+end
+
+--- Remember the answers of a query its caller ran itself (`query_stat`), once the opened
+--- records are known: those of `paths` (local or depot paths; nil = every one).
+---@param ws perforated.Workspace
+---@param recs table[]  opened records
+---@param set table<string, true>
+---@param stats table<string, string|false>  from `query_stat`
+---@param paths string[]?
+---@param t0 number?  from `query_stat`: files without stats are judged by their mtime
+function M.remember(ws, recs, set, stats, paths, t0)
+  local asked
+  if paths then
+    asked = {}
+    for _, f in ipairs(paths) do
+      asked[f:sub(1, 2) == '//' and f or p4.key(ws, f)] = true
+    end
+  end
+  local later = {}
+  for _, r in ipairs(own(ws, recs)) do
+    local k = p4.key(ws, r.clientFile)
+    if not asked or asked[k] or asked[r.depotFile] then
+      if stats[k] ~= nil then
+        M.store(ws, r, set[k] == true, stats[k])
+      elseif t0 then
+        later[#later + 1] = r
+      end
+    end
+  end
+  for _, r in ipairs(later) do
+    vim.uv.fs_stat(r.clientFile, function(_, st)
+      if st and st.mtime.sec < t0 - M.SETTLED_S then
+        local stat = ('%d.%09d:%d'):format(st.mtime.sec, st.mtime.nsec, st.size)
+        vim.schedule(function()
+          M.store(ws, r, set[p4.key(ws, r.clientFile)] == true, stat)
+        end)
+      end
+    end)
+  end
+end
+
+--- Drop the entries of files not among `recs` (no longer opened).
+---@param ws perforated.Workspace
+---@param recs table[]  every opened record
+function M.prune(ws, recs)
+  if not ws.markers then
+    return
+  end
+  local keep = {}
+  for _, r in ipairs(recs) do
+    if r.clientFile then
+      keep[p4.key(ws, r.clientFile)] = true
+    end
+  end
+  for k in pairs(ws.markers) do
+    if not keep[k] then
+      ws.markers[k] = nil
+    end
+  end
 end
 
 --- Changed/unchanged for files open in Neovim with unsaved edits (their buffer's diff state),

@@ -3228,6 +3228,110 @@ T['client view']['a file edited outside Neovim is marked at the next background 
   H.eq(marked('b.txt'), true)
 end
 
+--- Open the view quietly, its markers going to the workspace's cache even for files the test
+--- set-up wrote a moment ago (`modified.SETTLED_S`).
+local function open_view_cached()
+  child.lua([[require('perforated.modified').SETTLED_S = -60]])
+  open_view_quiet()
+end
+
+--- `lists.opened_items` (the opened-files picker, `:P4 opened`); waits for its answer.
+local function opened_items()
+  child.lua(
+    [[_G.items = nil
+    require('perforated.lists').opened_items(require('perforated').workspace(), function(items) _G.items = items end)]]
+  )
+  wait('_G.items ~= nil')
+end
+
+T['client view']['the opened-files list and the describe view take markers from the cache'] = function()
+  open_view_cached() -- (its markers went to the workspace's cache)
+  track_marker_queries()
+  opened_items()
+  child.cmd('P4 describe 2')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('● edit', 1, true) ~= nil]]
+  )
+  H.eq(count_calls({ 'diff -sa' }), {})
+  -- One file edited (outside Neovim): only it is asked, once; then the cache answers again.
+  H.write(root .. '/b.txt', 'b1 edited elsewhere\n')
+  opened_items()
+  H.eq(child.lua_get('_G.MARKERS'), { { 'b.txt' } })
+  opened_items()
+  H.eq(child.lua_get('_G.MARKERS'), { { 'b.txt' } })
+  -- :P4 refresh asks every marker anew.
+  child.cmd('tabfirst')
+  child.cmd('P4 refresh')
+  vim.uv.sleep(400)
+  H.wait_idle(child)
+  wait(('not (%s).loading'):format(view_expr(root)))
+  H.eq(child.lua_get('_G.MARKERS[#_G.MARKERS]'), 'all')
+end
+
+T['client view']['the first refresh caches files modified a while ago, not one just written'] = function()
+  -- (a fresh Neovim: the view's first refresh asks before the opened files are known)
+  local old = os.time() - 600
+  for _, rel in ipairs({ 'a.txt', 'c.txt' }) do
+    vim.uv.fs_utime(root .. '/' .. rel, old, old)
+  end
+  H.write(root .. '/b.txt', 'b1 just now\n')
+  open_view_quiet()
+  track_marker_queries()
+  opened_items()
+  H.eq(child.lua_get('_G.MARKERS'), { { 'b.txt' } })
+end
+
+T['client view']['an opened file against its base: the identical check asks no diff -sr'] = function()
+  open_view_cached() -- (its markers went to the workspace's cache)
+  child.lua(
+    [[_G.same = nil
+    local root = ...
+    local ws = require('perforated').workspace()
+    local function pair(rel)
+      return { left = { spec = '//depot/' .. rel .. '#1' }, right = { path = root .. '/' .. rel } }
+    end
+    require('perforated.same').check(ws, { pair('a.txt'), pair('b.txt') }, function(s) _G.same = s end)]],
+    { root }
+  )
+  wait('_G.same ~= nil')
+  H.eq(child.lua_get('_G.same'), { false, true }) -- a.txt edited, b.txt as checked out
+  H.eq(count_calls({ 'diff -s' }), {})
+end
+
+T['client view']['the hunks list prints no base of an unchanged file'] = function()
+  open_view_cached() -- (its markers went to the workspace's cache)
+  child.lua(
+    [[_G.printed = {}
+    local p4 = require('perforated.p4')
+    local many = p4.print_many
+    p4.print_many = function(ws, specs, ...)
+      vim.list_extend(_G.printed, specs)
+      return many(ws, specs, ...)
+    end
+    _G.items = nil
+    require('perforated.lists').all_hunk_items(require('perforated').workspace(), function(items) _G.items = items end)]]
+  )
+  wait('_G.items ~= nil')
+  -- b.txt and c.txt are opened unchanged: only a.txt's base is printed.
+  H.eq(child.lua_get('_G.printed'), { '//depot/a.txt#1' })
+  H.eq(child.lua_get('#_G.items') > 0, true)
+end
+
+T['client view']['a new base revision asks the marker again, the file untouched'] = function()
+  open_view_cached() -- (its markers went to the workspace's cache)
+  track_marker_queries()
+  -- c.txt (opened, stale) synced to #2 from another terminal: its file isn't rewritten (it's
+  -- opened; it now needs resolving), but its base moved.
+  server:p4({ 'sync', root .. '/c.txt' }, { client = 'alice_ws', cwd = root })
+  child.lua(
+    [[_G.done = nil
+    require('perforated.poll').refresh(require('perforated').workspace(), {}, function() _G.done = true end)]]
+  )
+  wait('_G.done')
+  opened_items()
+  H.eq(child.lua_get('_G.MARKERS'), { { 'c.txt' } })
+end
+
 T['client view']['with the view closed, an edit and a revert ask for that file once each'] = function()
   child.cmd('edit ' .. root .. '/d.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
@@ -3978,6 +4082,8 @@ T['client view']['<F5> and events that name nothing re-run every section'] = fun
   child.lua([[require('perforated.checkout').changed(require('perforated').workspace())]])
   vim.uv.sleep(400)
   wait(('not (%s).loading'):format(view_expr(root)))
+  -- (the changed markers from the workspace's cache: no file was touched since <F5>)
+  all['diff -sa'] = nil
   H.eq(count_calls(SECTIONS), all)
 end
 

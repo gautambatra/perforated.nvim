@@ -456,6 +456,8 @@ local FULL = { full = true }
 --- What the poll's news owes: everything but the Sync CL, the one query that reads the whole
 --- workspace's have list (only a sync moves it: F5, :P4 refresh and the plugin's syncs ask it).
 local POLLED = { full = true, keep_have = true }
+--- `<F5>` and `:P4 refresh`: everything, and every changed marker asked anew (not the cache).
+local FRESH = { full = true, fresh = true }
 
 --- What two refreshes owe together.
 ---@param a table  a `what` (see M.refresh), or FULL
@@ -465,6 +467,9 @@ local function merge_what(a, b)
   if a.full or b.full then
     -- The Sync CL is owed if either asked for it.
     local keep = (not a.full or a.keep_have) and (not b.full or b.keep_have)
+    if a.fresh or b.fresh then
+      return FRESH -- (the Sync CL too)
+    end
     return keep and POLLED or FULL
   end
   local files
@@ -547,12 +552,13 @@ end
 --- only with `changes`: `true` every changelist's, a list those changelists' (merged into the
 --- others' previous answer; an empty list none). The Sync CL and Recent submitted keep their
 --- answers (Recent submitted is asked again with `submitted`). nil = everything;
---- `keep_have` (the poll's news that names nothing) = everything but the Sync CL.
+--- `keep_have` (the poll's news that names nothing) = everything but the Sync CL; `fresh`
+--- (`<F5>`, `:P4 refresh`) = every changed marker asked anew, not from the workspace's cache.
 ---
 --- A query that fails keeps its section's previous answer (pending changelists and their
 --- files together), and the view's first line says why.
 ---@param view table
----@param what { files: string[]?, changes: boolean|string[]?, full: boolean?, keep_have: boolean?, submitted: boolean? }?
+---@param what { files: string[]?, changes: boolean|string[]?, full: boolean?, keep_have: boolean?, submitted: boolean?, fresh: boolean? }?
 function M.refresh(view, what)
   if not vim.api.nvim_buf_is_valid(view.buf) then
     return
@@ -621,13 +627,6 @@ function M.refresh(view, what)
       else
         shown.modified = field('modified')
       end
-      -- The files' stats when their markers were asked (`recheck_touched`): the new answer's
-      -- over the old, all new after a full one.
-      if got.mstat and not some then
-        shown.mstat = data.mstat
-      else
-        shown.mstat = vim.tbl_extend('force', prev.mstat or {}, data.mstat or {})
-      end
       shown.overlay = require('perforated.modified').overlay(ws)
       view.data = shown
       local t1 = vim.uv.hrtime()
@@ -652,6 +651,21 @@ function M.refresh(view, what)
         return
       end
       view.loading = false
+      -- Markers asked here go to the workspace's cache once the opened records (their bases)
+      -- are in.
+      if data.mstats and got.modified and data.modified and got.opened then
+        require('perforated.modified').remember(
+          ws,
+          data.opened,
+          data.modified,
+          data.mstats,
+          some,
+          data.mt0
+        )
+        if not some then
+          require('perforated.modified').prune(ws, data.opened)
+        end
+      end
       render()
       dbg.timing('client view: refresh', (vim.uv.hrtime() - t0) / 1e6)
       dbg.debug(
@@ -722,13 +736,22 @@ function M.refresh(view, what)
       end)
     end
     if full or (what.files and not keep_markers) then
-      require('perforated.modified').query_stat(ws, some, function(changed, stats)
-        set('modified', changed or false) -- false: unknown (no markers)
-        if changed then
-          set('mstat', stats)
-        end
-        done()
-      end)
+      local modified = require('perforated.modified')
+      if full and not what.fresh and ws.opened then
+        -- The cache answers files untouched since (their stats, their base); the opened files
+        -- as the poll knows them.
+        modified.markers(ws, vim.tbl_values(ws.opened), { all = true }, function(changed)
+          set('modified', changed or false) -- false: unknown (no markers)
+          done()
+        end)
+      else
+        modified.query_stat(ws, some, function(changed, stats, asked_at)
+          set('modified', changed or false)
+          -- (remembered with the opened records)
+          data.mstats, data.mt0 = changed and stats or nil, asked_at
+          done()
+        end)
+      end
     end
     -- The opened files come from the poll, so buffers, counts and statuslines update from the
     -- same answer. After a change, that's the poll's follow-up to it (an `fstat` of the files
@@ -809,48 +832,46 @@ function M.refresh(view, what)
 end
 
 --- Re-ask the changed markers of the opened files edited since their marker was answered (a
---- local `stat` each: mtime and size), only those: none edited, no p4 call. A visible view
---- with markers, between refreshes (a refresh asks its own).
+--- local `stat` each, through the workspace's marker cache): none edited, no p4 call. A
+--- visible view with markers, between refreshes (a refresh asks its own).
 ---@param view table
 function M.recheck_touched(view)
-  local d = view.data
+  local d, ws = view.data, view.ws
   if
     view.loading
     or view.rechecking
     or not d
     or type(d.modified) ~= 'table'
+    or not ws.opened
     or not vim.api.nvim_buf_is_valid(view.buf)
     or #vim.fn.win_findbuf(view.buf) == 0
   then
     return
   end
-  local ws, modified = view.ws, require('perforated.modified')
+  local modified = require('perforated.modified')
+  local recs = vim.tbl_values(ws.opened)
   view.rechecking = true
-  modified.touched(ws, d.mstat or {}, function(paths, stats)
-    if #paths == 0 then
-      view.rechecking = false
+  modified.markers(ws, recs, { all = true }, function(set)
+    view.rechecking = false
+    local now = view.data
+    if not set or not now or type(now.modified) ~= 'table' then
       return
     end
-    dbg.debug('client', 'recheck %s: %d file(s) edited since their marker', ws.key, #paths)
-    -- (the stats taken before asking are the next baseline)
-    modified.query(ws, paths, function(set)
-      view.rechecking = false
-      local now = view.data
-      if not set or not now or type(now.modified) ~= 'table' then
-        return
+    if not vim.api.nvim_buf_is_valid(view.buf) then
+      return
+    end
+    local moved = false
+    for _, r in ipairs(recs) do
+      local k = r.clientFile and p4.key(ws, r.clientFile)
+      if k and now.modified[k] ~= set[k] then
+        now.modified[k], moved = set[k], true
       end
-      if not vim.api.nvim_buf_is_valid(view.buf) then
-        return
-      end
-      now.mstat = now.mstat or {}
-      for _, p in ipairs(paths) do
-        local k = p4.key(ws, p)
-        now.modified[k], now.mstat[k] = set[k], stats[k]
-      end
+    end
+    if moved then
       now.overlay = modified.overlay(ws)
       view.tree:set(build(view, now))
       M.update_footer(view)
-    end)
+    end
   end)
 end
 
@@ -1175,7 +1196,7 @@ local function actions(view)
       keys = { '<F5>' }, -- P4V's refresh key (`gr` is "revert if unchanged" here)
       nomenu = true,
       run = function()
-        M.refresh(view)
+        M.refresh(view, FRESH)
       end,
     },
     {
@@ -2453,7 +2474,7 @@ function M.open(ws, opts)
           submitted = d.submitted,
         }
       else
-        what = d.source == 'poll' and POLLED or FULL
+        what = d.source == 'poll' and POLLED or d.source == 'refresh' and FRESH or FULL
       end
       if owed then
         owed = merge_what(owed, what)
@@ -2486,13 +2507,12 @@ function M.open(ws, opts)
         return
       end
       local modified = require('perforated.modified')
-      modified.query_stat(ws, { st.path }, function(set, stats)
+      modified.markers(ws, { st.rec }, { fresh = true }, function(set)
         local d = view.data
         if not set or not d or not d.modified or not vim.api.nvim_buf_is_valid(buf) then
           return
         end
         d.modified[st.key] = set[st.key]
-        d.mstat = vim.tbl_extend('force', d.mstat or {}, stats)
         d.overlay = modified.overlay(ws)
         view.tree:set(build(view, d))
       end)

@@ -250,9 +250,10 @@ local function load(view, cb)
     end
     local p4 = require('perforated.p4')
     p4.fstat_opened(ws, {}, function(recs)
-      local files = {}
+      local files, mine = {}, {}
       for _, r in ipairs(recs or {}) do
         if (r.change or 'default') == rec.change then
+          mine[#mine + 1] = r
           files[#files + 1] = {
             depotFile = r.depotFile,
             clientFile = r.clientFile,
@@ -265,10 +266,8 @@ local function load(view, cb)
       if #files == 0 then
         return finish(rec, fallback, shelved)
       end
-      local paths = vim.tbl_map(function(f)
-        return f.clientFile
-      end, files)
-      require('perforated.modified').query(ws, paths, function(set)
+      -- (the workspace's marker cache: only files edited since are asked)
+      require('perforated.modified').markers(ws, mine, {}, function(set)
         finish(rec, files, shelved, set or false)
       end)
     end)

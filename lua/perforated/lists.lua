@@ -29,6 +29,15 @@ end
 ---@param cb fun(items: table[], err: string?)
 function M.opened_items(ws, cb)
   local recs, changes, modified, err
+  local mod = require('perforated.modified')
+  -- Markers from the workspace's cache, started with the opened files the poll knows; files
+  -- the answer adds are asked once it's in.
+  local asked = {}
+  for _, r in pairs(ws.opened or {}) do
+    if r.clientFile then
+      asked[p4.key(ws, r.clientFile)] = true
+    end
+  end
   local function done()
     if not recs or not changes or modified == nil then
       return
@@ -36,7 +45,20 @@ function M.opened_items(ws, cb)
     if err then
       return cb({}, err)
     end
-    local mod = require('perforated.modified')
+    if modified and ws.opened then
+      local more = vim.tbl_filter(function(r)
+        return r.clientFile ~= nil and not asked[p4.key(ws, r.clientFile)]
+      end, recs)
+      if #more > 0 then
+        for _, r in ipairs(more) do
+          asked[p4.key(ws, r.clientFile)] = true
+        end
+        return mod.markers(ws, more, {}, function(set)
+          modified = set and vim.tbl_extend('force', modified, set) or false
+          done()
+        end)
+      end
+    end
     local overlay = mod.overlay(ws)
     local desc = { default = '' }
     for _, c in ipairs(changes) do
@@ -99,10 +121,15 @@ function M.opened_items(ws, cb)
     changes = c or {}
     done()
   end, nil, { reuse = true })
-  require('perforated.modified').query(ws, nil, function(set)
+  local function got(set)
     modified = set or false
     done()
-  end)
+  end
+  if ws.opened then
+    mod.markers(ws, vim.tbl_values(ws.opened), { all = true }, got)
+  else
+    mod.query(ws, nil, got)
+  end
 end
 
 --- Opened files that are stale (have < head) or unresolved. `err` when they couldn't be listed.
@@ -179,8 +206,9 @@ function M.buffer_hunk_items(buf)
   return hunk_items(st.path, st.hunks, st.base, cur, buf)
 end
 
---- Hunks across every opened file: one fstat, one batched print for uncached bases, then
---- in-process diffs (loaded buffers use their current text; others are read from disk).
+--- Hunks across every opened file: one fstat, the changed markers (the workspace's cache: no
+--- call when nothing was edited), one batched print for the uncached bases of changed files,
+--- then in-process diffs (loaded buffers use their current text; others are read from disk).
 ---@param ws perforated.Workspace
 ---@param cb fun(items: table[], err: string?)  `err` when the opened files couldn't be listed
 function M.all_hunk_items(ws, cb)
@@ -194,53 +222,62 @@ function M.all_hunk_items(ws, cb)
     table.sort(recs, function(a, b)
       return a.clientFile < b.clientFile
     end)
-    local cache = require('perforated.core.cache').content()
-    local need = {}
-    for _, r in ipairs(recs) do
-      local spec = p4.base_spec(r)
-      if spec and not cache:has(ws:server_key() .. '|' .. spec) then
-        need[#need + 1] = spec
-      end
-    end
-    local function finish(fetched)
-      local items = {}
-      local loaded = {}
-      for b, st in pairs(require('perforated.buffer').all()) do
-        if st.ws == ws then
-          loaded[st.key] = b
-        end
-      end
+    local mod = require('perforated.modified')
+    mod.markers(ws, recs, {}, function(set)
+      -- Files known to be unchanged have no hunks: no base to print, no file to read. (Unsaved
+      -- edits: the buffer's own state; a failed query: every file.)
+      local overlay = mod.overlay(ws)
+      recs = vim.tbl_filter(function(r)
+        return mod.is_changed(ws, r, set, overlay) ~= false
+      end, recs)
+      local cache = require('perforated.core.cache').content()
+      local need = {}
       for _, r in ipairs(recs) do
         local spec = p4.base_spec(r)
-        local base = {}
-        if spec then
-          local k = ws:server_key() .. '|' .. spec
-          base = cache:get(k) or fetched[spec]
-          if fetched[spec] then
-            cache:set(k, fetched[spec], 40 * #fetched[spec])
-          end
-        end
-        if base then
-          local b = loaded[p4.key(ws, r.clientFile)]
-          local cur
-          if b and vim.api.nvim_buf_is_loaded(b) then
-            cur = vim.api.nvim_buf_get_lines(b, 0, -1, false)
-          else
-            local fd = io.open(r.clientFile, 'rb')
-            cur = fd and p4.split_lines(fd:read('*a')) or {}
-            if fd then
-              fd:close()
-            end
-          end
-          vim.list_extend(items, hunk_items(r.clientFile, engine.hunks(base, cur), base, cur, b))
+        if spec and not cache:has(ws:server_key() .. '|' .. spec) then
+          need[#need + 1] = spec
         end
       end
-      cb(items)
-    end
-    if #need == 0 then
-      return finish({})
-    end
-    p4.print_many(ws, need, {}, finish)
+      local function finish(fetched)
+        local items = {}
+        local loaded = {}
+        for b, st in pairs(require('perforated.buffer').all()) do
+          if st.ws == ws then
+            loaded[st.key] = b
+          end
+        end
+        for _, r in ipairs(recs) do
+          local spec = p4.base_spec(r)
+          local base = {}
+          if spec then
+            local k = ws:server_key() .. '|' .. spec
+            base = cache:get(k) or fetched[spec]
+            if fetched[spec] then
+              cache:set(k, fetched[spec], 40 * #fetched[spec])
+            end
+          end
+          if base then
+            local b = loaded[p4.key(ws, r.clientFile)]
+            local cur
+            if b and vim.api.nvim_buf_is_loaded(b) then
+              cur = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+            else
+              local fd = io.open(r.clientFile, 'rb')
+              cur = fd and p4.split_lines(fd:read('*a')) or {}
+              if fd then
+                fd:close()
+              end
+            end
+            vim.list_extend(items, hunk_items(r.clientFile, engine.hunks(base, cur), base, cur, b))
+          end
+        end
+        cb(items)
+      end
+      if #need == 0 then
+        return finish({})
+      end
+      p4.print_many(ws, need, {}, finish)
+    end)
   end)
 end
 

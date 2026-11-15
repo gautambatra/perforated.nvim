@@ -178,9 +178,12 @@ Files you edit outside Neovim (another editor, a script, a code generator) get t
 marker at the next background check while the view is visible (`poll.interval`, or when you
 return to Neovim). The check looks at each opened file's modification time and size, with no
 p4 call, and asks p4 only about the files that changed since their marker was found; with
-nothing edited it asks nothing. A tool that rewrites a file but keeps its old modification
-time and size (`cp -p`, `rsync -a`) isn't noticed: `<F5>` and `:P4 refresh` always ask about
-every opened file.
+nothing edited it asks nothing. The same answers serve the opened-files picker, `:P4 opened`,
+the describe view of a pending changelist, `:P4 hunks` (which skips files known to be
+unchanged) and the check that two sides are identical before a diff opens: each asks p4 only
+about files edited since, or whose have revision moved (a sync or resolve). A tool that
+rewrites a file but keeps its old modification time and size (`cp -p`, `rsync -a`) isn't
+noticed: `<F5>` in the client view and `:P4 refresh` always ask about every opened file.
 
 If p4 doesn't answer a query (an error, or no reply within `runner.timeout`), its section
 keeps what it showed before, and the view's first line says `refresh failed:` and why. The
