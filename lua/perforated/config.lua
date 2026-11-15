@@ -61,6 +61,14 @@ local defaults = {
     reconcile = { paths = {}, mtime = true },
   },
   sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
+  shelve = {
+    --- Upload threads (`--parallel=threads=N`; 0 = off). Only faster when the server allows
+    --- parallel transfers (net.parallel.max > 0); otherwise p4 shelves one file at a time.
+    parallel = 0,
+    --- 'leave': shelve only changed files (`-a leaveunchanged`); unchanged ones stay opened
+    --- and out of the upload. 'shelve' (default): every opened file.
+    unchanged = 'shelve',
+  },
   timelapse = {
     max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
     slider = true,

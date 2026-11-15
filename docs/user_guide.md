@@ -541,6 +541,15 @@ The commands are `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d` and
   files you're shelving. When the shelf also holds files no longer opened in the changelist,
   `a` "replace all" (`p4 shelve -r`) makes the shelf exactly the opened files; the prompt lists
   the ones it would remove.
+- **Only changed files:** with `shelve.unchanged = 'leave'` (`p4 shelve -a leaveunchanged`),
+  files you checked out but didn't change aren't uploaded; they stay opened. The message counts
+  them apart ("shelve: 1 file(s) (2 unchanged, not shelved)"). An unchanged file already in the
+  shelf keeps that older version, and the message says so; "replace all" drops it from the
+  shelf.
+- **Parallel uploads:** `shelve.parallel = 4` asks for 4 upload threads
+  (`--parallel=threads=4`). It only helps when the server allows parallel transfers
+  (`net.parallel.max` above 0, an admin setting); otherwise p4 shelves one file at a time, as
+  without it.
 - **Unshelving** goes back into the shelf's own changelist when that's yours; otherwise you
   pick one. Files that need a resolve are listed in quickfix. When some workspace files are
   writable but not opened, p4 unshelves the rest and the plugin asks whether to overwrite

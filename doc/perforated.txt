@@ -561,6 +561,10 @@ keys):
         concurrency = 4,
         timeout = 10000
       },
+      shelve = {
+        parallel = 0,
+        unchanged = "shelve"
+      },
       signs = {
         algorithm = "myers",
         enabled = true,

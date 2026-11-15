@@ -19,7 +19,8 @@ end
 ---@param verb string
 ---@param res perforated.RunResult
 ---@param count integer
-local function report(verb, res, count)
+---@param extra string?  appended to the success message
+local function report(verb, res, count, extra)
   if res.stopped then
     return -- `jobs.run` already said so
   end
@@ -50,7 +51,7 @@ local function report(verb, res, count)
   else
     local warn = res.warnings[1]
     notify(
-      ('%s: %d file(s)%s'):format(verb, count, warn and (' — ' .. warn) or ''),
+      ('%s: %d file(s)%s%s'):format(verb, count, extra or '', warn and (' — ' .. warn) or ''),
       warn and vim.log.levels.WARN or nil
     )
   end

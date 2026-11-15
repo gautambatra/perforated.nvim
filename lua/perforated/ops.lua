@@ -149,9 +149,18 @@ function M.shelve(ws, change, paths, cb)
     paths and ('Shelving %d file(s) in CL %s…'):format(#paths, change)
       or ('Shelving CL %s…'):format(change)
   )
-  local function run(replace_all)
-    local args = replace_all and { 'shelve', '-r', '-c', change }
-      or { 'shelve', '-f', '-c', change }
+  local cfg = require('perforated.config').get().shelve or {}
+  local leave = cfg.unchanged == 'leave'
+  --- `existing`: the shelf's files before (an unchanged file's older version stays with `-f`).
+  local function run(replace_all, existing)
+    local args = { 'shelve', replace_all and '-r' or '-f' }
+    if leave then
+      vim.list_extend(args, { '-a', 'leaveunchanged' })
+    end
+    if (cfg.parallel or 0) > 0 then
+      args[#args + 1] = ('--parallel=threads=%d'):format(cfg.parallel)
+    end
+    vim.list_extend(args, { '-c', change })
     -- A job: shelving uploads every file's content.
     local opts = { task = task, effect = 'shelved' }
     if paths then
@@ -160,7 +169,31 @@ function M.shelve(ws, change, paths, cb)
     local title = ('shelve CL %s'):format(change)
     require('perforated.jobs').run(ws, title, args, opts, function(res)
       task.done()
-      co.report('shelve', res, #res.records)
+      -- p4 names every file, then those `-a leaveunchanged` left out ("unchanged, not shelved").
+      local named, unchanged = {}, {}
+      for _, r in ipairs(res.records) do
+        local f = r.depotFile or r.clientFile
+        if f then
+          (r.action == 'unchanged, not shelved' and unchanged or named)[f] = true
+        end
+      end
+      local n, nun, kept = 0, 0, 0
+      for f in pairs(named) do
+        n = n + (unchanged[f] and 0 or 1)
+      end
+      for f in pairs(unchanged) do
+        nun = nun + 1
+        for _, e in ipairs(not replace_all and existing or {}) do
+          kept = kept + (e.depotFile == f and 1 or 0)
+        end
+      end
+      local extra = nun > 0
+          and (' (%d unchanged, not shelved%s)'):format(
+            nun,
+            kept > 0 and ('; %d kept an older shelved version'):format(kept) or ''
+          )
+        or nil
+      co.report('shelve', res, n, extra)
       co.changed(ws, { changes = { change } })
       cb(#res.errors == 0 and #res.records > 0 and not res.stopped)
     end)
@@ -180,7 +213,7 @@ function M.shelve(ws, change, paths, cb)
       if not confirm(msg, '&Replace\n&Cancel') then
         return cb(false)
       end
-      return run(false)
+      return run(false, existing)
     end
     local names = vim.tbl_map(function(f)
       return '  ' .. f
@@ -192,10 +225,11 @@ function M.shelve(ws, change, paths, cb)
       .. ('\n\n%d shelved file(s) are no longer opened in CL %s:\n'):format(#extra, change)
       .. table.concat(names, '\n')
       .. '\n\nReplace keeps them in the shelf; Replace all removes them.'
+      .. (leave and ' Replace all also drops unchanged files from the shelf.' or '')
     local choice =
       require('perforated.ui.prompt').confirm(msg, '&Replace\nReplace &all\n&Cancel', 3)
     if choice == 1 or choice == 2 then
-      return run(choice == 2)
+      return run(choice == 2, existing)
     end
     cb(false)
   end

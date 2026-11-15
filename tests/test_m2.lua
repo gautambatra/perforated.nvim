@@ -3471,6 +3471,84 @@ T['client view']['the describe view of a pending changelist asks only its own fi
   H.eq(child.lua_get('_G.MAXIN'), 2) -- (its shelf and its files)
 end
 
+--- Shelve CL 2 with `shelve` options, answering `choice` to the replace question; returns the
+--- message, the question asked and the shelve command's arguments.
+local function shelve_cl2(opts, choice)
+  child.lua(
+    [=[_G.note, _G.asked, _G.shelve_args, _G.shelved = nil, nil, nil, nil
+    vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { shelve = ... })
+    require('perforated.config').reload()
+    local choice = select(2, ...)
+    require('perforated.ui.prompt').confirm = function(msg) _G.asked = msg; return choice end
+    local toast = require('perforated.ui.toast')
+    local notify = toast.notify
+    toast.notify = function(msg, ...)
+      if msg:find('shelve', 1, true) then _G.note = msg end
+      return notify(msg, ...)
+    end
+    local ws = require('perforated').workspace()
+    local run = ws.run
+    ws.run = function(self, args, ...)
+      if args[1] == 'shelve' then _G.shelve_args = args end
+      return run(self, args, ...)
+    end
+    require('perforated.ops').shelve(ws, '2', nil, function(ok) _G.shelved = ok end)]=],
+    { opts, choice }
+  )
+  wait('_G.shelved ~= nil')
+  return child.lua_get('_G.note'), child.lua_get('_G.asked'), child.lua_get('_G.shelve_args')
+end
+
+--- The files in CL 2's shelf (depot paths).
+local function shelf_cl2()
+  local out =
+    server:p4({ '-ztag', 'describe', '-S', '-s', '2' }, { client = 'alice_ws', cwd = root }).stdout
+  local files = {}
+  for f in out:gmatch('%.%.%. depotFile%d+ (%S+)') do
+    files[#files + 1] = f
+  end
+  table.sort(files)
+  return files
+end
+
+T['client view']["shelve.unchanged = 'leave' shelves only the changed files"] = function()
+  server:p4({ 'edit', '-c', '2', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  local note, _, args = shelve_cl2({ unchanged = 'leave' }, 1)
+  H.eq(note, '[perforated] shelve: 1 file(s) (1 unchanged, not shelved)')
+  H.eq(args, { 'shelve', '-f', '-a', 'leaveunchanged', '-c', '2' })
+  H.eq(shelf_cl2(), { '//depot/a.txt' })
+  H.eq(opened()['//depot/d.txt'], '2') -- (still opened)
+end
+
+T['client view']['an unchanged file that keeps an older shelved version is said'] = function()
+  server:p4({ 'edit', '-c', '2', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  local note = shelve_cl2({ unchanged = 'leave' }, 1)
+  H.eq(
+    note,
+    '[perforated] shelve: 1 file(s) (1 unchanged, not shelved; 1 kept an older shelved version)'
+  )
+  H.eq(shelf_cl2(), { '//depot/a.txt', '//depot/d.txt' })
+end
+
+T['client view']['replace all says unchanged files leave the shelf'] = function()
+  -- d.txt shelved, then reverted: the shelf holds a file no longer opened in CL 2.
+  server:p4({ 'edit', '-c', '2', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-f', '-c', '2' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'revert', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  local _, asked = shelve_cl2({ unchanged = 'leave' }, 3)
+  H.neq(asked:find('Replace all also drops unchanged files from the shelf.', 1, true), nil)
+  _, asked = shelve_cl2({ unchanged = 'shelve' }, 3)
+  H.eq(asked:find('unchanged', 1, true), nil)
+end
+
+T['client view']['shelve.parallel passes the upload threads'] = function()
+  local _, _, args = shelve_cl2({ parallel = 4 }, 1)
+  H.eq(args, { 'shelve', '-f', '--parallel=threads=4', '-c', '2' })
+  _, _, args = shelve_cl2({ parallel = 0 }, 1)
+  H.eq(args, { 'shelve', '-f', '-c', '2' })
+end
+
 T['client view']['the opened-files list and the describe view take markers from the cache'] = function()
   open_view_cached() -- (its markers went to the workspace's cache)
   track_marker_queries()

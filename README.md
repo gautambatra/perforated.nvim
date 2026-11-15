@@ -297,6 +297,10 @@ opts = {
     },
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
+  shelve = {
+    parallel = 0, -- upload threads (--parallel=threads=N) when the server allows; 0 = off
+    unchanged = 'shelve', -- 'leave': shelve only changed files (-a leaveunchanged)
+  },
   timelapse = {
     max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
     slider = true,

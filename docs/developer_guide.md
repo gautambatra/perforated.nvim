@@ -1400,7 +1400,10 @@ delete asks `shelf` (status, client, description, shelf) with `fstat_change` (th
 or revert), plus a `describe -s` only for another client's changelist (`change.allow_force`),
 whose opened files only it sees; re-shelving a whole changelist asks `shelved_files` with
 `opened -c`.
-Shelve (`shelve -f`, confirmation before replacing; when a whole changelist is re-shelved and
+Shelve (`shelve -f`, plus `-a leaveunchanged` with `shelve.unchanged = 'leave'` and
+`--parallel=threads=N` with `shelve.parallel`; the report counts the files p4 named minus its
+"unchanged, not shelved" records, and notes unchanged files whose older version `-f` kept in the
+shelf; confirmation before replacing; when a whole changelist is re-shelved and
 one `opened -c` shows the shelf holding files no longer opened in it, a third choice "replace
 all" runs `shelve -r` and the prompt lists those files), delete shelved files, unshelve (into the
 shelf's own changelist when it's yours, else a picked one; `-f` only after confirming, and
