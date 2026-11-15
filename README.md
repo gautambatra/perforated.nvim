@@ -141,7 +141,9 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 
 `:P4` shows your pending changelists, shelves, files needing attention, workspace reconcile
 and recent submits, in one tab. It refreshes itself after every action and when someone
-else's change affects you; `<F5>` refreshes by hand.
+else's change affects you; `<F5>` refreshes by hand. Files you edit outside Neovim get
+their changed marker (`●`) at the next background check, which only asks p4 about files whose
+modification time or size moved.
 
 - `.` or right-click opens a menu of what you can do with the line under the cursor.
 - `?` lists every key; the footer shows the ones for the current line.

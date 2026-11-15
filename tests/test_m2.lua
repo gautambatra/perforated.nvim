@@ -3093,6 +3093,141 @@ T['client view']['the opened-files picker right after a refresh asks nothing'] =
   )
 end
 
+--- Run the background check and wait until it and the view's refresh after it are done.
+local function probe()
+  child.lua([[require('perforated.poll').probe(require('perforated').workspace())]])
+  vim.uv.sleep(300) -- (the view's 150 ms settle)
+  H.wait_idle(child)
+  wait(('not (%s).loading'):format(view_expr(root)))
+end
+
+--- From now on, record the paths each changed-markers query asks about ('all': every file).
+local function track_marker_queries()
+  child.lua([[_G.MARKERS = {}
+    if _G.MARKERS_HOOKED then return end
+    _G.MARKERS_HOOKED = true
+    local m = require('perforated.modified')
+    local query = m.query
+    m.query = function(ws, paths, cb)
+      table.insert(_G.MARKERS, paths and vim.tbl_map(function(p)
+        return vim.fs.basename(p)
+      end, paths) or 'all')
+      return query(ws, paths, cb)
+    end]])
+end
+
+T['client view']['a description edited elsewhere refreshes the changelists only'] = function()
+  open_view()
+  probe() -- baseline
+  track_calls()
+  track_marker_queries()
+  local spec = server:p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
+  server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = (spec:gsub('Fix parser', 'Fix the parser')) }
+  )
+  probe()
+  H.eq(has_line('Fix the parser'), true, view_text())
+  -- No shelves, no changed markers, no submitted list: only the changelists were asked again.
+  H.eq(child.lua_get('_G.MARKERS'), {})
+  H.eq(count_calls({ 'describe -S', 'diff -sa', 'changes -s submitted -l -m' }), {})
+end
+
+T['client view']['a file opened elsewhere re-checks only that file'] = function()
+  open_view()
+  probe()
+  track_calls()
+  track_marker_queries()
+  server:p4({ 'edit', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  probe()
+  H.eq(has_line('d.txt'), true, view_text())
+  H.eq(child.lua_get('_G.MARKERS'), { { 'd.txt' } })
+  H.eq(count_calls({ 'describe -S', 'changes -s submitted -l -m' }), {})
+  -- Reverted elsewhere: it drops out without a marker query; it may have been submitted, so
+  -- Recent submitted is asked again.
+  track_calls()
+  track_marker_queries()
+  server:p4({ 'revert', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  probe()
+  H.eq(has_line('d.txt'), false, view_text())
+  for _, asked in ipairs(child.lua_get('_G.MARKERS')) do
+    H.eq(asked, {}) -- (nothing to ask: no p4 call)
+  end
+  H.eq(count_calls({ 'describe -S', 'diff -sa' }), {})
+  H.eq(count_calls({ 'changes -s submitted -l -m' }), { ['changes -s submitted -l -m'] = 1 })
+end
+
+T['client view']['a changelist gone elsewhere asks the submitted list, a new shelf only its own'] = function()
+  local out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tShort-lived\n' }
+  ).stdout
+  local cl = out:match('Change (%d+) created')
+  open_view()
+  probe()
+  track_calls()
+  server:p4({ 'change', '-d', cl }, { client = 'alice_ws', cwd = root })
+  probe()
+  H.eq(has_line('Short-lived'), false, view_text())
+  H.eq(count_calls({ 'describe -S', 'diff -sa' }), {})
+  H.eq(count_calls({ 'changes -s submitted -l -m' }), { ['changes -s submitted -l -m'] = 1 })
+  -- b.txt shelved elsewhere into a new changelist: one shelf query, for that changelist.
+  out = server:p4(
+    { 'change', '-i' },
+    { client = 'alice_ws', cwd = root, stdin = 'Change: new\nDescription:\n\tShelf elsewhere\n' }
+  ).stdout
+  local cl2 = out:match('Change (%d+) created')
+  server:p4({ 'reopen', '-c', cl2, root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  server:p4({ 'shelve', '-c', cl2 }, { client = 'alice_ws', cwd = root })
+  track_calls()
+  probe()
+  local shelves = vim.tbl_filter(function(c)
+    return c:sub(1, 11) == 'describe -S'
+  end, child.lua_get('_G.CALLS'))
+  H.eq(#shelves, 1, vim.inspect(shelves))
+  H.eq(shelves[1]:match('%d+$'), cl2)
+end
+
+--- Whether the view marks `rel` as changed.
+local function marked(rel)
+  return child.lua_get(
+    ([[(%s.data.modified or {})[require('perforated.p4').key(require('perforated').workspace(), %q)] == true]]):format(
+      view_expr(root),
+      root .. '/' .. rel
+    )
+  )
+end
+
+T['client view']['a file edited outside Neovim is marked at the next background check'] = function()
+  open_view()
+  probe()
+  H.eq(marked('b.txt'), false)
+  -- Nothing edited: no marker is asked again.
+  track_calls()
+  track_marker_queries()
+  probe()
+  H.eq(child.lua_get('_G.MARKERS'), {})
+  H.eq(count_calls({ 'diff -sa' }), {})
+  -- Edited by another program: only it is asked, and it shows as changed.
+  H.write(root .. '/b.txt', 'b1 edited elsewhere\n')
+  probe()
+  wait(
+    ([[(%s.data.modified or {})[require('perforated.p4').key(require('perforated').workspace(), %q)] == true]]):format(
+      view_expr(root),
+      root .. '/b.txt'
+    )
+  )
+  H.eq(child.lua_get('_G.MARKERS'), { { 'b.txt' } })
+  -- Its stats are the new baseline: the next check asks nothing.
+  track_marker_queries()
+  probe()
+  H.eq(child.lua_get('_G.MARKERS'), {})
+  -- <F5> still asks every marker.
+  f5()
+  H.eq(child.lua_get('_G.MARKERS'), { 'all' })
+  H.eq(marked('b.txt'), true)
+end
+
 T['client view']['with the view closed, an edit and a revert ask for that file once each'] = function()
   child.cmd('edit ' .. root .. '/d.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])

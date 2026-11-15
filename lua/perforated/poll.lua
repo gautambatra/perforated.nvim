@@ -114,6 +114,7 @@ function M.refresh(ws, opts, cb)
         end
       end
     end
+    local prev_opened = ws.opened
     ws.opened = opened
     if not named then
       ws.opened_stamp = stamp
@@ -178,9 +179,10 @@ function M.refresh(ws, opts, cb)
     end
     -- News for views and lists (a visible client view refreshes, resolve lists re-check): only
     -- when the opened files' state really differs from the last refresh, never on the first.
-    local sig = {}
+    -- It names the files that differ (`poll_news`).
+    local sig, sigs = {}, {}
     for _, r in ipairs(recs) do
-      sig[#sig + 1] = table.concat({
+      local s = table.concat({
         r.depotFile,
         r.haveRev or '',
         r.headRev or '',
@@ -188,13 +190,14 @@ function M.refresh(ws, opts, cb)
         r.change or '',
         r.unresolved and 'u' or '',
       }, '|')
+      sig[#sig + 1], sigs[r.depotFile] = s, s
     end
     table.sort(sig)
     local key = table.concat(sig, '\n')
     if ws.poll_sig and ws.poll_sig ~= key and not explained then
-      require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
+      require('perforated.poll_news').opened(ws, ws.poll_sigs or {}, sigs, prev_opened, opened)
     end
-    ws.poll_sig = key
+    ws.poll_sig, ws.poll_sigs = key, sigs
     finish(recs, res)
   end)
 end
@@ -213,6 +216,16 @@ function M.following(ws)
   return started[ws.key] == true
 end
 
+local probe_hooks = {} ---@type table<string, fun(ws: perforated.Workspace)>
+
+--- Run `fn(ws)` with each probe (a visible client view re-checks files edited since their
+--- marker); `fn = nil` removes it.
+---@param id string
+---@param fn fun(ws: perforated.Workspace)?
+function M.on_probe(id, fn)
+  probe_hooks[id] = fn
+end
+
 --- Cheap probe; escalates to a full refresh (plus loaded clean buffers) only on news.
 ---@param ws perforated.Workspace
 function M.probe(ws)
@@ -226,6 +239,9 @@ function M.probe(ws)
       tostring(M.focused)
     )
     return
+  end
+  for _, fn in pairs(probe_hooks) do
+    fn(ws)
   end
   -- Opened files changed elsewhere (unshelve, edit, revert, reopen from another terminal)?
   -- Compared with the last full refresh; works with nothing opened yet, too.
@@ -264,19 +280,20 @@ function M.probe(ws)
           return
         end
         p4.keep_pending(ws, stamp, res.records) -- pickers and prompts may reuse it
-        local sig = {}
+        local sig, sigs = {}, {}
         for _, r in ipairs(res.records) do
           if r.change then
-            sig[#sig + 1] = table.concat({ r.change, r.desc or '', r.shelved and 's' or '' }, '|')
+            local s = table.concat({ r.change, r.desc or '', r.shelved and 's' or '' }, '|')
+            sig[#sig + 1], sigs[r.change] = s, { sig = s, shelved = r.shelved ~= nil }
           end
         end
         table.sort(sig)
         local key = table.concat(sig, '\n')
         if ws.pending_sig and ws.pending_sig ~= key then
           dbg.debug('poll', '%s probe: pending changelists changed elsewhere', ws.key)
-          require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll' })
+          require('perforated.poll_news').pending(ws, ws.pending_sigs or {}, sigs)
         end
-        ws.pending_sig = key
+        ws.pending_sig, ws.pending_sigs = key, sigs
       end
     )
   end

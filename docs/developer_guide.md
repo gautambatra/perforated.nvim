@@ -538,6 +538,7 @@ lua/perforated/
   checkout_prompt.lua        the check-out menu and changelist picker (loaded on first use)
   poll.lua                   stale/unresolved detection (cheap probe, full refresh on news)
   poll_follow.lua            following the plugin's changes: the follow-up refresh, `settled` (lazy)
+  poll_news.lua              what the poll's news names: changed files, changelists' shelves (lazy)
   stale_toast.lua            the toast for newly stale opened files (lazy)
   changelists.lua            changelist queries: describe, shelved files, submitted, reopen…
   lists.lua                  quickfix producers: opened files, status, hunks
@@ -798,8 +799,9 @@ why keys, menus and help never disagree.
    files, update buffers and statuslines, raise a toast for newly stale files and emit
    `PerforatedChanged` (a visible client view refreshes).
 3. A third query, `p4 changes -s pending -l -c <client>`, is compared with the previous probe
-   (`change|desc|shelved`): a changelist created, deleted, described or shelved elsewhere only
-   emits `PerforatedChanged` (no fstat needed). Its answer is kept (`p4.keep_pending`).
+   (`change|desc|shelved`, per changelist in `ws.pending_sigs`): a changelist created,
+   deleted, described or shelved elsewhere only emits `PerforatedChanged` (no fstat needed),
+   naming the changelists whose shelf came or went (`no_files`). Its answer is kept (`p4.keep_pending`).
 4. Reuse: state fetched moments ago answers again (`poll.reuse`, 5 s; 0 = off). Each answer
    carries a `p4.stamp(ws)` taken when it was asked (time and `ws.opened_gen`), and
    `p4.fresh(ws, stamp)` holds while it's younger than `poll.reuse` and no change has bumped
@@ -836,9 +838,15 @@ why keys, menus and help never disagree.
    with no shelf left drops out), an empty list none. Shelve, delete shelved and delete
    changelist name their changelist; a description save and unshelve name none (the
    description comes from the pending list, and unshelving changes no shelf). Merged events
-   list every changelist they name, `true` winning. The Sync CL and Recent submitted keep their answers. A `poll` event re-runs
-   everything but the Sync CL (`POLLED`: its `changes -m1 #have` reads the whole have list,
-   and only a sync moves it). An event naming nothing, a `refresh` event, `<F5>`, the scope
+   list every changelist they name, `true` winning. The Sync CL and Recent submitted keep their answers;
+   `submitted = true` asks Recent submitted again. A `poll` event says what it found
+   changed (`poll_news.lua`, loaded with the first news): `files`, the files whose opened
+   records differ (the view re-checks markers only of those still opened, `still_opened`:
+   reverted or submitted ones drop out unasked), or `changes`, the changelists whose shelf
+   came or went (a description edit names none), with `submitted` when an opened file or a
+   changelist went away or a head revision moved. More than `CHANGED_FILES_MAX` files, or
+   no detail, re-runs everything but the Sync CL (`POLLED`: its `changes -m1 #have` reads
+   the whole have list, and only a sync moves it). An event naming nothing, a `refresh` event, `<F5>`, the scope
    toggle and the first refresh re-run everything. A query that fails leaves its section's
    previous answer in place (pending changelists and opened files only ever change
    together) and puts `refresh failed: <res.err>` at the top of Pending; every run result
@@ -868,7 +876,19 @@ why keys, menus and help never disagree.
    one `fstat -Ro`.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background
-   news reaches the view and the quickfix resolve lists without a timer of their own. `:P4 refresh`
+   news reaches the view and the quickfix resolve lists without a timer of their own. It
+   keeps a signature per file (`ws.poll_sigs`) and names the files that differ; the
+   resolve lists re-check only those.
+   Edits outside Neovim change no Perforce record, so no news names them. Instead, each
+   marker answer carries the files' local stats taken just before `diff -sa` ran
+   (`modified.query_stat`: `mtime` in ns and size, `view.data.mstat`), and every probe runs
+   `poll.on_probe` hooks: a visible view's `recheck_touched` stats the opened files
+   (`modified.touched`, `vim.uv.fs_stat`, no p4 call) and runs `diff -sa` of only those whose
+   stats differ or have none, updating their markers and stats in place. Taking the stats
+   before the diff means an edit during it shows as a difference next time rather than being
+   missed. A first full refresh with `ws.opened` not known yet (`:P4` in a fresh Neovim)
+   records no stats, so the first probe re-checks every file once. `<F5>` and `:P4 refresh`
+   stay a full `diff -sa` (tools such as `cp -p` keep the mtime). `:P4 refresh`
    emits one (`source = 'refresh'`) after re-checking every open buffer (`buffer.refresh_all`,
    one batched fstat) and the opened files (`poll.refresh`). Other events also make `poll.lua` run one
    `poll.refresh` once they settle, for the counts and statuslines (see `poll.lua` below).
@@ -1157,7 +1177,9 @@ test finding).
 
 #### `modified.lua`
 "Changed vs unchanged" for opened files: `query(ws, paths)` runs `p4 diff -sa` (p4 compares
-locally); `overlay(ws)` uses loaded buffers' own diff state for unsaved edits; `is_changed`
+locally); `query_stat` adds the files' local stats taken before it (`mtime` ns and size), and
+`touched(ws, baseline)` lists the opened files whose stats differ from a baseline (local
+`fs_stat` only, no p4 call); `overlay(ws)` uses loaded buffers' own diff state for unsaved edits; `is_changed`
 combines them (adds/deletes/moves always count as changed); `marker(changed)` returns the `●`
 chunk and the row highlight.
 

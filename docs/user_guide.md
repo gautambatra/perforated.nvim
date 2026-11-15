@@ -164,9 +164,23 @@ resolving does the same for the files involved. The file's buffer, the statuslin
 any list of files to resolve take their state from that same answer. Editing a description re-reads only the changelists;
 shelving, deleting shelved files or deleting a changelist re-reads them and that one
 changelist's shelf. The Sync CL and Recent submitted are asked
-again after a submit or sync. News from the background check re-reads everything but the Sync
-CL: finding it means reading your whole workspace's have list, which is slow on a large
-workspace, and only a sync moves it. A sync made outside Neovim shows there on `<F5>`.
+again after a submit or sync. News from the background check re-reads only what it found
+changed: files opened, reverted, moved or brought up to date elsewhere re-read your
+changelists and those files' changed markers; a changelist created, described or deleted
+elsewhere re-reads the changelists, plus the shelf of one that gained or lost shelved
+files. Recent submitted is asked again when a changelist or an opened file went away (it
+may have been submitted) or a newer revision of an opened file appeared. The Sync CL is
+never asked for it: finding it means reading your whole workspace's have list, which is slow
+on a large workspace, and only a sync moves it. A sync made outside Neovim shows there on
+`<F5>`.
+
+Files you edit outside Neovim (another editor, a script, a code generator) get their changed
+marker at the next background check while the view is visible (`poll.interval`, or when you
+return to Neovim). The check looks at each opened file's modification time and size, with no
+p4 call, and asks p4 only about the files that changed since their marker was found; with
+nothing edited it asks nothing. A tool that rewrites a file but keeps its old modification
+time and size (`cp -p`, `rsync -a`) isn't noticed: `<F5>` and `:P4 refresh` always ask about
+every opened file.
 
 If p4 doesn't answer a query (an error, or no reply within `runner.timeout`), its section
 keeps what it showed before, and the view's first line says `refresh failed:` and why. The

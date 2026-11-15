@@ -45,6 +45,80 @@ function M.query(ws, paths, cb)
   end)
 end
 
+--- Local stats of `paths` (local paths), all at once: key → `mtime(ns):size`, false when the
+--- file is missing. A marker answered after these were taken holds while they still match:
+--- a file whose stats didn't change needn't be asked again (`touched`).
+---@param ws perforated.Workspace
+---@param paths string[]
+---@param cb fun(stats: table<string, string|false>)
+function M.stats(ws, paths, cb)
+  local out, left = {}, #paths
+  if left == 0 then
+    return vim.schedule(function()
+      cb(out)
+    end)
+  end
+  for _, p in ipairs(paths) do
+    local k = p4.key(ws, p)
+    vim.uv.fs_stat(p, function(_, st)
+      out[k] = st and ('%d.%09d:%d'):format(st.mtime.sec, st.mtime.nsec, st.size) or false
+      left = left - 1
+      if left == 0 then
+        vim.schedule(function()
+          cb(out)
+        end)
+      end
+    end)
+  end
+end
+
+--- `query`, with the files' stats taken before it asked (`stats`).
+---@param ws perforated.Workspace
+---@param paths string[]?  nil = every opened file (stats of those `ws.opened` knows)
+---@param cb fun(set: table<string, true>?, stats: table<string, string|false>)
+function M.query_stat(ws, paths, cb)
+  local files = paths
+      and vim.tbl_filter(function(p)
+        return p:sub(1, 2) ~= '//' -- (a depot path: no local file to stat)
+      end, paths)
+    or M.opened_paths(ws)
+  M.stats(ws, files, function(stats)
+    M.query(ws, paths, function(set)
+      cb(set, stats)
+    end)
+  end)
+end
+
+--- This client's opened files as local paths.
+---@param ws perforated.Workspace
+---@return string[]
+function M.opened_paths(ws)
+  local out = {}
+  for _, r in pairs(ws.opened or {}) do
+    if r.clientFile then
+      out[#out + 1] = r.clientFile
+    end
+  end
+  table.sort(out)
+  return out
+end
+
+--- The opened files whose local stats differ from `baseline` (or have none): edited since
+--- their marker was answered, inside Neovim or out. Their stats now, for the next baseline.
+---@param ws perforated.Workspace
+---@param baseline table<string, string|false>
+---@param cb fun(paths: string[], stats: table<string, string|false>)
+function M.touched(ws, baseline, cb)
+  local paths = M.opened_paths(ws)
+  M.stats(ws, paths, function(stats)
+    local out = vim.tbl_filter(function(p)
+      local k = p4.key(ws, p)
+      return baseline[k] == nil or baseline[k] ~= stats[k]
+    end, paths)
+    cb(out, stats)
+  end)
+end
+
 --- Changed/unchanged for files open in Neovim with unsaved edits (their buffer's diff state),
 --- keyed like M.query's set. Compute once per render.
 ---@param ws perforated.Workspace

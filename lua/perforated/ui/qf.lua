@@ -422,7 +422,7 @@ function M.setup()
       local ws = d.ws and require('perforated.core.workspace').get(d.ws)
       if not ws then
         prune_owed.any = true
-      elseif not d.files or d.source then
+      elseif not d.files or (d.source and d.source ~= 'poll') then -- (the poll's news names its files)
         prune_owed.all[ws.key] = true
       else
         local set = prune_owed.files[ws.key] or {}

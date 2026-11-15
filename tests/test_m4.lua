@@ -705,6 +705,17 @@ T['m4']['the resolve list re-checks only the files a change names'] = function()
   vim.uv.sleep(1000)
   H.wait_idle(child)
   H.eq(child.lua_get('#vim.fn.getqflist()'), 1)
+  -- The background check's news names its files the same way.
+  child.lua(
+    ([[local ws = require('perforated').workspace(vim.fn.bufnr(%q))
+      require('perforated.core.events').emit('Changed', { ws = ws.key, source = 'poll', files = { %q } })]]):format(
+      root .. '/main/a.txt',
+      root .. '/main/a.txt'
+    )
+  )
+  vim.uv.sleep(1000)
+  H.wait_idle(child)
+  H.eq(child.lua_get('#vim.fn.getqflist()'), 1)
   -- A change naming it: the list follows.
   changed('main/b.txt')
   wait([[#vim.fn.getqflist() == 0]])
