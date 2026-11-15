@@ -518,6 +518,7 @@ lua/perforated/
     activation.lua           gate hit → Workspace; environment-only (P4CLIENT) setups
     workspace.lua            Workspace registry and object: run(), info, idle, caches
     conn.lua                 connection state machine: online/offline/auth, login
+    login.lua                password prompt, `p4 login` (no timeout), ticket check on focus (lazy)
     queue.lua                global process queue: concurrency, priorities, dedup, pause
     runner.lua               spawn p4 (vim.system), stream JSON, timeouts, cancel
     parse.lua                -Mj -ztag JSON lines, messages vs records, indexed fields
@@ -1021,6 +1022,19 @@ reason to fail fast (offline, cancelled login). `need_auth(retry)` coordinates a
 per workspace: queue group paused, `login_pending` set, one `inputsecret` prompt, `p4 login`
 via stdin, `epoch` bumped on success, waiters retried. `probe()` and the backoff timer handle
 recovery from offline.
+
+#### `core/login.lua`
+Loaded with the first login (`Conn:login` forwards to it). `login(conn, cb)`: the password
+prompt, then `p4 login` with **no timeout**: with browser-based multi-factor authentication it
+waits until the sign-in finishes in the browser (the call timeout used to kill it there, leaving
+the workspace `offline_auth`). After `BUSY_MS` (500 ms) still running, a busy pop-up says
+"Waiting for the sign-in to finish…" with Ctrl+c (`toast.busy` cancel → the process's
+`on_spawn` control; a cancelled login is `offline_auth`, "login cancelled"). A failure says p4's
+own words: an error record, stderr, else a lower-severity message (never the runner's `exit N`).
+`watch(conn)` runs when a connection becomes `offline_auth` (`Conn:_set`): a FocusGained
+autocmd (throttled by `poll.focus_throttle`) runs `check(conn)`, `p4 login -s` (probe, no
+prompt, not observed), and a valid ticket brings it back online (`epoch` bumped; pending
+buffers retried): a login finished in a terminal, P4V or the browser counts.
 
 #### `core/queue.lua`
 A global queue of process jobs: `cap` concurrent jobs (config `runner.concurrency`),
@@ -2047,7 +2061,7 @@ mixed-case path. CI runs this leg on Linux.
 |---|---|
 | `test_activation.lua` | dormancy, gate, workspaces, command list vs plugin/, aliases, completion |
 | `test_runner.lua`, `test_parse.lua`, `test_cache_queue_config.lua` | core units |
-| `test_conn.lua` | offline/backoff, auth: one prompt, stale-auth retry, login races |
+| `test_conn.lua` | offline/backoff, auth: one prompt, stale-auth retry, login races, a slow (browser) sign-in, Ctrl+c, ticket recovery on focus |
 | `test_engine.lua` | diff engine: hunk types, ranges, async = sync |
 | `test_debug.lua` | debug log, redaction |
 | `test_integration.lua` | real p4d end to end: fstat, info, expired login |

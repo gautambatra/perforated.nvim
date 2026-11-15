@@ -331,4 +331,119 @@ T['auth']['calls queued behind a cancelled prompt do not prompt again'] = functi
   H.eq(child.lua_get('_G.ws.conn.state'), 'offline_auth')
 end
 
+--- Set config values in the child.
+local function config(over)
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated or {}, ...)
+    require('perforated.config').reload()]],
+    { over }
+  )
+end
+
+--- Record busy pop-ups (`_G.busy`: their messages; `_G.cancel`: the last one's Ctrl+c).
+local function track_busy()
+  child.lua([[_G.busy = {}
+    local toast = require('perforated.ui.toast')
+    local busy = toast.busy
+    toast.busy = function(msg, opts)
+      table.insert(_G.busy, msg)
+      _G.cancel = opts and opts.cancel
+      return busy(msg, opts)
+    end]])
+end
+
+T['auth']['a login that waits for a browser sign-in is not cut off'] = function()
+  local marker = H.tmp() .. '/logged-in'
+  setup({
+    { match = '^login', sleep = 1.0, touch = marker, records = { { User = 'alice' } } },
+    { match = '^opened', unless = marker, records = AUTH_ERR },
+    { match = '^opened', records = { { depotFile = '//depot/a.c' } } },
+  })
+  config({ runner = { timeout = 300 } }) -- (far shorter than the sign-in)
+  track_busy()
+  child.lua([[vim.fn.inputsecret = function() return 's3cret' end]])
+  local r = run({ 'opened' })
+  H.eq(r.ok, true)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'online')
+  H.eq(child.lua_get('_G.busy'), { 'Waiting for the sign-in to finish…' })
+end
+
+T['auth']['Ctrl+c while waiting for the sign-in cancels the login'] = function()
+  setup({
+    { match = '^login', hang = true },
+    { match = '^opened', records = AUTH_ERR },
+  })
+  track_busy()
+  child.lua([[vim.fn.inputsecret = function() return 's3cret' end]])
+  child.lua('_G.run(...)', { { 'opened' } })
+  H.eq(H.wait(child, '_G.cancel ~= nil', 5000), true)
+  child.lua('_G.cancel()')
+  H.eq(H.wait(child, '_G.res ~= nil', 10000), true)
+  H.eq(child.lua_get('_G.res.ok'), false)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'offline_auth')
+  H.eq(child.lua_get('_G.ws.conn.last_error'), 'login cancelled')
+end
+
+T['auth']['a quick login shows no busy pop-up'] = function()
+  setup({
+    { match = '^login', records = { { User = 'alice' } } },
+    { match = '^opened', records = { { depotFile = '//depot/a.c' } } },
+  })
+  track_busy()
+  child.lua([[vim.fn.inputsecret = function() return 's3cret' end
+    _G.ok = nil
+    _G.ws.conn:login(function(ok) _G.ok = ok end)]])
+  H.eq(H.wait(child, '_G.ok ~= nil', 5000), true)
+  vim.uv.sleep(700)
+  H.eq(child.lua_get('_G.busy'), {})
+end
+
+T['auth']['logged out: a ticket got elsewhere brings it back online on focus'] = function()
+  local marker = H.tmp() .. '/ticket'
+  setup({
+    {
+      match = '^login %-s',
+      unless = marker,
+      records = {
+        { data = 'Perforce password (P4PASSWD) invalid or unset.\n', generic = 36, severity = 3 },
+      },
+    },
+    { match = '^login %-s', records = { { User = 'alice', TicketExpiration = '43200' } } },
+    { match = '^opened', records = AUTH_ERR },
+  })
+  config({ poll = { focus_throttle = 0.2 } })
+  child.lua([[_G.prompts = 0
+    vim.fn.inputsecret = function() _G.prompts = _G.prompts + 1; return '' end]])
+  run({ 'opened' }) -- (the prompt is cancelled: offline_auth)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'offline_auth')
+  child.cmd('doautocmd FocusGained')
+  vim.uv.sleep(400)
+  H.eq(child.lua_get('_G.ws.conn.state'), 'offline_auth')
+  -- Signed in from a terminal (or the browser sign-in finished): the next return checks.
+  H.write(marker, '')
+  child.cmd('doautocmd FocusGained')
+  H.eq(H.wait(child, [[_G.ws.conn.state == 'online']], 5000), true)
+  H.eq(#H.calls_matching(child.fake.log, 'login -s'), 2)
+  H.eq(child.lua_get('_G.prompts'), 1)
+end
+
+T['auth']['a failed login says what p4 printed'] = function()
+  setup({
+    {
+      match = '^login',
+      code = 1,
+      records = { { data = 'SSO helper: access denied\n', generic = 0, severity = 2 } },
+    },
+    { match = '^opened', records = AUTH_ERR },
+  })
+  child.lua([[vim.fn.inputsecret = function() return 's3cret' end
+    _G.notes = {}
+    local toast = require('perforated.ui.toast')
+    local notify = toast.notify
+    toast.notify = function(msg, ...) table.insert(_G.notes, msg); return notify(msg, ...) end]])
+  run({ 'opened' })
+  H.eq(child.lua_get('_G.ws.conn.last_error'), 'SSO helper: access denied')
+  H.eq(child.lua_get('_G.notes'), { '[perforated] login failed: SSO helper: access denied' })
+end
+
 return T

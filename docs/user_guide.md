@@ -829,7 +829,11 @@ the one that last changed the line, history, annotate, time-lapse.
 - **Several workspaces** can be open in one session; each keeps its own connection, caches and
   settings. Several Neovim instances on one machine never interfere.
 - **Expired login:** exactly one password prompt, then the calls that failed are retried. If
-  you cancel it, calls fail fast and the statusline shows `⊘login` until `:P4 login`.
+  you cancel it, calls fail fast and the statusline shows `⊘login` until `:P4 login`, or until
+  you come back to Neovim after logging in elsewhere (a terminal, P4V): each return checks the
+  ticket (`p4 login -s`, no prompt).
+- **Multi-factor sign-in in the browser:** the login waits as long as the sign-in takes. A
+  pop-up says "Waiting for the sign-in to finish…"; Ctrl+c cancels the login.
 - **Unreachable server:** offline mode. Calls fail immediately with a clear message, and a
   background retry backs off from 5 s to 5 min; the statusline shows `⊘`. A command that's
   merely slow doesn't count: the plugin checks the server first and only goes offline if that

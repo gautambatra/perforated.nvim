@@ -5,7 +5,8 @@
 ---      ▼              ▼
 ---   offline ◀───── (backoff probes: `p4 -ztag info -s`, 5s → 5min) ──ok──▶ online
 ---   auth_needed ── password prompt (once) ──ok──▶ online
----                                        └─cancel/fail──▶ offline_auth (fail fast; :P4 login)
+---                                        └─cancel/fail──▶ offline_auth (fail fast; :P4 login,
+---                                                          or a valid ticket at FocusGained)
 
 local events = require('perforated.core.events')
 
@@ -68,6 +69,7 @@ end
 ---@field last_error string?
 ---@field epoch integer          bumped on every successful login
 ---@field login_pending boolean? a login (prompt + p4 login) is in progress
+---@field checking_ticket boolean? a `p4 login -s` check (core/login.lua) is running
 local Conn = {}
 Conn.__index = Conn
 
@@ -95,6 +97,9 @@ function Conn:_set(state, err)
   )
   local refused = self.state == 'offline' or self.state == 'offline_auth'
   self.state = state
+  if state == 'offline_auth' then
+    require('perforated.core.login').watch(self) -- (a ticket got elsewhere brings it back)
+  end
   self.last_error = err
   events.emit('Status', { ws = self.ws.key, conn = state })
   local status = package.loaded['perforated.status']
@@ -251,35 +256,10 @@ function Conn:need_auth(retry)
   end)
 end
 
---- Prompt for a password (inputsecret) and run `p4 login` with it on stdin.
+--- Prompt for a password and run `p4 login` (core/login.lua).
 ---@param cb fun(ok: boolean)
 function Conn:login(cb)
-  local user = self.ws.settings and self.ws.settings.P4USER or ''
-  local prompt = ('Perforce password%s: '):format(user ~= '' and (' for ' .. user) or '')
-  local ok_input, pw = pcall(vim.fn.inputsecret, prompt)
-  if not ok_input or pw == nil or pw == '' then
-    self:_set('offline_auth', 'login cancelled')
-    return cb(false)
-  end
-  self.ws:run(
-    { 'login' },
-    { probe = true, force = true, stdin = pw, priority = 1, no_auth_retry = true },
-    function(res)
-      if res.ok then
-        self.epoch = self.epoch + 1
-        self:_set('online')
-        cb(true)
-      else
-        local msg = res.errors[1] or vim.trim(res.stderr)
-        self:_set('offline_auth', msg)
-        require('perforated.ui.toast').notify(
-          '[perforated] login failed: ' .. msg,
-          vim.log.levels.ERROR
-        )
-        cb(false)
-      end
-    end
-  )
+  require('perforated.core.login').login(self, cb)
 end
 
 function Conn:dispose()
