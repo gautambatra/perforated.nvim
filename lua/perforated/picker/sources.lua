@@ -33,7 +33,7 @@ function M.pending(ws)
         vim.log.levels.ERROR
       )
     end
-    p4.fstat_opened(ws, {}, function(recs, res)
+    p4.fstat_opened(ws, { reuse = true }, function(recs, res)
       if not recs then
         return require('perforated.ui.toast').notify(
           '[perforated] ' .. (res.errors[1] or vim.trim(res.stderr or '')),
@@ -68,12 +68,12 @@ function M.pending(ws)
         end,
       })
     end)
-  end)
+  end, nil, { reuse = true })
 end
 
 --- Opened files → open them.
 function M.opened(ws)
-  p4.fstat_opened(ws, {}, function(recs, res)
+  p4.fstat_opened(ws, { reuse = true }, function(recs, res)
     if not recs then
       return require('perforated.ui.toast').notify(
         '[perforated] opened files: ' .. (res.errors[1] or vim.trim(res.stderr or '')),

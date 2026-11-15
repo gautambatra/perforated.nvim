@@ -90,7 +90,7 @@ function M.opened_items(ws, cb)
     end
     cb(items)
   end
-  p4.fstat_opened(ws, {}, function(r, res)
+  p4.fstat_opened(ws, { reuse = true }, function(r, res)
     recs = r or {}
     err = not r and failure(res) or nil
     done()
@@ -98,7 +98,7 @@ function M.opened_items(ws, cb)
   p4.pending_changes(ws, function(c)
     changes = c or {}
     done()
-  end)
+  end, nil, { reuse = true })
   require('perforated.modified').query(ws, nil, function(set)
     modified = set or false
     done()
@@ -109,7 +109,7 @@ end
 ---@param ws perforated.Workspace
 ---@param cb fun(items: table[], err: string?)
 function M.status_items(ws, cb)
-  p4.fstat_opened(ws, {}, function(recs, res)
+  p4.fstat_opened(ws, { reuse = true }, function(recs, res)
     if not recs then
       return cb({}, failure(res))
     end
@@ -184,7 +184,7 @@ end
 ---@param ws perforated.Workspace
 ---@param cb fun(items: table[], err: string?)  `err` when the opened files couldn't be listed
 function M.all_hunk_items(ws, cb)
-  p4.fstat_opened(ws, {}, function(recs, res)
+  p4.fstat_opened(ws, { reuse = true }, function(recs, res)
     if not recs then
       return cb({}, failure(res))
     end

@@ -528,6 +528,7 @@ lua/perforated/
     events.lua               User autocmd events
   p4.lua                     typed p4 wrappers: fstat, print, pending changes, edit/add/revert
   p4_batch.lua               print snapshots and prints of several files in one call (lazy)
+  p4_cmds.lua                pending changelists, new changelist, edit/add/revert (lazy)
   buffer.lua                 per-buffer state, attach pipeline, base text, diff, signs
   signs.lua                  gutter signs, hunk navigation, reset
   signs_preview.lua          the hunk preview float and its word diff (loaded on first use)
@@ -537,6 +538,7 @@ lua/perforated/
   checkout_prompt.lua        the check-out menu and changelist picker (loaded on first use)
   poll.lua                   stale/unresolved detection (cheap probe, full refresh on news)
   poll_follow.lua            following the plugin's changes: the follow-up refresh, `settled` (lazy)
+  stale_toast.lua            the toast for newly stale opened files (lazy)
   changelists.lua            changelist queries: describe, shelved files, submitted, reopen…
   lists.lua                  quickfix producers: opened files, status, hunks
   uri.lua                    perforated:// buffers (any depot revision)
@@ -797,7 +799,18 @@ why keys, menus and help never disagree.
    `PerforatedChanged` (a visible client view refreshes).
 3. A third query, `p4 changes -s pending -l -c <client>`, is compared with the previous probe
    (`change|desc|shelved`): a changelist created, deleted, described or shelved elsewhere only
-   emits `PerforatedChanged` (no fstat needed).
+   emits `PerforatedChanged` (no fstat needed). Its answer is kept (`p4.keep_pending`).
+4. Reuse: state fetched moments ago answers again (`poll.reuse`, 5 s; 0 = off). Each answer
+   carries a `p4.stamp(ws)` taken when it was asked (time and `ws.opened_gen`), and
+   `p4.fresh(ws, stamp)` holds while it's younger than `poll.reuse` and no change has bumped
+   the generation since. Stamped: each `fstat` record (`ws.fstat_at`, from a buffer's fstat or
+   a refresh; a merged follow-up answer stamps only the files it asked about), the opened
+   files of a full refresh (`ws.opened_stamp`), and this client's pending changelists
+   (`ws.pending_kept`, from the probe or `pending_changes`; a new changelist drops it).
+   A buffer attaching with a fresh record applies it (`buffer.reuse`, no fstat), `BufEnter`
+   skips its fstat, and `pending_changes(…, { reuse = true })` / `fstat_opened(ws, { reuse =
+   true })` answer from them: the pickers, the check-out and changelist prompts and the
+   unshelve target. The client view never reuses (its refreshes follow a change or `<F5>`).
 
 ### 18.7 You open the client view (`:P4`)
 
@@ -1047,7 +1060,9 @@ batch had no answer for it. p4 answers `-x - print` in order and skips what it c
 so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N` by
 `change`, else the depot path). A snapshot records the content-cache keys printed for it
 (`cached`, only ones not cached before); `release(snap)` drops them and its content.
-`snapshot`, `release`, `renew`, `print_batch` and `print_many` are forwarders to
+`pending_changes`, `new_change`, `edit`, `add`, `reconcile_add` and `revert` are forwarders
+to `p4_cmds.lua` (run on request, so loaded with the first one). `snapshot`, `release`,
+`renew`, `print_batch` and `print_many` are forwarders to
 `p4_batch.lua`, which only the diff tab, the identical-files check and the lists use: it
 loads with them, keeping its code out of the startup memory (`make bench`). `print` and
 `keep` stay here, and `print_batch` reaches the shared state as `p4._batched` and

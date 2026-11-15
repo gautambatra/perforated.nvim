@@ -678,6 +678,12 @@ Changes you make from the plugin don't wait for that check: after a check-out, a
 move to another changelist, the statusline and the opened-file counts update within a moment,
 even with `poll.interval = 0`.
 
+What was fetched in the last 5 seconds (`poll.reuse`) answers again instead of asking the
+server: opening a file just refreshed (from the client view, a diff tab), entering its buffer,
+and the pickers and changelist prompts right after the background check or a view refresh.
+Any change you make from the plugin ends that at once. A change made outside Neovim in
+those seconds shows at the next check or on `<F5>`; `poll.reuse = 0` always asks.
+
 **`:P4 refresh`** asks everything again at once: the status of every open buffer, your opened
 files, and the server details. It says `refreshed (N buffers)` when done, or warns if p4
 didn't answer. Use it with `poll.interval = 0`, or after changing files outside Neovim.

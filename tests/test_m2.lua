@@ -3017,6 +3017,82 @@ local function row_of(text)
   end
 end
 
+--- Set `poll.reuse` (seconds) in the child.
+local function set_reuse(secs)
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { poll = { reuse = ... } })
+    require('perforated.config').reload()]],
+    { secs }
+  )
+end
+
+--- Open `rel` in a buffer and wait until it has its state.
+local function open_file(rel, status)
+  child.cmd('edit ' .. root .. '/' .. rel)
+  wait(([[(require('perforated.buffer').get() or {}).status == %q]]):format(status))
+  vim.uv.sleep(300) -- room for a query it would still run
+  H.wait_idle(child)
+end
+
+T['client view']['opening a file just refreshed asks nothing; an older record is asked again'] = function()
+  open_view_quiet() -- its refresh fetched a.txt's record moments ago
+  open_file('a.txt', 'opened')
+  H.eq(count_calls({ 'fstat' }), {}) -- (nor when its buffer is entered)
+  -- Older than `poll.reuse`: asked again.
+  set_reuse(1)
+  vim.uv.sleep(1100)
+  child.cmd('bwipeout')
+  track_calls()
+  open_file('a.txt', 'opened')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
+end
+
+T['client view']['after a change, a file just refreshed is asked again'] = function()
+  open_view_quiet()
+  -- A change that names no file's state still means the records may be out of date.
+  child.lua(
+    [[require('perforated.checkout').changed(require('perforated').workspace(), { changes = true })]]
+  )
+  open_file('a.txt', 'opened')
+  H.eq(count_calls({ 'fstat -T' }), { ['fstat -T'] = 1 })
+end
+
+T['client view']['a changelist just created is in the next changelist list'] = function()
+  open_view_quiet() -- its refresh kept the pending changelists
+  child.lua([[_G.cl, _G.list = nil, nil
+    local p4, ws = require('perforated.p4'), require('perforated').workspace()
+    p4.new_change(ws, 'Brand new', function(cl)
+      _G.cl = cl
+      p4.pending_changes(ws, function(c) _G.list = vim.tbl_map(function(r) return r.change end, c) end,
+        nil, { reuse = true })
+    end)]])
+  wait('_G.list ~= nil')
+  H.eq(vim.tbl_contains(child.lua_get('_G.list'), child.lua_get('_G.cl')), true)
+end
+
+T['client view']['the opened-files picker right after a refresh asks nothing'] = function()
+  open_view_quiet()
+  child.lua(
+    [[_G.items = nil
+    require('perforated.lists').opened_items(require('perforated').workspace(), function(items) _G.items = items end)]]
+  )
+  wait('_G.items ~= nil')
+  H.eq(child.lua_get('#_G.items') > 0, true)
+  -- (its changed markers still ask: `diff -sa`)
+  H.eq(count_calls({ 'changes -s pending', 'fstat' }), {})
+  -- With `poll.reuse = 0` it always asks.
+  set_reuse(0)
+  child.lua(
+    [[_G.items = nil
+    require('perforated.lists').opened_items(require('perforated').workspace(), function(items) _G.items = items end)]]
+  )
+  wait('_G.items ~= nil')
+  H.eq(
+    count_calls({ 'changes -s pending', 'fstat -Ro' }),
+    { ['changes -s pending'] = 1, ['fstat -Ro'] = 1 }
+  )
+end
+
 T['client view']['with the view closed, an edit and a revert ask for that file once each'] = function()
   child.cmd('edit ' .. root .. '/d.txt')
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])

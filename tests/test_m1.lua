@@ -429,6 +429,8 @@ T['checkout']['check-out and add show a centred busy pop-up while p4 works'] = f
   wait_prompt()
   child.type_keys('<CR>')
   wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  -- (the state can arrive in the same moment p4 answers, just before the pop-up closes)
+  wait('#_G.busy == 2 and not _G.busy[2].open')
   H.eq(child.lua_get('_G.busy'), {
     { msg = 'Checking out a.txt…', open = false },
     { msg = 'Opening new.txt for add…', open = false },

@@ -92,9 +92,10 @@ end
 
 --- fstat of every file opened in the workspace (one call: `fstat -Ro //client/...`).
 --- Concurrent callers share one call, but not across a change (`opened_changed`): a call
---- started before it may not see it.
+--- started before it may not see it. `opts.reuse`: the opened files of a full refresh moments
+--- ago (`fresh`) answer instead (pickers).
 ---@param ws perforated.Workspace
----@param opts perforated.RunOpts?
+---@param opts (perforated.RunOpts|{ reuse: boolean? })?
 ---@param cb fun(recs: table[]?, res: perforated.RunResult)
 function M.fstat_opened(ws, opts, cb)
   local client = ws:client()
@@ -103,11 +104,51 @@ function M.fstat_opened(ws, opts, cb)
       cb(nil, { ok = false, errors = { 'unknown client' }, records = {}, warnings = {} })
     end)
   end
+  if opts and opts.reuse and ws.opened and M.fresh(ws, ws.opened_stamp) then
+    local recs = vim.tbl_values(ws.opened)
+    table.sort(recs, function(a, b)
+      return a.depotFile < b.depotFile
+    end)
+    return vim.schedule(function()
+      cb(recs, { ok = true, records = recs, errors = {}, warnings = {} })
+    end)
+  end
   opts = vim.tbl_extend('keep', opts or {}, { key = 'fstat-opened:' .. (ws.opened_gen or 0) })
+  opts.reuse = nil
   ws:run({ 'fstat', '-Ro', '-T', M.FSTAT_FIELDS, ('//%s/...'):format(client) }, opts, function(res)
     -- "file(s) not opened" is a warning (severity 2): nothing is opened, still ok.
     cb(res.ok and res.records or nil, res)
   end)
+end
+
+--- A stamp for state asked for now: it may answer again for `poll.reuse` seconds, until a
+--- change (`opened_changed`).
+---@param ws perforated.Workspace
+---@return { t: integer, gen: integer }
+function M.stamp(ws)
+  return { t = vim.uv.now(), gen = ws.opened_gen or 0 }
+end
+
+--- Whether state with this stamp may answer again (`poll.reuse`: a change made since, or an
+--- older answer, means asking).
+---@param ws perforated.Workspace
+---@param stamp { t: integer, gen: integer }?
+---@return boolean
+function M.fresh(ws, stamp)
+  local reuse = require('perforated.config').get().poll.reuse or 0
+  return stamp ~= nil
+    and reuse > 0
+    and stamp.gen == (ws.opened_gen or 0)
+    and vim.uv.now() - stamp.t < reuse * 1000
+end
+
+--- Keep this client's pending changelists (from the probe, or `pending_changes`), asked for
+--- at `stamp`, for `pending_changes(…, { reuse = true })`.
+---@param ws perforated.Workspace
+---@param stamp { t: integer, gen: integer }
+---@param records table[]
+function M.keep_pending(ws, stamp, records)
+  ws.pending_kept = { stamp = stamp, records = records }
 end
 
 --- The opened files may have changed (a plugin change, or one seen elsewhere): a later
@@ -242,126 +283,28 @@ function M.split_lines(text)
   return lines
 end
 
---- Pending changelists (full descriptions) of this client, or of all the user's clients.
---- Records carry `shelved = ''` when the CL has shelved files.
+--- Changelists and file commands run on request (`perforated.p4_cmds`, loaded with the first).
 ---@param ws perforated.Workspace
 ---@param cb fun(changes: table[]?, err: string?)
 ---@param scope ('client'|'user')?
-function M.pending_changes(ws, cb, scope)
-  local client, user = ws:client(), ws:user()
-  local filter
-  if scope == 'user' then
-    filter = user and { '-u', user }
-  else
-    filter = client and { '-c', client }
-  end
-  if not filter then
-    return vim.schedule(function()
-      cb(nil, 'unknown client/user')
-    end)
-  end
-  local args = vim.list_extend({ 'changes', '-s', 'pending', '-l' }, filter)
-  ws:run(args, { key = 'pending:' .. (scope or 'client') }, function(res)
-    if not res.ok then
-      return cb(nil, res.errors[1] or vim.trim(res.stderr))
-    end
-    cb(res.records)
-  end)
+---@param opts { reuse: boolean? }?
+function M.pending_changes(ws, cb, scope, opts)
+  return require('perforated.p4_cmds').pending_changes(ws, cb, scope, opts)
 end
-
---- Create an empty pending changelist. Specs are sent untagged (-Mj breaks `change -i`).
----@param ws perforated.Workspace
----@param desc string
----@param cb fun(change: string?, err: string?)
 function M.new_change(ws, desc, cb)
-  local lines = { 'Change: new', 'Description:' }
-  for _, l in ipairs(vim.split(desc, '\n', { plain = true })) do
-    lines[#lines + 1] = '\t' .. l
-  end
-  ws:run(
-    { 'change', '-i' },
-    { tagged = false, stdin = table.concat(lines, '\n') .. '\n' },
-    function(res)
-      local cl = res.ok and (res.stdout or ''):match('Change (%d+) created')
-      if cl then
-        return cb(cl)
-      end
-      cb(nil, res.errors[1] or vim.trim((res.stdout or '') .. res.stderr))
-    end
-  )
+  return require('perforated.p4_cmds').new_change(ws, desc, cb)
 end
-
----@param change string?
----@return string[]
-local function change_args(change)
-  if change and change ~= 'default' then
-    return { '-c', change }
-  end
-  return {}
-end
-
---- Run a file-mutating command over many paths.
----@param ws perforated.Workspace
----@param cmd string[]  e.g. { 'edit', '-c', '12' }
----@param paths string[]
----@param cb fun(res: perforated.RunResult)
----@param effect string  for the warning when it's stopped, e.g. 'reverted'
----@param busy string?  the pop-up
--- `escape = false` for `add`, which takes file names literally.
-local function file_cmd(ws, cmd, paths, cb, effect, busy, escape)
-  local stdin = escape == false and paths or M.escape_all(paths)
-  local title = ('%s %s'):format(
-    cmd[1],
-    #paths == 1 and (paths[1]:match('[^/]+/%.%.%.$') or vim.fs.basename(paths[1]))
-      or (#paths .. ' files')
-  )
-  require('perforated.jobs').run(ws, title, cmd, {
-    globals = { '-x', '-' },
-    stdin = stdin,
-    busy = busy,
-    effect = effect,
-    single = #paths == 1,
-    -- A `<dir>/...` path: how many files it holds isn't known.
-    total = not vim.iter(paths):any(function(f)
-      return f:find('...', 1, true) ~= nil
-    end) and #paths or nil,
-  }, cb)
-end
-
 function M.edit(ws, paths, change, cb, busy)
-  file_cmd(ws, vim.list_extend({ 'edit' }, change_args(change)), paths, cb, 'opened', busy)
+  return require('perforated.p4_cmds').edit(ws, paths, change, cb, busy)
 end
-
 function M.add(ws, paths, change, cb, busy)
-  local cmd = { 'add' }
-  for _, p in ipairs(paths) do
-    if p:find('[@#%%*]') then
-      cmd[#cmd + 1] = '-f' -- names with p4 wildcards are only accepted literally with -f
-      break
-    end
-  end
-  file_cmd(ws, vim.list_extend(cmd, change_args(change)), paths, cb, 'opened', busy, false)
+  return require('perforated.p4_cmds').add(ws, paths, change, cb, busy)
 end
-
---- Open for add the files under `paths` (wildcards) that aren't in the depot yet.
 function M.reconcile_add(ws, paths, change, cb, busy)
-  file_cmd(
-    ws,
-    vim.list_extend({ 'reconcile', '-a' }, change_args(change)),
-    paths,
-    cb,
-    'opened',
-    busy
-  )
+  return require('perforated.p4_cmds').reconcile_add(ws, paths, change, cb, busy)
 end
-
----@param opts { unchanged: boolean?, busy: string? }?
 function M.revert(ws, paths, opts, cb)
-  local cmd = { 'revert' }
-  if opts and opts.unchanged then
-    cmd[#cmd + 1] = '-a'
-  end
-  file_cmd(ws, cmd, paths, cb, 'reverted', opts and opts.busy)
+  return require('perforated.p4_cmds').revert(ws, paths, opts, cb)
 end
 
 --- Newest submitted change touching any of the given depot files (one call).

@@ -68,6 +68,7 @@ local function flush(ws, cb)
   local paths = vim.tbl_keys(b.paths)
   table.sort(paths)
   dbg.debug('buffer', 'fstat batch of %d path(s) for %s', #paths, ws.key)
+  local stamp = p4.stamp(ws)
   p4.fstat(ws, paths, { priority = 2 }, function(r)
     if not r.res.ok and next(r.files) == nil and next(r.missing) == nil then
       return cb and cb(false) -- connection trouble; conn state/statusline already reflect it
@@ -87,9 +88,9 @@ local function flush(ws, cb)
       -- Cache only what's still needed: files shown in a buffer, or opened in Perforce (a
       -- buffer wiped while its fstat was in flight must not leave an entry behind).
       if shown or (rec and rec.action) then
-        ws.fstat[k] = rec
+        ws.fstat[k], ws.fstat_at[k] = rec, rec and stamp or nil
       else
-        ws.fstat[k] = nil
+        ws.fstat[k], ws.fstat_at[k] = nil, nil
       end
     end
     if cb then
@@ -371,7 +372,29 @@ function M.attach(ws, buf)
   if config.get().lsp.enabled then
     require('perforated.lsp').attach(buf, ws) -- experimental: code actions
   end
+  if M.reuse(buf) then
+    return
+  end
   M.refresh(buf)
+end
+
+--- Take the buffer's state from its file's `fstat` record when that was fetched moments ago
+--- (`p4.fresh`: a refresh, another buffer of it), instead of asking again.
+---@param buf integer
+---@return boolean  reused
+function M.reuse(buf)
+  local st = states[buf]
+  local rec = st and st.ws.fstat[st.key]
+  if not (rec and p4.fresh(st.ws, st.ws.fstat_at[st.key])) then
+    return false
+  end
+  dbg.debug('buffer', 'buf %d %s: fstat record fetched moments ago, reused', buf, st.path)
+  vim.schedule(function()
+    if states[buf] == st and st.status == 'pending' then
+      M.apply(buf, rec)
+    end
+  end)
+  return true
 end
 
 ---@param buf integer
@@ -394,7 +417,7 @@ function M.detach(buf)
         return
       end
     end
-    st.ws.fstat[st.key] = nil
+    st.ws.fstat[st.key], st.ws.fstat_at[st.key] = nil, nil
   end
 end
 

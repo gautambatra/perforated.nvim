@@ -371,7 +371,7 @@ function M.unshelve(ws, shelf, depot_files, target, cb)
         cb(false)
       end
     end)
-  end)
+  end, nil, { reuse = true })
 end
 
 --- Delete a pending changelist. p4 only deletes an empty one, so after a single confirmation

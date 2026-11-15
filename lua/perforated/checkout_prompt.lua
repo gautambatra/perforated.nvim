@@ -90,7 +90,7 @@ function M.pick_change(ws, cb, opts)
         cb(choice.change, choice.desc)
       end,
     })
-  end)
+  end, nil, { reuse = true })
 end
 
 --- Create a new changelist from a description entered in the editor float.
@@ -174,7 +174,7 @@ function M.prompt(buf, verb, target)
         end
       end
       ws.sticky_cl, ws.sticky_desc = nil, nil
-    end)
+    end, nil, { reuse = true })
   end
 
   local rec = st.rec or {}

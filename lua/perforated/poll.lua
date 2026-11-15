@@ -44,82 +44,6 @@ local function watched_files(ws)
   return files
 end
 
---- Fill in user/description for changes we don't know yet (one describe call).
----@param ws perforated.Workspace
----@param changes string[]
----@param cb fun()
-local function learn_changes(ws, changes, cb)
-  local need = {}
-  for _, c in ipairs(changes) do
-    if not ws.clmemo[c] then
-      need[#need + 1] = c
-    end
-  end
-  if #need == 0 then
-    return cb()
-  end
-  ws:run(vim.list_extend({ 'describe', '-s' }, need), { priority = 3 }, function(res)
-    for _, r in ipairs(res.records) do
-      if r.change then
-        ws.clmemo[r.change] = { user = r.user, client = r.client, time = r.time, desc = r.desc }
-      end
-    end
-    cb()
-  end)
-end
-
----@param ws perforated.Workspace
----@param recs table[]
----@param initial boolean
-local function toast_for(ws, recs, initial)
-  local icons = require('perforated.ui.icons')
-  local changes = {}
-  for _, r in ipairs(recs) do
-    if r.headChange then
-      changes[#changes + 1] = r.headChange
-    end
-  end
-  learn_changes(ws, changes, function()
-    local lines = {}
-    local nstale, nunres = 0, 0
-    for _, r in ipairs(recs) do
-      local name = vim.fn.fnamemodify(r.clientFile or r.depotFile, ':~:.')
-      if require('perforated.status').is_stale(r) then
-        nstale = nstale + 1
-        local m = ws.clmemo[r.headChange or ''] or {}
-        lines[#lines + 1] = ('%s %s  #%s→#%s · CL %s%s'):format(
-          icons.glyph('stale'),
-          name,
-          r.haveRev,
-          r.headRev,
-          r.headChange or '?',
-          m.user and (' · ' .. m.user) or ''
-        )
-      end
-      if r.unresolved then
-        nunres = nunres + 1
-        lines[#lines + 1] = ('%s %s  unresolved'):format(icons.glyph('unresolved'), name)
-      end
-    end
-    if #lines == 0 then
-      return
-    end
-    lines[#lines + 1] = 'sync before submitting · :P4 status for details'
-    local title
-    if initial then
-      title = ('Perforce: %d stale, %d unresolved opened file(s)'):format(nstale, nunres)
-    else
-      title = ('Perforce: %d opened file(s) now stale'):format(nstale)
-    end
-    require('perforated.ui.toast').show(
-      title,
-      lines,
-      vim.log.levels.WARN,
-      { detail = true, place = 'background' }
-    )
-  end)
-end
-
 --- Refresh of opened-file state, updating counts, buffers and toasts: one `fstat -Ro` of
 --- every opened file, or with `opts.files` (and opened files known) one `fstat` of those.
 ---@param ws perforated.Workspace
@@ -146,7 +70,7 @@ function M.refresh(ws, opts, cb)
     end
     p4.fstat_opened(ws, { priority = 3, timeout = opts.timeout }, got)
   end
-  local asked = vim.uv.hrtime()
+  local asked, stamp = vim.uv.hrtime(), p4.stamp(ws)
   fetch(function(recs, res, named)
     if not recs then
       return finish(nil, res)
@@ -183,14 +107,21 @@ function M.refresh(ws, opts, cb)
         end
       end
       if r.clientFile then
-        ws.fstat[p4.key(ws, r.clientFile)] = r
+        local k = p4.key(ws, r.clientFile)
+        -- (a merged answer: only the files it asked about are this fresh)
+        if not named or named[k] then
+          ws.fstat[k], ws.fstat_at[k] = r, stamp
+        end
       end
     end
     ws.opened = opened
+    if not named then
+      ws.opened_stamp = stamp
+    end
     -- Files no longer opened (reverted, submitted) mustn't keep an "opened" cache entry.
     for k, rec in pairs(ws.fstat) do
       if rec.action and not opened[rec.depotFile] then
-        ws.fstat[k] = nil
+        ws.fstat[k], ws.fstat_at[k] = nil, nil
       end
     end
     ws.opened_count, ws.stale_count, ws.unresolved_count = #recs, stale, unres
@@ -238,11 +169,12 @@ function M.refresh(ws, opts, cb)
     for k, n in pairs(named or {}) do
       if n.rec and not n.rec.action then
         ws.fstat[k] = shown[k] and n.rec or nil
+        ws.fstat_at[k] = shown[k] and stamp or nil
       end
     end
     require('perforated.status').update_ws(ws)
     if opts.notify ~= false and #fresh > 0 then
-      toast_for(ws, fresh, opts.initial)
+      require('perforated.stale_toast').show(ws, fresh, opts.initial)
     end
     -- News for views and lists (a visible client view refreshes, resolve lists re-check): only
     -- when the opened files' state really differs from the last refresh, never on the first.
@@ -323,6 +255,7 @@ function M.probe(ws)
   -- Pending changelists changed elsewhere (new, deleted, description, shelf)?
   local client = ws:client()
   if client then
+    local stamp = p4.stamp(ws)
     ws:run(
       { 'changes', '-s', 'pending', '-l', '-c', client },
       { priority = 3, key = 'probe-pending:' .. ws.key },
@@ -330,6 +263,7 @@ function M.probe(ws)
         if not res.ok then
           return
         end
+        p4.keep_pending(ws, stamp, res.records) -- pickers and prompts may reuse it
         local sig = {}
         for _, r in ipairs(res.records) do
           if r.change then
@@ -434,8 +368,9 @@ local function ensure_autocmds()
   vim.api.nvim_create_autocmd('BufEnter', {
     group = group,
     callback = function(ev)
-      if not require('perforated.buffer').get(ev.buf) then
-        return
+      local st = require('perforated.buffer').get(ev.buf)
+      if not st or p4.fresh(st.ws, st.ws.fstat_at[st.key]) then
+        return -- (its record was fetched moments ago)
       end
       local now = vim.uv.now()
       if now - (last_enter[ev.buf] or -math.huge) >= cfg().bufenter_throttle * 1000 then
