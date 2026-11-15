@@ -995,8 +995,10 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
     co.changed(ws)
     refresh(ws)
     -- Fresh state of every opened file: the list covers *all* unresolved files, not just the
-    -- ones this sync reported.
-    require('perforated.poll').refresh(ws, {}, function()
+    -- ones this sync reported. With the interactive timeout, as the client view asks for it:
+    -- the view's refresh after this change shares the call.
+    local timeout = require('perforated.config').get().runner.timeout
+    require('perforated.poll').refresh(ws, { timeout = timeout }, function()
       M.after_sync(ws, texts, attention, problems)
       cb(not failed and not res.cancelled)
     end)

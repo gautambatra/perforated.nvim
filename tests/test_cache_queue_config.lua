@@ -34,6 +34,11 @@ end
 
 T['queue'] = MiniTest.new_set()
 
+--- The timeout of the job that callers with `key` share.
+local function q_timeout(q, key)
+  return tostring(q.waiters[key].timeout)
+end
+
 local function job(q, log, name, opts)
   opts = opts or {}
   local finish
@@ -42,8 +47,9 @@ local function job(q, log, name, opts)
     priority = opts.priority,
     key = opts.key,
     force = opts.force,
+    timeout = opts.timeout,
     start = function(done)
-      log[#log + 1] = 'start ' .. name
+      log[#log + 1] = 'start ' .. name .. (opts.timeout and (' ' .. q_timeout(q, opts.key)) or '')
       finish = done
     end,
     cb = function(r)
@@ -75,6 +81,39 @@ T['queue']['dedupes identical keyed jobs'] = function()
   H.eq(log, { 'start a' })
   f1('r')
   H.eq(log, { 'start a', 'done a r', 'done b r' })
+end
+
+T['queue']['a caller joining a waiting job gives it the longer timeout and higher priority'] = function()
+  local q = require('perforated.core.queue').new(1)
+  local log = {}
+  local f1 = job(q, log, 'busy', { priority = 1 })
+  job(q, log, 'other', { priority = 2 })
+  job(q, log, 'bg', { key = 'k', priority = 3, timeout = 500 })
+  job(q, log, 'ui', { key = 'k', priority = 1, timeout = 5000 })
+  job(q, log, 'bg2', { key = 'k', priority = 3, timeout = 500 }) -- never lowers it
+  f1('x')
+  -- Started ahead of `other`, with 5000 ms; every caller gets its answer.
+  H.eq(log, { 'start busy', 'done busy x', 'start bg 5000' })
+end
+
+T['queue']['a running job with a shorter timeout is not joined; later callers share the new one'] = function()
+  local q = require('perforated.core.queue').new(4)
+  local log = {}
+  local short = job(q, log, 'short', { key = 'k', timeout = 500 })
+  local long = job(q, log, 'long', { key = 'k', timeout = 5000 })
+  job(q, log, 'later', { key = 'k', timeout = 5000 })
+  job(q, log, 'shorter', { key = 'k', timeout = 100 }) -- 5000 ms is long enough for it
+  H.eq(log, { 'start short 500', 'start long 5000' })
+  short('a')
+  long('b')
+  H.eq(log, {
+    'start short 500',
+    'start long 5000',
+    'done short a',
+    'done long b',
+    'done later b',
+    'done shorter b',
+  })
 end
 
 T['queue']['pause holds a group; force bypasses it'] = function()

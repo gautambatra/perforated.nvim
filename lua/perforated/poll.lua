@@ -262,6 +262,7 @@ function M.probe(ws)
       table.sort(before)
       if table.concat(now, '\n') ~= table.concat(before, '\n') then
         dbg.debug('poll', '%s probe: opened files changed elsewhere', ws.key)
+        p4.opened_changed(ws)
         M.refresh(ws)
       end
     end)
@@ -320,6 +321,7 @@ function M.probe(ws)
     if first then
       return -- baseline; activation already did a full refresh
     end
+    p4.opened_changed(ws)
     M.refresh(ws)
     for buf, st in pairs(require('perforated.buffer').all()) do
       if st.ws == ws and st.status == 'clean' then

@@ -838,6 +838,12 @@ why keys, menus and help never disagree.
    The view takes its opened files from `poll.refresh` (no toast: the view shows stale files
    itself; with `runner.timeout`, not the background one the poll's own calls use), so buffers, counts and statuslines update from the same `fstat -Ro`, and the
    poll's follow-up to the event is skipped. One `:P4 edit` costs the view three p4 calls.
+   Concurrent `fstat_opened` calls share one (queue key `fstat-opened:<opened_gen>`), but
+   not across a change: `p4.opened_changed(ws)` bumps `ws.opened_gen` in
+   `checkout.changed` before listeners run, and when the probe sees changes made
+   elsewhere, so a call started before a revert isn't the answer after it. A sync runs its
+   own `poll.refresh` with `runner.timeout` too, so the view's refresh after it shares that
+   one `fstat -Ro`.
    `poll.refresh` emits one too (`source = 'poll'`) when the opened files' state (have/head
    revision, action, changelist, unresolved) differs from its previous refresh, so background
    news reaches the view and the quickfix resolve lists without a timer of their own. `:P4 refresh`
@@ -966,7 +972,11 @@ recovery from offline.
 A global queue of process jobs: `cap` concurrent jobs (config `runner.concurrency`),
 three priority FIFOs (`interactive`, `buffer`, `background`), in-flight de-duplication by
 `key` (a second identical request shares the first one's result), and per-group
-`pause`/`resume` (a login pauses its workspace only). `pending_count()` is used by tests.
+`pause`/`resume` (a login pauses its workspace only). Sharing never cuts a caller short: a
+job still waiting takes the longer timeout (`job.timeout`, read by `start`, so `ws:run`
+passes it through the job) and the higher priority of its callers; a running job with a
+shorter timeout than a new caller's isn't joined: the new one runs too, and later callers
+share it (`waiters[key]` is the newest job; each job keeps its callers in `cbs`). `pending_count()` is used by tests.
 
 #### `core/runner.lua`
 `run(spec, cb)` spawns p4 with `vim.system` — no shell, argument list only. Tagged calls add
@@ -1014,7 +1024,8 @@ env, or `:P4 debug on`). `dbg.timing(name, ms)` keeps fixed-size aggregates for
 Typed wrappers returning parsed data. `key(ws, path)` is the cache key (lower-cased on
 case-insensitive servers). `fstat(ws, paths)` batches local paths through `-x -` and returns
 records by key plus "missing" reasons (not in view / no such file) per path.
-`fstat_opened(ws)` is `fstat -Ro //client/...`. Local paths passed as p4 file arguments are
+`fstat_opened(ws)` is `fstat -Ro //client/...`, shared by concurrent callers until
+`opened_changed(ws)` (see [§18.7](#187-you-open-the-client-view-p4)). Local paths passed as p4 file arguments are
 escaped with `escape` (`@ # % *` → `%40 %23 %25 %2A`; `add` takes names literally, with `-f`
 when they contain wildcards). A `#rev`/`@CL` suffix is cut only from depot paths, or from a
 local name that isn't an existing file, so `icon@2x.png` keeps its name. `base_spec(rec)` decides the diff base (`#have`,

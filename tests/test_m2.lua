@@ -2885,6 +2885,68 @@ local function open_view_quiet()
   track_calls()
 end
 
+--- Wrap p4 so that, once the flag file exists, each `fstat -Ro` answers `secs` after it asked
+--- the server (its answer is as of the start).
+local function slow_opened(secs, runner)
+  return wrap_p4(
+    ([[case "$*" in *"fstat -Ro"*) [ -e "$FLAG" ] && { %s "$@" > "$FLAG.$$"; rc=$?; sleep %s; cat "$FLAG.$$"; exit $rc; };; esac]]):format(
+      P.p4,
+      secs
+    ),
+    runner
+  )
+end
+
+T['client view']['a sync with the view open asks for the opened files once'] = function()
+  local flag = slow_opened(1)
+  open_view_quiet()
+  H.write(flag, '')
+  -- No "resolve now?" pop-up for the fixture's unresolved file.
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { sync = { resolve_prompt = false } })
+    require('perforated.config').reload()
+    require('perforated.ui.prompt').confirm = function() return 1 end; _G.r = nil
+    require('perforated.ops').sync(require('perforated').workspace(), {}, function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r ~= nil', 10000)
+  vim.uv.sleep(800) -- room for anything else that would run
+  wait(('not (%s).loading'):format(view_expr(root)))
+  -- The view's refresh after the sync shares the sync's own query.
+  H.eq(count_calls({ 'fstat -Ro' }), { ['fstat -Ro'] = 1 })
+end
+
+T['client view']['a change while the opened files are being asked for asks again'] = function()
+  local flag = slow_opened(1)
+  open_view_quiet()
+  H.write(flag, '')
+  -- Started before the edit, so its answer doesn't have d.txt: the view mustn't share it.
+  -- (With the view's timeout, so only the change keeps it from sharing.)
+  child.lua([[require('perforated.poll').refresh(require('perforated').workspace(),
+    { timeout = require('perforated.config').get().runner.timeout })]])
+  child.lua(
+    ("require('perforated.checkout').edit(require('perforated').workspace(), { %q })"):format(
+      root .. '/d.txt'
+    )
+  )
+  wait(
+    ([[(function() local d = (%s).data
+    for _, r in ipairs(d.opened or {}) do if r.depotFile == '//depot/d.txt' then return true end end
+  end)()]]):format(view_expr(root)),
+    8000
+  )
+  H.eq(count_calls({ 'fstat -Ro' }), { ['fstat -Ro'] = 2 })
+end
+
+T['client view']['F5 during a background query of the opened files keeps its own timeout'] = function()
+  local flag = slow_opened(1.5, { timeout = 5000, background_timeout = 500 })
+  open_view_quiet()
+  H.write(flag, '')
+  child.lua([[require('perforated.poll').refresh(require('perforated').workspace())]]) -- 500 ms
+  f5()
+  H.eq(has_line('refresh failed'), false, view_text())
+  H.eq(has_line('b.txt') and has_line('a.txt'), true, view_text())
+end
+
 local function row_of(text)
   for _, l in ipairs(lines()) do
     if l:find(text, 1, true) then
@@ -3408,12 +3470,15 @@ T['client view']['shelf vs workspace: one print for the check, none to show the 
     { { '//depot/b.txt@=2', '//depot/c.txt@=2', '//depot/d.txt@=2' } }
   )
   -- (loading the workspace files prints their bases for gutter signs: not the tab's)
+  -- (sorted: the log has them as they finish, and the two run at once)
   local function shelf_prints()
-    return vim.tbl_filter(function(c)
+    local prints = vim.tbl_filter(function(c)
       return c:find('^print') and not c:find('#%d+$')
     end, child.lua_get('_G.CALLS'))
+    table.sort(prints)
+    return prints
   end
-  H.eq(shelf_prints(), { 'print -q //depot/a.txt@=2', 'print -q' })
+  H.eq(shelf_prints(), { 'print -q', 'print -q //depot/a.txt@=2' })
   H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil)
   child.type_keys('<Tab>')
   shown_left('d.txt@=2')

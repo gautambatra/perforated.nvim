@@ -91,6 +91,8 @@ function M.fstat(ws, paths, opts, cb)
 end
 
 --- fstat of every file opened in the workspace (one call: `fstat -Ro //client/...`).
+--- Concurrent callers share one call, but not across a change (`opened_changed`): a call
+--- started before it may not see it.
 ---@param ws perforated.Workspace
 ---@param opts perforated.RunOpts?
 ---@param cb fun(recs: table[]?, res: perforated.RunResult)
@@ -101,10 +103,18 @@ function M.fstat_opened(ws, opts, cb)
       cb(nil, { ok = false, errors = { 'unknown client' }, records = {}, warnings = {} })
     end)
   end
+  opts = vim.tbl_extend('keep', opts or {}, { key = 'fstat-opened:' .. (ws.opened_gen or 0) })
   ws:run({ 'fstat', '-Ro', '-T', M.FSTAT_FIELDS, ('//%s/...'):format(client) }, opts, function(res)
     -- "file(s) not opened" is a warning (severity 2): nothing is opened, still ok.
     cb(res.ok and res.records or nil, res)
   end)
+end
+
+--- The opened files may have changed (a plugin change, or one seen elsewhere): a later
+--- `fstat_opened` doesn't share a call started before.
+---@param ws perforated.Workspace
+function M.opened_changed(ws)
+  ws.opened_gen = (ws.opened_gen or 0) + 1
 end
 
 --- Decide the depot revision a buffer's working copy should be compared against.

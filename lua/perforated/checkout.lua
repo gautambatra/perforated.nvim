@@ -143,6 +143,7 @@ local function changed(ws, what)
     end
     data.files = files
   end
+  require('perforated.p4').opened_changed(ws) -- before listeners query them
   require('perforated.core.events').emit('Changed', data)
 end
 M.changed = changed

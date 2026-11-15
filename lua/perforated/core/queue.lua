@@ -10,14 +10,18 @@ M.PRIORITY = { interactive = 1, buffer = 2, background = 3 }
 ---@field priority integer?                1 (highest) .. 3
 ---@field key string?                      de-duplication key
 ---@field force boolean?                   run even while the group is paused (e.g. `p4 login`)
+---@field timeout integer?                 ms the work may take (nil/0: no limit), read by `start`
 ---@field start fun(done: fun(...))         begins the work; must call done exactly once
 ---@field cb fun(...)?                      completion callback
+---@field cbs fun(...)[]?                   (keyed) callbacks of every caller sharing the job
+---@field prio integer?                     (set by push) the FIFO it waits in
+---@field running boolean?                  (set when started)
 
 ---@class perforated.Queue
 ---@field cap integer
 ---@field running integer
 ---@field pending perforated.Job[][]       one FIFO per priority
----@field waiters table<string, fun(...)[]> key → callbacks of jobs merged into one
+---@field waiters table<string, perforated.Job> key → the queued or running job callers share
 ---@field paused table<string, boolean>
 local Queue = {}
 Queue.__index = Queue
@@ -34,18 +38,44 @@ function M.new(cap)
   }, Queue)
 end
 
+--- A timeout's limit in ms (nil or 0: none).
+local function limit(timeout)
+  return (timeout or 0) > 0 and timeout or math.huge
+end
+
+--- Queue a job. A job with the same key as one queued or running shares its result, so long
+--- as that doesn't cut it short: one still waiting gets the longer timeout and the higher
+--- priority of the two; one running with a shorter timeout isn't joined (it could give up
+--- before this one would), so this one runs too, and later callers share it instead.
 ---@param job perforated.Job
 function Queue:push(job)
+  local prio = math.max(1, math.min(3, job.priority or M.PRIORITY.interactive))
   if job.key then
-    local w = self.waiters[job.key]
-    if w then
-      -- Identical job already queued or running: share its result.
-      w[#w + 1] = job.cb
+    local shared = self.waiters[job.key]
+    if shared and (not shared.running or limit(shared.timeout) >= limit(job.timeout)) then
+      shared.cbs[#shared.cbs + 1] = job.cb
+      if not shared.running then
+        if limit(job.timeout) > limit(shared.timeout) then
+          shared.timeout = job.timeout
+        end
+        if prio < shared.prio then
+          local fifo = self.pending[shared.prio]
+          for i, queued in ipairs(fifo) do
+            if queued == shared then
+              table.remove(fifo, i)
+              break
+            end
+          end
+          shared.prio = prio
+          table.insert(self.pending[prio], shared)
+        end
+      end
       return
     end
-    self.waiters[job.key] = { job.cb }
+    job.cbs = { job.cb }
+    self.waiters[job.key] = job
   end
-  local prio = math.max(1, math.min(3, job.priority or M.PRIORITY.interactive))
+  job.prio = prio
   table.insert(self.pending[prio], job)
   self:_pump()
 end
@@ -67,6 +97,7 @@ function Queue:_pump()
       return
     end
     self.running = self.running + 1
+    job.running = true
     local finished = false
     job.start(function(...)
       if finished then
@@ -74,12 +105,9 @@ function Queue:_pump()
       end
       finished = true
       self.running = self.running - 1
-      local cbs
-      if job.key then
-        cbs = self.waiters[job.key] or {}
+      local cbs = job.cbs or { job.cb }
+      if job.key and self.waiters[job.key] == job then
         self.waiters[job.key] = nil
-      else
-        cbs = { job.cb }
       end
       for _, cb in ipairs(cbs) do
         if cb then

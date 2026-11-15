@@ -33,6 +33,7 @@ M.CONNECTION_KEY = '<connection>'
 ---@field conn perforated.Conn
 ---@field buffers table<integer, true>
 ---@field fstat table<string, table>      path → fstat record
+---@field opened_gen integer?             bumped when the opened files may have changed (`p4.opened_changed`)
 ---@field clmemo table<string, table>     change → { user, client, time, desc }
 ---@field sticky_cl string?
 ---@field idle boolean
@@ -213,11 +214,13 @@ function Workspace:run(args, opts, cb)
       or rcfg.timeout
   end
   local epoch -- login generation when the command started
-  queue.global():push({
+  local job ---@type perforated.Job
+  job = {
     group = self.key,
     priority = opts.priority,
     key = opts.key and (self.key .. '|' .. opts.key) or nil,
     force = opts.force,
+    timeout = timeout, -- a caller sharing the job may raise it before it starts
     start = function(done)
       epoch = self.conn.epoch
       runner.run({
@@ -228,7 +231,7 @@ function Workspace:run(args, opts, cb)
           or opts.globals,
         tagged = opts.tagged,
         stdin = opts.stdin,
-        timeout = timeout,
+        timeout = job.timeout,
         env_mode = opts.env_mode,
         ws = self.key,
         on_record = opts.on_record,
@@ -258,7 +261,8 @@ function Workspace:run(args, opts, cb)
       end
       cb(res)
     end,
-  })
+  }
+  queue.global():push(job)
 end
 
 --- Fetch (once) `p4 set -q` and `p4 -ztag info`. Concurrent callers share the calls.
