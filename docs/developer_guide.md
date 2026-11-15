@@ -527,6 +527,7 @@ lua/perforated/
     debug.lua / debug_impl.lua   debug log front end / implementation, timings
     events.lua               User autocmd events
   p4.lua                     typed p4 wrappers: fstat, print, pending changes, edit/add/revert
+  p4_batch.lua               print snapshots and prints of several files in one call (lazy)
   buffer.lua                 per-buffer state, attach pipeline, base text, diff, signs
   signs.lua                  gutter signs, hunk navigation, reset
   signs_preview.lua          the hunk preview float and its word diff (loaded on first use)
@@ -1025,7 +1026,12 @@ and a `print` of one of its specs meanwhile waits for it (`batched`), printing a
 batch had no answer for it. p4 answers `-x - print` in order and skips what it can't print,
 so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N` by
 `change`, else the depot path). A snapshot records the content-cache keys printed for it
-(`cached`, only ones not cached before); `release(snap)` drops them and its content. `pending_changes`, `new_change`, `edit`, `add`,
+(`cached`, only ones not cached before); `release(snap)` drops them and its content.
+`snapshot`, `release`, `renew`, `print_batch` and `print_many` are forwarders to
+`p4_batch.lua`, which only the diff tab, the identical-files check and the lists use: it
+loads with them, keeping its code out of the startup memory (`make bench`). `print` and
+`keep` stay here, and `print_batch` reaches the shared state as `p4._batched` and
+`p4._keep`. `pending_changes`, `new_change`, `edit`, `add`,
 `revert` (all through `-x -`) and `latest_changes` (the poll probe).
 
 #### `changelists.lua`
