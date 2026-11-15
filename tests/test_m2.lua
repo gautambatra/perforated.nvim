@@ -544,6 +544,62 @@ local function f5()
   wait(('not (%s).loading'):format(view_expr(root)))
 end
 
+--- Open 31 more files for add in CL 2 (more than the old 30-file rule).
+local function crowd_cl2()
+  local files = {}
+  for i = 1, 31 do
+    files[i] = ('%s/many/n%02d.txt'):format(root, i)
+    H.write(files[i], 'n\n')
+  end
+  server:p4(vim.list_extend({ 'add', '-c', '2' }, files), { client = 'alice_ws', cwd = root })
+end
+
+T['client view']['a changelist with many files starts expanded'] = function()
+  crowd_cl2()
+  open_view()
+  H.eq(has_line('n31.txt'), true)
+  H.eq(has_line('a.txt'), true)
+end
+
+T['client view']['expand_limit starts bigger changelists collapsed'] = function()
+  crowd_cl2()
+  child.lua([[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated,
+      { client_view = { expand_limit = 30 } })
+    require('perforated.config').reload()]])
+  open_view()
+  H.eq(has_line('n31.txt'), false)
+  H.eq(has_line('b.txt'), true) -- (the default changelist: 2 files)
+end
+
+T['client view']['a collapsed changelist stays so until a file lands in it'] = function()
+  open_view()
+  goto_line('CL 2')
+  child.type_keys('h')
+  goto_line('default')
+  child.type_keys('h')
+  H.eq(has_line('a.txt'), false)
+  f5()
+  H.eq(has_line('a.txt'), false)
+  -- b.txt moved into CL 2 from elsewhere: CL 2 opens; the default changelist, which only lost
+  -- a file, stays collapsed.
+  server:p4({ 'reopen', '-c', '2', root .. '/b.txt' }, { client = 'alice_ws', cwd = root })
+  f5()
+  H.eq(has_line('a.txt'), true)
+  H.eq(has_line('b.txt'), true)
+  H.neq(lines()[goto_line('default')]:find('▶', 1, true), nil)
+end
+
+T['client view']['a collapsed Pending section opens when a file lands in a changelist'] = function()
+  open_view()
+  goto_line('Pending')
+  child.type_keys('h')
+  H.eq(has_line('a.txt'), false)
+  server:p4({ 'edit', '-c', '2', root .. '/d.txt' }, { client = 'alice_ws', cwd = root })
+  f5()
+  H.eq(has_line('a.txt'), true)
+  H.eq(has_line('d.txt'), true)
+end
+
 T['client view']['a timed-out opened-files query keeps the files and says why'] = function()
   local flag = wrap_p4(
     [[case "$*" in *"fstat -Ro"*) [ -e "$FLAG" ] && sleep 3;; esac]],

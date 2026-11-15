@@ -496,6 +496,7 @@ keys):
         sticky = true
       },
       client_view = {
+        expand_limit = 0,
         kind = "tab",
         reconcile = {
           mtime = true,

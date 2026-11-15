@@ -128,7 +128,11 @@ Client alice_ws  Stream //main/dev  User alice  perforce:1666  online
 - **The top line:** client, stream, user, server and connection state.
 - **Sync CL:** the newest changelist your workspace has synced. `gd`, `K` and `y` work on it.
 - **Pending:** your pending changelists, the default one first and then the newest, with their
-  files and shelved files.
+  files and shelved files. Every changelist starts expanded, so your opened files are in view.
+  `h` collapses one and it stays collapsed through refreshes, until a file is newly checked
+  out, added or moved into it: then it opens again (with Pending, if you collapsed that too).
+  `client_view.expand_limit = 30` starts changelists with more than 30 files collapsed (0, the
+  default, means no limit).
 - **Needs attention:** opened files that are stale or unresolved.
 - **Workspace reconcile:** files changed outside Perforce, to open for add, edit or delete
   (`a`). See [Reconcile](#reconcile).

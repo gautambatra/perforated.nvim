@@ -290,6 +290,7 @@ opts = {
   client_view = {
     kind = 'tab', -- 'tab' | 'float' | 'split'
     submitted_limit = 20, -- "Recent submitted": how many of your latest (gn: the full list)
+    expand_limit = 0, -- changelists with more files start collapsed (0 = no limit)
     reconcile = {
       paths = {}, -- paths to scan (relative to the client root); {} = whole client
       mtime = true, -- hash only files whose mtime moved (`p4 status -m`); false = hash every file

@@ -1736,7 +1736,10 @@ copy the options of the plugin view they were opened from.
 The client view ([§18.7](#187-you-open-the-client-view-p4)). `file_node` renders a file row
 (action, icon, path, `#have/#head`, stale/unresolved badges, the `●`/dimmed changed marker,
 and in "Needs attention" the changelist). `build(view, data)` assembles the sections: header,
-Sync CL, Pending (per changelist, with shelves), Needs attention, Workspace reconcile (lazy,
+Sync CL, Pending (per changelist, with shelves; a changelist starts open unless it has more
+files than `client_view.expand_limit` (0 = no limit), and `view.cl_files` — each changelist's
+files at the last build — re-opens one (and the Pending section) when a file appears in it that
+wasn't there before, overriding a collapse in `tree.folds`), Needs attention, Workspace reconcile (lazy,
 scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted (the latest
 `client_view.submitted_limit`, then a `submitted_all` row: `<CR>` there or `gn` in the section
 opens `views/changes.lua` with `{ user, anywhere = true }`), with blank spacer rows between

@@ -195,6 +195,30 @@ local function build(view, data)
   end)
 
   local is_stale = require('perforated.status').is_stale
+  -- Changelists start expanded (`client_view.expand_limit`: those with more files start
+  -- collapsed); one a file newly lands in (checked out, added, moved there) opens again, with
+  -- the Pending section, even if you collapsed it. Your other collapses stay.
+  local limit = require('perforated.config').get().client_view.expand_limit or 0
+  if data.pending and data.opened then
+    local now = {}
+    for _, key in ipairs(order) do
+      local set = {}
+      for _, f in ipairs(by_change[key].files) do
+        set[f.depotFile or f.clientFile or ''] = true
+      end
+      now['cl:' .. key] = set
+    end
+    for id, set in pairs(view.cl_files and now or {}) do
+      local was = view.cl_files[id] or {}
+      for f in pairs(set) do
+        if not was[f] then
+          view.tree.folds[id], view.tree.folds['sec:pending'] = true, true
+          break
+        end
+      end
+    end
+    view.cl_files = now
+  end
   local pending_children = {}
   local attention = {}
   for _, key in ipairs(order) do
@@ -282,7 +306,7 @@ local function build(view, data)
           shelved = shelved,
           mine = s.client == mine,
         },
-        open = #s.files <= 30,
+        open = limit <= 0 or #s.files <= limit,
         text = title,
         children = (#children > 0) and children or nil,
       }

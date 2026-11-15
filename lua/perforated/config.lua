@@ -50,6 +50,9 @@ local defaults = {
     --- How many of your latest submitted changelists "Recent submitted" shows (any client);
     --- `gn` there opens the full list.
     submitted_limit = 20,
+    --- Changelists with more opened files than this start collapsed (0 = no limit: every one
+    --- starts expanded). A file newly checked out, added or moved into one expands it anyway.
+    expand_limit = 0,
     -- Paths the reconcile section scans (relative to the client root, local or depot paths;
     -- or a function(ws) returning them). Empty = the whole client. `p` in the view overrides
     -- it for the session. `mtime`: skip hashing files whose modification time matches the
