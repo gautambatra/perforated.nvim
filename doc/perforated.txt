@@ -509,6 +509,9 @@ keys):
       commands = {
         aliases = true
       },
+      complete = {
+        wait = 300
+      },
       debug = {
         enabled = false,
         level = "debug",

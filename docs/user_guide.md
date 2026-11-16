@@ -767,6 +767,22 @@ column until you sync.
   client view, `:P4 resolve`) or reverted, its entry disappears; when none are left, the title
   says "all resolved" and the window closes.
 
+## Command-line completion
+
+`:P4 <Tab>` completes the subcommands, and after one, its arguments:
+
+- **Changelist numbers** for `change`, `describe`, `submit`, `unshelve` (the ones with a
+  shelf), `integrate` and every `-c`, plus `default` or `new` where the command takes them.
+  They come from what the plugin already knows (your pending changelists, your opened files,
+  the client view's recent submits), so they cost no call to the server.
+- **Depot paths:** a word starting with `//` completes from `p4 dirs` and `p4 files` for that
+  directory, kept for 5 minutes. A space in a name is completed as `\ `.
+- **Users** after `changes -u` (`p4 users`, once per session), and each command's **flags**.
+
+Completion never waits long on the server: a `<Tab>` waits at most `complete.wait` (300 ms)
+for a directory or the user list it doesn't have yet. If the server is slower, that `<Tab>`
+shows nothing and the next one has the answer. Offline, it doesn't ask the server at all.
+
 ## Pickers, statusline, icons, code actions
 
 Every plugin that changes how perforated looks or behaves, and what you get without it, is

@@ -61,6 +61,11 @@ local defaults = {
     reconcile = { paths = {}, mtime = true },
   },
   sync = { resolve_prompt = true }, -- after a sync that leaves files unresolved: offer to resolve
+  complete = {
+    --- `:P4` completion of depot paths and users asks p4; a <Tab> waits at most this long (ms)
+    --- for an answer it doesn't have yet (a slower one shows on the next <Tab>; 0 = never wait).
+    wait = 300,
+  },
   shelve = {
     --- Upload threads (`--parallel=threads=N`; 0 = off). Only faster when the server allows
     --- parallel transfers (net.parallel.max > 0); otherwise p4 shelves one file at a time.

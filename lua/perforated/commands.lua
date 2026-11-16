@@ -13,7 +13,7 @@ local M = {}
 ---@field scope 'none'|'workspace'|'connection'
 ---@field desc string
 ---@field run fun(ctx: perforated.Workspace?, o: table, args: string[])
----@field complete (fun(arglead: string, args: string[]): string[])?
+---@field complete (fun(arglead: string, args: string[]): string[])|perforated.CompleteSpec?
 
 local function notify(msg, level)
   local dbg = package.loaded['perforated.core.debug']
@@ -195,7 +195,7 @@ M.commands = {
   edit = {
     scope = 'workspace',
     desc = 'Open files for edit: :P4 edit [-c CL] [file|dir…] (default: sticky CL or default)',
-    complete = complete_files,
+    complete = { flags = { '-c' }, c = 'pending', c_default = true, files = true, depot = true },
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
       if not need_files(files) then
@@ -211,7 +211,7 @@ M.commands = {
   add = {
     scope = 'workspace',
     desc = 'Open files for add: :P4 add [-c CL] [file|dir…]',
-    complete = complete_files,
+    complete = { flags = { '-c' }, c = 'pending', c_default = true, files = true },
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
       if not need_files(files) then
@@ -241,7 +241,7 @@ M.commands = {
   revert = {
     scope = 'workspace',
     desc = 'Revert files: :P4 revert[!] [-a] [file|dir…] (! = no confirmation, -a = only unchanged)',
-    complete = complete_files,
+    complete = { flags = { '-a' }, files = true, depot = true },
     run = function(ws, o, args)
       local _, files, flags = parse_file_args(args)
       if not need_files(files) then
@@ -371,9 +371,7 @@ M.commands = {
   change = {
     scope = 'workspace',
     desc = "Edit a changelist description: :P4 change[!] [N|new]  (! = full spec; no N = current file's CL); :P4 change -d N deletes a pending CL",
-    complete = function()
-      return { 'new', '-d' }
-    end,
+    complete = { flags = { '-d' }, words = { 'new' }, cl = 'pending' },
     run = function(ws, o, args)
       local editor = require('perforated.views.change_editor')
       if args[1] == '-d' then
@@ -427,6 +425,7 @@ M.commands = {
   changes = {
     scope = 'connection',
     desc = 'Submitted changelists: :P4 changes [-u user] [-m N] [path] (default: this client)',
+    complete = { flags = { '-u', '-m' }, depot = true, files = true },
     run = function(ws, _, args)
       local opts, i = {}, 1
       while i <= #args do
@@ -451,6 +450,7 @@ M.commands = {
   describe = {
     scope = 'connection',
     desc = "Describe a changelist: :P4 describe [N|default]  (no N = the current file's CL)",
+    complete = { words = { 'default' }, cl = 'any' },
     run = function(ws, _, args)
       local cl = args[1]
       if not cl then
@@ -470,7 +470,7 @@ M.commands = {
   filelog = {
     scope = 'connection',
     desc = 'File history: :P4 filelog [file|//depot/path|dir]  (default: current file; a directory lists its changelists)',
-    complete = complete_files,
+    complete = { files = true, depot = true },
     run = function(ws, _, args)
       local h = require('perforated.views.history')
       if not args[1] then
@@ -487,7 +487,7 @@ M.commands = {
   history = {
     scope = 'connection',
     desc = 'Alias of :P4 filelog',
-    complete = complete_files,
+    complete = { files = true, depot = true },
     run = function(ws, o, args)
       M.commands.filelog.run(ws, o, args)
     end,
@@ -496,6 +496,7 @@ M.commands = {
   timelapse = {
     scope = 'connection',
     desc = 'Time-lapse: step through every revision of the current file (or a depot path)',
+    complete = { files = true, depot = true },
     run = function(ws, _, args)
       local tl = require('perforated.views.timelapse')
       if args[1] then
@@ -512,6 +513,7 @@ M.commands = {
   annotate = {
     scope = 'connection',
     desc = 'Annotate the current file (or a depot revision): :P4 annotate [//depot/path#rev]',
+    complete = { files = true, depot = true },
     run = function(ws, _, args)
       local a = require('perforated.views.annotate')
       if args[1] and args[1]:match('^//') then
@@ -540,6 +542,7 @@ M.commands = {
   lookup = {
     scope = 'connection',
     desc = 'Go to a changelist (number), a file or directory history (path) or a user: :P4 lookup [what]',
+    complete = { cl = 'any', depot = true },
     run = function(ws, _, args)
       require('perforated.lookup').run(ws, args[1])
     end,
@@ -548,7 +551,7 @@ M.commands = {
   reopen = {
     scope = 'workspace',
     desc = 'Move opened files to another changelist: :P4 reopen [-c CL] [file|dir…]  (no -c: pick one)',
-    complete = complete_files,
+    complete = { flags = { '-c' }, c = 'pending', c_default = true, files = true, depot = true },
     run = function(ws, _, args)
       local cl, files = parse_file_args(args)
       if not need_files(files) then
@@ -592,7 +595,13 @@ M.commands = {
   shelve = {
     scope = 'workspace',
     desc = "Shelve: :P4 shelve [-c CL] [file|dir…]  (default: the current file's CL, all its files; -d deletes the shelf)",
-    complete = complete_files,
+    complete = {
+      flags = { '-c', '-d' },
+      c = 'pending',
+      c_default = true,
+      files = true,
+      depot = true,
+    },
     run = function(ws, _, args)
       local ops = require('perforated.ops')
       local cl, files, flags = parse_file_args(args)
@@ -620,6 +629,7 @@ M.commands = {
   unshelve = {
     scope = 'workspace',
     desc = 'Unshelve: :P4 unshelve CL [-c target] [//depot/file…]',
+    complete = { flags = { '-c' }, cl = 'shelved', c = 'pending', c_default = true, depot = true },
     run = function(ws, _, args)
       local shelf, target, files = nil, nil, {}
       local i = 1
@@ -644,6 +654,7 @@ M.commands = {
   submit = {
     scope = 'workspace',
     desc = "Submit a changelist (with a confirmation): :P4 submit [CL|default]  (default: the current file's CL)",
+    complete = { words = { 'default' }, cl = 'pending' },
     run = function(ws, _, args)
       local cl = args[1]
       if not cl then
@@ -660,7 +671,7 @@ M.commands = {
   sync = {
     scope = 'workspace',
     desc = 'Sync the whole workspace (:P4 sync), or get the latest revision of files (:P4 sync %|path …); @CL / #head for a revision',
-    complete = complete_files,
+    complete = { files = true, depot = true },
     run = function(ws, _, args)
       if #args == 1 and args[1] == '@' then
         return require('perforated.ops').pick_sync_change(ws) -- pick a changelist
@@ -737,6 +748,7 @@ M.commands = {
   integrate = {
     scope = 'workspace',
     desc = 'Cherry-pick a submitted changelist: :P4 integrate [CL]  (no CL: pick from a source path)',
+    complete = { cl = 'submitted' },
     run = function(ws, _, args)
       require('perforated.integrate').run(ws, args[1])
     end,
@@ -968,15 +980,29 @@ function M.complete(arglead, cmdline, _)
   return M.complete_args(words[1], arglead, cmdline)
 end
 
---- Argument completion for a given subcommand (also used by the flat aliases).
-function M.complete_args(name, arglead, _)
+--- Argument completion for a given subcommand (also used by the flat aliases). A table
+--- `complete` is a `perforated.CompleteSpec` (complete.lua, loaded on first use).
+function M.complete_args(name, arglead, cmdline)
   local cmd = M.commands[name]
-  if cmd and cmd.complete then
-    return vim.tbl_filter(function(c)
-      return vim.startswith(c, arglead)
-    end, cmd.complete(arglead, {}))
+  if not (cmd and cmd.complete) then
+    return {}
   end
-  return {}
+  local out
+  if type(cmd.complete) == 'table' then
+    -- The word before this one, when it's a flag (`-c` takes a changelist, `-u` a user).
+    local before = vim.split(vim.trim((cmdline or ''):sub(1, #(cmdline or '') - #arglead)), '%s+')
+    local prev = before[#before]
+    out = require('perforated.complete').complete(
+      cmd.complete,
+      arglead,
+      prev and prev:match('^%-%a$') and prev or nil
+    )
+  else
+    out = cmd.complete(arglead, {})
+  end
+  return vim.tbl_filter(function(c)
+    return vim.startswith(c, arglead)
+  end, out)
 end
 
 return M

@@ -511,6 +511,7 @@ lua/perforated/
   config.lua                 defaults, merging, unknown-key detection
   gate.lua                   activation gate: pure-Lua P4CONFIG lookup, dormancy
   commands.lua               :P4 dispatcher, every subcommand, completion
+  complete.lua               :P4 argument completion: changelists, depot paths, users (lazy)
   keymaps.lua                <Plug> actions and the opt-in preset
   health.lua                 :checkhealth perforated
   hl.lua                     highlight groups (default links)
@@ -951,6 +952,17 @@ fresh Neovim (no Perforce file opened, so nothing has run `p4 info`) would other
 "unknown client/user". `parse_file_args` handles `-c CL` and file arguments
 (default: the current file). `M.names()` feeds completion and the doc generator; each `desc`
 becomes the command's entry in `:h perforated`.
+
+A command's `complete` is a function, or a `perforated.CompleteSpec` table (`flags`, `words`,
+`cl` for a changelist argument, `c` / `c_default` for what `-c` takes, `depot`, `files`) that
+`complete_args` hands to the lazy `complete.lua` with the flag before the word (`-c`, `-u`).
+Changelists come only from known state (`ws.pending_kept` and its `shelved` field, `ws.opened`,
+the client view's `data.submitted` if that module is loaded): no p4 call. Depot paths run
+`dirs` and `files -e` for the word's directory and users run `users`; each listing is cached
+(directories 5 minutes, users per server and user), one call per key at a time, never while
+offline. Completion is synchronous, so a missing listing gets `vim.wait` up to
+`complete.wait` ms (scheduled callbacks still run inside it; command-line completion has no
+textlock); a later answer fills the cache for the next `<Tab>`. Paths are escaped as `\ `.
 
 #### `keymaps.lua`
 `M.actions` maps `<Plug>` names to functions (mostly `:P4` subcommands). `M.PRESET` is the
@@ -2075,6 +2087,7 @@ mixed-case path. CI runs this leg on Linux.
 | File | Covers |
 |---|---|
 | `test_activation.lua` | dormancy, gate, workspaces, command list vs plugin/, aliases, completion |
+| `test_complete.lua` | `:P4` argument completion: changelists, depot paths (cache, wait limit), users, flags, offline |
 | `test_runner.lua`, `test_parse.lua`, `test_cache_queue_config.lua` | core units |
 | `test_conn.lua` | offline/backoff, auth: one prompt, stale-auth retry, login races, a slow (browser) sign-in, Ctrl+c, ticket recovery on focus |
 | `test_engine.lua` | diff engine: hunk types, ranges, async = sync |

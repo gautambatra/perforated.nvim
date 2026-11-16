@@ -301,6 +301,7 @@ opts = {
     },
   },
   sync = { resolve_prompt = true }, -- offer to resolve after a sync leaves files unresolved
+  complete = { wait = 300 }, -- ms a :P4 <Tab> waits for depot paths / users from p4 (0 = never)
   shelve = {
     parallel = 0, -- upload threads (--parallel=threads=N) when the server allows; 0 = off
     unchanged = 'shelve', -- 'leave': shelve only changed files (-a leaveunchanged)
@@ -396,8 +397,9 @@ keys = {
 
 ## Commands
 
-The most used ones. `:P4 <Tab>` completes them all, and `:h perforated-commands` has the full
-list.
+The most used ones. `:P4 <Tab>` completes them all, and their arguments too: changelist
+numbers, `//depot` paths, users and flags ([completion](docs/user_guide.md#command-line-completion)).
+`:h perforated-commands` has the full list.
 
 | Command | Description |
 |---|---|
