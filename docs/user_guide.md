@@ -532,6 +532,18 @@ with every line added since `◆` highlighted (tagged with the revision that add
 every line deleted since `◆` shown where it was. `h` / `l` move `●`, `[a` / `]a` move `◆`,
 and the info panel says which mode you're in.
 
+**Long histories** load in two parts, because the server's cost grows with the number of
+revisions it walks. The newest `timelapse.window` revisions (50) come first and the view opens
+on them; the older ones follow in the background. Until they're in, the older part of the
+slider is dashed, its title says `loading revisions before #N…`, and stepping past `#N` tells
+you they're still loading. Opening it from a file's buffer also starts that first part
+alongside the revision list, instead of after it. `timelapse.window = 0` loads everything at
+once.
+
+**Reopening** a file's time-lapse in the same session is instant: the last two closed ones
+are kept for ten minutes (unless their text is above 5 MB). If the file has new revisions,
+only those are fetched.
+
 Files above `timelapse.max_bytes` (20 MB) point you to their history instead.
 
 ## Shelve, submit, sync, resolve, integrate

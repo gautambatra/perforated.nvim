@@ -602,7 +602,8 @@ keys):
         info_position = "right",
         info_width = 50,
         max_bytes = 20971520,
-        slider = true
+        slider = true,
+        window = 50
       },
       toast = {
         backend = "float",

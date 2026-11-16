@@ -917,6 +917,22 @@ why keys, menus and help never disagree.
 
 1. `timelapse.load` runs `filelog -l` (revision metadata) and `annotate -a` of the newest
    revision with content: every line the file ever had, in order, with its revision range.
+   The server's cost is walking the revisions (on a scratch p4d, 12k lines × 400 revisions:
+   1.7 s for all of them, 0.3 s for the newest 50; the Lua side is ~70 ms), so a history longer
+   than `timelapse.window` (50) loads in two parts: `annotate -a file#J,#last` first (lines
+   older than J come back with `lower = J`), the view opens on it (`tl.from = J`), then
+   `file#first,#J` runs in the background and `stitch` joins the two on revision J. Revision J's
+   lines are in both, in the same order, so they pair up; lines that died before J and lines
+   born after it never share a revision, so their relative order doesn't matter. A range
+   starting at a deleted revision starts at the next one with content, so J is moved there.
+   When the caller knows the head (`opts.head`, from the buffer's fstat), the first annotate
+   starts alongside `filelog`; it's thrown away if `filelog` shows a different head.
+   Closing the view cancels whatever is still running (`loader.cancel()`) and keeps a complete
+   time-lapse (`keep`: the last 2, for 10 minutes, ≤ 5 MB of text). Reopening reuses it while
+   `filelog`'s revisions up to its last (change, action, digest: `signature`) still match;
+   new revisions are annotated alone (`#oldlast,#last`) and stitched on. Lines are stored as
+   three parallel arrays (`text`, `lo`, `hi`): 1.9 MB instead of 4.6 MB as a table per line
+   for 1 MB of text.
 2. Revision N is the lines with `lower ≤ N ≤ upper`. A step computes, in one pass, the buffer
    edits between the two revisions, where the cursor goes and which lines were added or
    removed — then applies only those edits (a few `set_lines` calls). About 2 ms for a 20k-line
@@ -1403,8 +1419,12 @@ with `swarm(ws, change)`, which copies a changelist's review URL.
 
 #### `timelapse.lua`
 The time-lapse engine ([§18.8](#188-you-step-through-a-time-lapse)): `load` (filelog +
-`annotate -a`, size guard `timelapse.max_bytes`), `parse` (entries `{ text, lo, hi }`,
-joining chunked long lines), `revision(tl, n)` (lines and entry indices, LRU of 8),
+`annotate -a`, size guard `timelapse.max_bytes`, the newest `timelapse.window` revisions first;
+returns a loader whose `cancel()` stops it), `parse` (line arrays `{ text, lo, hi, bytes }`,
+joining chunked long lines), `stitch(a, b, j)` (joins an annotate of ..j with one of j..),
+`lines(list)` (arrays from `{ text, lo, hi }` items, for tests and the bench), `keep(tl)` /
+`kept()` (closed time-lapses for a quick reopen), `signature`, `loaded(tl, n)` (whether n is
+in yet), `revision(tl, n)` (lines and their indices, LRU of 8),
 `changes(tl, n)` (added lines and deleted lines grouped by where they'd sit), `range(tl, a, b)`
 (for range mode), `transition(tl, from, to, lnum)` (buffer edits + cursor anchor + changes in
 one pass), `anchor`, `step`.
@@ -1836,7 +1856,12 @@ Revision:") sits on the right (`timelapse.info_position = 'right'`, stacked fiel
 bottom (two columns, a rule line as separator). The **slider** (`slider.lua`) is a three-line
 window above: its own title winbar (so a global winbar can't steal a line), the track with a
 tick per revision and the handles, and labels (changelists or revisions) placed by
-bisection so they never crowd. Windows are created with `nvim_open_win({ split = … })`.
+bisection so they never crowd. Windows are created with `nvim_open_win({ split = … })`. While the
+older history is still loading (`tl.from > tl.first`), the track left of `#from` is dashed
+(`┄`, ticks `┊`) and the title says so; `go` / `go_a` refuse revisions before `from` with a message, and
+`on_more` redraws the decorations once the rest is stitched on. `open_buf` passes the buffer's
+head (fstat) so the first annotate starts with `filelog`; the BufWipeout handler, set up
+before loading, cancels the loader and keeps the time-lapse.
 
 #### `views/changes.lua`, `views/change_info.lua`, `views/change_editor.lua`
 `:P4 changes` (submitted changelists, paged; a changelist row expands, on first `l`, into its
@@ -1928,7 +1953,8 @@ provider).
 meta = {CL → {user, time, desc, client}} }`.
 
 **Timelapse** (`timelapse.lua`): `{ depotFile, revs = {n → rev record}, first, last, head,
-entries = { {text, lo, hi} }, cache }`.
+from, text = {…}, lo = {…}, hi = {…}, bytes, sig, key, cache }` (`from`: the oldest revision
+loaded so far; `first` once the whole history is in).
 
 ## 21. Conventions
 

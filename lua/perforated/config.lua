@@ -76,6 +76,8 @@ local defaults = {
   },
   timelapse = {
     max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
+    --- Revisions annotated first; older ones load in the background (0 = all at once).
+    window = 50,
     slider = true,
     info_position = 'right', -- the revision details panel: 'right' | 'bottom'
     info_width = 50, -- right-hand panel

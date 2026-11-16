@@ -70,6 +70,15 @@ function Slider:render()
     cells[c] = '┼'
   end
   cells[0], cells[width - 1] = '├', '┤'
+  -- Revisions older than the loaded part (still on their way): a dashed track and ticks.
+  local tl = view.tl
+  local loading = tl.from and tl.from > tl.first and pos[tl.from]
+  if loading then
+    local dashed = { ['─'] = '┄', ['┼'] = '┊' }
+    for c = 1, loading - 1 do
+      cells[c] = dashed[cells[c]] or cells[c]
+    end
+  end
   local lo, hi = a and math.min(pos[a] or 0, pos[b] or 0), a and math.max(pos[a] or 0, pos[b] or 0)
   if a then
     for c = lo + 1, hi - 1 do
@@ -144,10 +153,11 @@ function Slider:render()
       and ('incremental diff ◆ %s → ● %s'):format(label(view, a), label(view, b))
     or view.mode == 'range' and ('range: changes since ◆ %s'):format(label(view, a))
     or 'single'
-  vim.wo[self.win][0].winbar = ('%%#PerforatedTitle# Time-lapse%%#PerforatedDim#  %s  ·  %s  ·  labels: %s (S)'):format(
+  vim.wo[self.win][0].winbar = ('%%#PerforatedTitle# Time-lapse%%#PerforatedDim#  %s  ·  %s  ·  labels: %s (S)%s'):format(
     (view.tl.depotFile:gsub('%%', '%%%%')),
     mode,
-    view.scale == 'rev' and 'revisions' or 'changelists'
+    view.scale == 'rev' and 'revisions' or 'changelists',
+    loading and ('  ·  loading revisions before #%d…'):format(tl.from) or ''
   )
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, { track, labels })

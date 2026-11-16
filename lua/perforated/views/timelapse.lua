@@ -271,7 +271,7 @@ function M.decorate(view)
     local _, idx = engine.revision(tl, n)
     local span = math.max(1, tl.last - tl.first)
     for l, i in ipairs(idx) do
-      local lo = tl.entries[i].lo
+      local lo = tl.lo[i]
       local step = 1 + math.floor((lo - tl.first) * 9 / span)
       vim.api.nvim_buf_set_extmark(buf, ns, l - 1, 0, {
         virt_text = { { ('%4s '):format('#' .. lo), 'PerforatedAge' .. step } },
@@ -372,8 +372,9 @@ function M.set_mode(view, mode)
     leave_diff(view)
   end
   view.mode = mode
-  if mode ~= 'single' and not (view.a and view.a < view.n) then
-    view.a = engine.step(view.tl, view.n, -1) or view.n
+  if mode ~= 'single' and not (view.a and view.a < view.n and engine.loaded(view.tl, view.a)) then
+    local a = engine.step(view.tl, view.n, -1)
+    view.a = a and engine.loaded(view.tl, a) and a or view.n
   end
   if mode == 'diff' then
     M.update_diff(view)
@@ -385,8 +386,18 @@ function M.set_mode(view, mode)
   M.render_info(view)
 end
 
+--- Older revisions arrive after the view opens (`timelapse.window`): say so instead of moving.
+---@return boolean
+local function loaded(view, n)
+  if engine.loaded(view.tl, n) then
+    return true
+  end
+  notify(('older revisions (before #%d) are still loading…'):format(view.tl.from))
+  return false
+end
+
 local function go(view, n)
-  if n and view.tl.revs[n] then
+  if n and view.tl.revs[n] and loaded(view, n) then
     if view.mode ~= 'single' and view.a and n <= view.a then
       view.a = engine.step(view.tl, n, -1) or n -- keep ◆ before ●
     end
@@ -396,7 +407,7 @@ end
 
 --- Move ◆ (diff / range mode), keeping it before ●.
 local function go_a(view, n)
-  if not n or not view.tl.revs[n] or n >= view.n then
+  if not n or not view.tl.revs[n] or n >= view.n or not loaded(view, n) then
     return
   end
   view.a = n
@@ -720,7 +731,7 @@ end
 --- Open the time-lapse of a file.
 ---@param ws perforated.Workspace
 ---@param path string  depot or local path
----@param opts { rev: integer?, line: integer? }?  start revision (default: newest) and line
+---@param opts { rev: integer?, line: integer?, head: { rev: integer, action: string }? }?  start revision (default: newest) and line; the file's head when known (fstat), so loading starts sooner
 function M.open(ws, path, opts)
   opts = opts or {}
   -- A local name can hold @ or # (`icon@2x.png`): only cut a revision it doesn't name.
@@ -750,7 +761,47 @@ function M.open(ws, path, opts)
   }
   view.actions = actions(view)
   M._last = view
-  engine.load(ws, path, function(tl, err)
+  -- The rest of the history (older than `timelapse.window` revisions) was stitched on.
+  local function on_more(tl, err)
+    if not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+    if not tl then
+      return notify('older revisions failed to load: ' .. tostring(err), vim.log.levels.WARN)
+    end
+    view.changes = nil -- the oldest loaded revision's changes are known now
+    M.decorate(view)
+    if view.slider then
+      view.slider:render()
+    end
+    M.render_info(view)
+  end
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer = buf,
+    once = true,
+    callback = function()
+      if view.loader then
+        view.loader.cancel() -- the history may still be loading
+      end
+      if view.tl then
+        engine.keep(view.tl) -- a quick reopen
+      end
+      view.tl = nil -- free the line table
+      if view.footer then
+        view.footer:close()
+      end
+      if view.slider then
+        view.slider:close()
+      end
+      if view.dwin and vim.api.nvim_win_is_valid(view.dwin) then
+        pcall(vim.api.nvim_win_close, view.dwin, true)
+      end
+      if view.iwin and vim.api.nvim_win_is_valid(view.iwin) then
+        pcall(vim.api.nvim_win_close, view.iwin, true)
+      end
+    end,
+  })
+  view.loader = engine.load(ws, path, function(tl, err)
     if not vim.api.nvim_buf_is_valid(buf) then
       return
     end
@@ -777,26 +828,7 @@ function M.open(ws, path, opts)
         go(view, rev)
       end)
     end
-    vim.api.nvim_create_autocmd('BufWipeout', {
-      buffer = buf,
-      once = true,
-      callback = function()
-        view.tl = nil -- free the line table
-        if view.footer then
-          view.footer:close()
-        end
-        if view.slider then
-          view.slider:close()
-        end
-        if view.dwin and vim.api.nvim_win_is_valid(view.dwin) then
-          pcall(vim.api.nvim_win_close, view.dwin, true)
-        end
-        if view.iwin and vim.api.nvim_win_is_valid(view.iwin) then
-          pcall(vim.api.nvim_win_close, view.iwin, true)
-        end
-      end,
-    })
-  end)
+  end, { head = opts.head, want = opts.rev, on_more = on_more })
   return view
 end
 
@@ -820,7 +852,11 @@ function M.open_buf(buf)
   if st.rec.action == 'add' then
     return notify('opened for add: no history yet', vim.log.levels.INFO)
   end
-  M.open(st.ws, st.rec.depotFile, { rev = tonumber(st.rec.haveRev), line = line })
+  M.open(st.ws, st.rec.depotFile, {
+    rev = tonumber(st.rec.haveRev),
+    line = line,
+    head = { rev = tonumber(st.rec.headRev), action = st.rec.headAction },
+  })
 end
 
 M._actions = actions -- for the generated help (scripts/gen_doc.lua)

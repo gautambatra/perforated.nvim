@@ -363,7 +363,7 @@ do
     end
     local revs = {}
     for r = 1, 200 do revs[r] = { rev = tostring(r), change = tostring(1000 + r), user = 'u', time = '0', desc = 'd' } end
-    local tl = { depotFile = '//depot/big.c', revs = revs, first = 1, last = 200, head = 200, entries = entries, cache = {} }
+    local tl = vim.tbl_extend('force', engine.lines(entries), { depotFile = '//depot/big.c', revs = revs, first = 1, last = 200, head = 200, from = 1, cache = {} })
     local buf = vim.api.nvim_get_current_buf()
     vim.bo[buf].buftype = 'nofile'
     local view = { tl = tl, buf = buf, win = vim.api.nvim_get_current_win(), actions = {},

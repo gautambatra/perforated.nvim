@@ -190,7 +190,8 @@ More: [describe, history, annotate, blame](docs/user_guide.md#describe-history-a
 `:P4 timelapse` steps through every revision of a file instantly, P4V-style: `h` / `l` move,
 a slider shows where you are, and a panel shows each revision's details. Lines added in a
 revision are highlighted and lines it deleted are shown where they were. Two more modes
-compare against an older revision.
+compare against an older revision. A long history opens on its newest 50 revisions while the
+rest loads in the background, and reopening a file is instant.
 
 More: [time-lapse](docs/user_guide.md#time-lapse).
 
@@ -308,6 +309,7 @@ opts = {
   },
   timelapse = {
     max_bytes = 20 * 1024 * 1024, -- larger files: use history instead
+    window = 50, -- revisions loaded first; older ones follow in the background (0 = all at once)
     slider = true,
     info_position = 'right', -- the Slider Revision panel: 'right' | 'bottom'
     info_width = 50, -- right-hand panel
