@@ -762,6 +762,185 @@ T['m4']['reconcile scans only the configured paths; p changes them'] = function(
   )
 end
 
+--- The client view open on a reconcile scan of an edit (main/a.txt), a delete (main/b.txt) and an
+--- add (main/new.txt).
+local function reconcile_scanned()
+  setup()
+  local a = root .. '/main/a.txt'
+  vim.uv.fs_chmod(a, tonumber('644', 8))
+  H.write(a, 'l1\nl2 changed\nl3\nl4\nl5\n')
+  local later = os.time() + 60
+  vim.uv.fs_utime(a, later, later) -- `status -m` looks at files whose mtime moved
+  os.remove(root .. '/main/b.txt')
+  H.write(root .. '/main/new.txt', 'n1\n')
+  child.cmd('P4')
+  wait(
+    [[require('perforated.views.client')._get(require('perforated').workspace().key).data ~= nil]]
+  )
+  local function goto_line(text)
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find(text, 1, true) then
+        child.api.nvim_win_set_cursor(0, { i, 0 })
+        return l
+      end
+    end
+  end
+  goto_line('Workspace reconcile')
+  child.type_keys('l')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('(3 ·', 1, true) ~= nil]]
+  )
+  return goto_line
+end
+
+--- The two sides of the current diff tab: their buffer names.
+local function diff_sides()
+  return child.lua([[
+    local names = {}
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.wo[w].diff then
+        names[#names + 1] = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w))
+      end
+    end
+    return names
+  ]])
+end
+
+T['m4']['reconcile: d diffs a found edit, add or delete; o opens one, not a delete'] = function()
+  local goto_line = reconcile_scanned()
+  local view_tab = child.api.nvim_get_current_tabpage()
+  local tabs = #child.api.nvim_list_tabpages() + 1 -- the diff opens a tab of its own
+  local function back()
+    child.cmd('tabclose')
+    child.api.nvim_set_current_tabpage(view_tab)
+  end
+  -- edit: the have revision against the file
+  goto_line('main/a.txt')
+  child.type_keys('d')
+  wait(('#vim.api.nvim_list_tabpages() == %d and vim.wo.diff'):format(tabs))
+  local sides = diff_sides()
+  H.eq(#sides, 2)
+  H.neq(sides[1]:find('//depot/main/a.txt#1', 1, true), nil)
+  H.eq(sides[2], root .. '/main/a.txt')
+  back()
+  -- add: nothing against the file
+  goto_line('main/new.txt')
+  child.type_keys('d')
+  wait(('#vim.api.nvim_list_tabpages() == %d and vim.wo.diff'):format(tabs))
+  sides = diff_sides()
+  H.neq(sides[1]:find('not in depot', 1, true), nil)
+  H.eq(sides[2], root .. '/main/new.txt')
+  back()
+  -- delete: the have revision against nothing
+  goto_line('main/b.txt')
+  child.type_keys('d')
+  wait(('#vim.api.nvim_list_tabpages() == %d and vim.wo.diff'):format(tabs))
+  sides = diff_sides()
+  H.neq(sides[1]:find('//depot/main/b.txt#1', 1, true), nil)
+  H.neq(sides[2]:find('deleted locally', 1, true), nil)
+  back()
+  -- o: a deleted file has nothing to open
+  goto_line('main/b.txt')
+  local before = child.api.nvim_get_current_buf()
+  child.type_keys('o')
+  H.eq(child.api.nvim_get_current_buf(), before)
+  goto_line('main/new.txt')
+  child.type_keys('o')
+  wait(('vim.api.nvim_buf_get_name(0) == %q'):format(root .. '/main/new.txt'))
+end
+
+T['m4']['reconcile: a on the section header asks with counts, then opens every found file'] = function()
+  local goto_line = reconcile_scanned()
+  child.lua([[
+    _G.ASKED = {}
+    require('perforated.ui.prompt').confirm = function(msg)
+      table.insert(_G.ASKED, msg)
+      return _G.ANSWER
+    end
+  ]])
+  -- Cancel: nothing opened, the files stay
+  child.lua('_G.ANSWER = 2')
+  goto_line('Workspace reconcile')
+  child.type_keys('a')
+  H.eq(
+    child.lua_get('_G.ASKED'),
+    { 'Open 3 file(s) found by the reconcile scan? (1 edit, 1 add, 1 delete)' }
+  )
+  H.eq(opened(), {})
+  H.neq(goto_line('main/new.txt'), nil)
+  -- Open: all three, and they leave the section
+  child.lua('_G.ANSWER = 1')
+  goto_line('Workspace reconcile')
+  child.type_keys('a')
+  wait([[#_G.ASKED == 2]])
+  local want = {
+    ['//depot/main/a.txt'] = 'edit',
+    ['//depot/main/b.txt'] = 'delete',
+    ['//depot/main/new.txt'] = 'add',
+  }
+  for _ = 1, 150 do
+    local o = opened()
+    if vim.tbl_count(o) == 3 then
+      break
+    end
+    vim.uv.sleep(100)
+  end
+  local got = {}
+  for depot, f in pairs(opened()) do
+    got[depot] = f.action
+  end
+  H.eq(got, want)
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('(0 ·', 1, true) ~= nil]]
+  )
+end
+
+T['m4']['reconcile: p keeps paths with spaces, escaped or quoted'] = function()
+  setup()
+  H.write(root .. '/my dir/new.txt', 'x\n')
+  H.write(root .. '/an other/new2.txt', 'y\n')
+  H.write(root .. '/noise/n.txt', 'z\n')
+  child.cmd('P4')
+  wait(
+    [[require('perforated.views.client')._get(require('perforated').workspace().key).data ~= nil]]
+  )
+  local function goto_line(text)
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find(text, 1, true) then
+        child.api.nvim_win_set_cursor(0, { i, 0 })
+        return l
+      end
+    end
+  end
+  child.lua([[
+    require('perforated.ui.prompt').input = function(opts, cb)
+      _G.DEFAULT = opts.default
+      cb(_G.TYPED)
+    end
+  ]])
+  child.lua([=[_G.TYPED = [[my\ dir "an other"]]]=])
+  goto_line('Workspace reconcile')
+  child.type_keys('p')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('new2.txt', 1, true) ~= nil]]
+  )
+  local all = table.concat(child.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+  H.neq(all:find('my dir/new.txt', 1, true), nil)
+  H.eq(all:find('noise/n.txt', 1, true), nil)
+  H.neq(goto_line('Workspace reconcile'):find('"my dir" "an other"', 1, true), nil)
+  -- The prompt shows the paths escaped, so <CR> keeps them
+  child.lua([[_G.TYPED = nil]])
+  child.type_keys('p')
+  H.eq(child.lua_get('_G.DEFAULT'), [[my\ dir an\ other]])
+  H.eq(
+    child.lua_get(
+      [[require('perforated.views.client').split_scope(...)]],
+      { [[a\ b 'c d' e "f\"g" ]] }
+    ),
+    { 'a b', 'c d', 'e', 'f"g' }
+  )
+end
+
 T['m4']['resolve: -am takes clean merges; conflicts go to the merge tool'] = function()
   setup()
   child.cmd('P4 edit')

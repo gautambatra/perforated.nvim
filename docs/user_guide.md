@@ -269,11 +269,18 @@ only scans when you expand it (`l`).
 
 - `a` opens the files under the cursor (or selected) for add, edit or delete. A file leaves the
   section once p4 opens it; one p4 refuses stays listed, and the message says why.
+- `a` on the section header opens every file the scan found, after a question that counts
+  them (`Open 14 file(s) found by the reconcile scan? (9 edit, 4 add, 1 delete)`).
+- `d` shows what changed: the have revision against your file for an edit, an empty
+  "not in depot" side against it for an add, and the have revision against an empty
+  "deleted locally" side for a delete. `o` opens the file (not offered for a delete).
 - `x` stops a running scan, as do `:P4 jobs` and `:P4 cancel`.
 - `r` scans again.
 - To scan only the parts you work on, set `client_view.reconcile.paths`, e.g.
   `{ 'src/myteam' }`. Paths are relative to the client root; local and depot paths work too.
-  `p` on the section changes them for the session.
+  `p` on the section changes them for the session. Paths are separated by spaces; write a
+  space inside a path as `\ ` (what `<Tab>` completion inserts) or put the path in quotes
+  (`"my dir" src/other`).
 - The scan reads only files whose modification time moved since they were synced
   (`p4 status -m`), so it doesn't hash the whole workspace. A tool that rewrites a file but keeps
   its old mtime (`cp -p`, `rsync -t`, some archive tools) slips past it: set

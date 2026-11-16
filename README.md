@@ -153,6 +153,8 @@ modification time or size moved.
 - `c` creates a changelist, `i` edits its description (submitted ones too, if they're yours),
   `dd` deletes an empty one and `gm` moves files between them.
 - `W` switches to another of your clients; `A` shows all of them at once.
+- Workspace reconcile scans when you expand it: `d` diffs a file it found, `a` opens it for
+  add, edit or delete, and `a` on the section header opens them all.
 
 More: [client view](docs/user_guide.md#client-view), [changelists](docs/user_guide.md#changelists).
 

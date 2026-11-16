@@ -56,7 +56,8 @@ end
 
 --- Like `vim.ui.input`: `on_confirm(text)`, or `on_confirm(nil)` when cancelled. An empty
 --- answer is `''`, not nil. `<CR>` accepts; `<Esc>`, `<C-c>` or leaving the window cancels;
---- with `opts.completion` (a `getcompletion()` type) `<Tab>` completes the word at the cursor.
+--- with `opts.completion` (a `getcompletion()` type) `<Tab>` completes the word at the cursor
+--- (`dir` / `file`: a space in a name is `\ `, as on the command line).
 ---@param opts { prompt: string?, default: string?, completion: string? }
 ---@param on_confirm fun(input: string?)
 function M.input(opts, on_confirm)
@@ -125,9 +126,29 @@ function M.input(opts, on_confirm)
       end
       local line = vim.api.nvim_get_current_line()
       local col = vim.api.nvim_win_get_cursor(0)[2]
-      local start = (line:sub(1, col):match('.*()%s') or 0) + 1
+      -- File and directory names: a space in one is `\ ` (as on the command line), both in
+      -- the word being completed and in what completion inserts.
+      local esc = opts.completion == 'dir' or opts.completion == 'file'
+      local start, i = 1, 1
+      while i <= col do
+        local c = line:sub(i, i)
+        if esc and c == '\\' then
+          i = i + 1
+        elseif c:match('%s') then
+          start = i + 1
+        end
+        i = i + 1
+      end
       local word = line:sub(start, col)
+      if esc then
+        word = word:gsub('\\(.)', '%1')
+      end
       local ok, matches = pcall(vim.fn.getcompletion, word, opts.completion)
+      if ok and esc then
+        matches = vim.tbl_map(function(m)
+          return (m:gsub('([\\%s])', '\\%1'))
+        end, matches)
+      end
       if ok and #matches > 0 then
         vim.fn.complete(start, matches)
       end

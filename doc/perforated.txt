@@ -237,7 +237,9 @@ Client view (:P4)                                     *perforated-client-view*
     I                 Integrate into this workspace
 
   Reconcile
-    a                 Open for add / edit / delete as found
+    a                 Open for add / edit / delete as found (on the header: every file)
+    d                 Diff a found file (have revision, not in depot, deleted locally)
+    o                 Open a found file
     r                 Reconcile: scan again
     p                 Reconcile: set the paths to scan
     x                 Cancel scan

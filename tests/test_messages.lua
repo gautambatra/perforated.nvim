@@ -126,6 +126,26 @@ T['messages']['text input is a pop-up; empty and cancelled answers differ'] = fu
   H.eq(ask('<Esc>'), 'nil')
 end
 
+T['messages']['text input: <Tab> completes a directory with a space escaped'] = function()
+  child = H.child({})
+  local dir = vim.fn.tempname()
+  vim.fn.mkdir(dir .. '/sp dir', 'p')
+  vim.fn.mkdir(dir .. '/other', 'p')
+  child.cmd('cd ' .. vim.fn.fnameescape(dir))
+  local function ask(keys)
+    child.lua([[_G.r = 'unset'; require('perforated.ui.prompt').input(
+      { prompt = 'Paths: ', completion = 'dir' },
+      function(v) _G.r = v end)]])
+    child.type_keys(unpack(keys))
+    H.eq(H.wait(child, [[_G.r ~= 'unset']]), true)
+    return child.lua_get('_G.r')
+  end
+  H.eq(ask({ 'sp', '<Tab>', '<CR>' }), [[sp\ dir/]])
+  -- an escaped space stays part of the word being completed
+  H.eq(ask({ 'other sp\\ d', '<Tab>', '<CR>' }), [[other sp\ dir/]])
+  vim.fn.delete(dir, 'rf')
+end
+
 T['messages']['jobs: a pop-up when they start and when they end, nothing in between'] = function()
   child = H.child({})
   child.lua([[

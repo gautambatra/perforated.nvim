@@ -409,7 +409,7 @@ local function build(view, data)
     open = false,
     text = {
       { 'Workspace reconcile', 'PerforatedSection' },
-      { #scope > 0 and ('  · ' .. table.concat(scope, ' ')) or '', 'PerforatedHeader' },
+      { #scope > 0 and ('  · ' .. M.show_scope(scope)) or '', 'PerforatedHeader' },
       { label, 'PerforatedDim' },
     },
     children = rec_children,
@@ -917,6 +917,93 @@ function M.reconcile_scope(ws)
   return type(cfg) == 'table' and cfg or {}
 end
 
+--- The `p` prompt's text → scope entries: separated by spaces; `\ ` (what directory completion
+--- inserts) or quotes keep a space inside a path (`"my dir" a\ b c` → `my dir`, `a b`, `c`).
+---@param input string
+---@return string[]
+function M.split_scope(input)
+  local out, cur, quote, any = {}, {}, nil, false
+  local i, n = 1, #input
+  while i <= n do
+    local c = input:sub(i, i)
+    if c == '\\' and i < n and (input:sub(i + 1, i + 1):match('[%s"\'\\]')) then
+      cur[#cur + 1], any, i = input:sub(i + 1, i + 1), true, i + 1
+    elseif quote then
+      if c == quote then
+        quote = nil
+      else
+        cur[#cur + 1] = c
+      end
+    elseif c == '"' or c == "'" then
+      quote, any = c, true
+    elseif c:match('%s') then
+      if any then
+        out[#out + 1] = table.concat(cur)
+      end
+      cur, any = {}, false
+    else
+      cur[#cur + 1], any = c, true
+    end
+    i = i + 1
+  end
+  if any then
+    out[#out + 1] = table.concat(cur)
+  end
+  return vim.tbl_filter(function(e)
+    return e ~= ''
+  end, out)
+end
+
+--- Scope entries → the `p` prompt's text (spaces escaped, so `<CR>` keeps them as they are).
+---@param entries string[]
+---@return string
+function M.join_scope(entries)
+  return table.concat(
+    vim.tbl_map(function(e)
+      return (e:gsub('([\\%s"\'])', '\\%1'))
+    end, entries),
+    ' '
+  )
+end
+
+--- Scope entries for the section header: a path with a space in quotes.
+---@param entries string[]
+---@return string
+function M.show_scope(entries)
+  return table.concat(
+    vim.tbl_map(function(e)
+      return e:find('%s') and ('"' .. e .. '"') or e
+    end, entries),
+    ' '
+  )
+end
+
+--- Diff a file the reconcile scan found, from the scan's own record (`workRev` is the have
+--- revision): edit = have vs the file, add = nothing vs the file, delete = have vs nothing.
+---@param ws perforated.Workspace
+---@param rec table  a `p4 status` record
+function M.diff_reconcile(ws, rec)
+  local dview = require('perforated.diff.view')
+  local have = rec.action ~= 'add'
+    and rec.workRev
+    and rec.depotFile
+    and (rec.depotFile .. '#' .. rec.workRev)
+  local left = have and { spec = have, label = 'have' } or { empty = 'not in depot' }
+  local right
+  if rec.action == 'delete' then
+    right = { empty = 'deleted locally' }
+  elseif rec.clientFile and rec.clientFile:match('^/') then
+    local buf = vim.fn.bufadd(rec.clientFile)
+    vim.fn.bufload(buf)
+    right = { buf = buf }
+  else
+    return notify('no local file for ' .. (rec.depotFile or '?'), vim.log.levels.WARN)
+  end
+  require('perforated.same').or_open(ws, left, right, function()
+    dview.pair(ws, left, right, { spec = have or nil, path = rec.clientFile })
+  end)
+end
+
 --- Scope entries → `p4 status` arguments (nil = the whole client).
 ---@param ws perforated.Workspace
 ---@param entries string[]
@@ -950,7 +1037,7 @@ function M.scan_reconcile(view)
   end
   local jobs = require('perforated.jobs')
   local entries = M.reconcile_scope(view.ws)
-  local label = #entries > 0 and table.concat(entries, ' ') or 'workspace'
+  local label = #entries > 0 and M.show_scope(entries) or 'workspace'
   local job, run_opts = jobs.start(view.ws, 'reconcile ' .. label)
   view.reconcile = { state = 'running', t0 = vim.uv.hrtime(), job = job }
   if view.data then
@@ -1138,6 +1225,57 @@ end
 
 local function actions(view)
   local ws = view.ws
+  -- Open reconcile files for add / edit / delete as the scan found them.
+  local function apply_reconcile(items)
+    local by = { add = {}, edit = {}, delete = {} }
+    for _, it in ipairs(items) do
+      table.insert(by[it.action] or by.edit, it.clientFile)
+    end
+    -- Each op announces PerforatedChanged, which refreshes the view (once, coalesced).
+    local co = require('perforated.checkout')
+    -- The files p4 opened leave the section; the ones it refused and the rest of the scan
+    -- stay.
+    local function applied(res)
+      local opened = {}
+      for _, r in ipairs(res.records) do
+        if r.clientFile then
+          opened[p4.key(ws, r.clientFile)] = true
+        end
+      end
+      view.reconcile.recs = vim.tbl_filter(function(r)
+        return not opened[p4.key(ws, r.clientFile)]
+      end, view.reconcile.recs or {})
+      if vim.api.nvim_buf_is_valid(view.buf) and view.data then
+        view.tree:set(build(view, view.data))
+      end
+    end
+    if #by.add > 0 then
+      co.add(ws, by.add, ws.sticky_cl, function(_, res)
+        applied(res)
+      end)
+    end
+    if #by.edit > 0 then
+      co.edit(ws, by.edit, ws.sticky_cl, function(_, res)
+        applied(res)
+      end)
+    end
+    if #by.delete > 0 then
+      local title = ('delete %d file(s)'):format(#by.delete)
+      require('perforated.jobs').run(ws, title, { 'delete' }, {
+        globals = { '-x', '-' },
+        stdin = p4.escape_all(by.delete), -- `icon@2x.png` is a file, not a rev
+        busy = ('Opening %d file(s) for delete…'):format(#by.delete),
+        delay = 500,
+        effect = 'opened for delete',
+        single = #by.delete == 1,
+      }, function(res)
+        co.report('delete', res, #res.records)
+        co.changed(ws, { files = by.delete })
+        applied(res)
+      end)
+    end
+  end
+
   local function all_submitted()
     require('perforated.views.changes').open(ws, { user = ws:user(), anywhere = true })
   end
@@ -1912,54 +2050,64 @@ local function actions(view)
       multi = true,
       footer = 10,
       run = function(items)
-        local by = { add = {}, edit = {}, delete = {} }
-        for _, it in ipairs(items) do
-          table.insert(by[it.action] or by.edit, it.clientFile)
-        end
-        -- Each op announces PerforatedChanged, which refreshes the view (once, coalesced).
-        local co = require('perforated.checkout')
-        -- The files p4 opened leave the section; the ones it refused and the rest of the scan
-        -- stay.
-        local function applied(res)
-          local opened = {}
-          for _, r in ipairs(res.records) do
-            if r.clientFile then
-              opened[p4.key(ws, r.clientFile)] = true
-            end
-          end
-          view.reconcile.recs = vim.tbl_filter(function(r)
-            return not opened[p4.key(ws, r.clientFile)]
-          end, view.reconcile.recs or {})
-          if vim.api.nvim_buf_is_valid(view.buf) and view.data then
-            view.tree:set(build(view, view.data))
-          end
-        end
-        if #by.add > 0 then
-          co.add(ws, by.add, ws.sticky_cl, function(_, res)
-            applied(res)
-          end)
-        end
-        if #by.edit > 0 then
-          co.edit(ws, by.edit, ws.sticky_cl, function(_, res)
-            applied(res)
-          end)
-        end
-        if #by.delete > 0 then
-          local title = ('delete %d file(s)'):format(#by.delete)
-          require('perforated.jobs').run(ws, title, { 'delete' }, {
-            globals = { '-x', '-' },
-            stdin = p4.escape_all(by.delete), -- `icon@2x.png` is a file, not a rev
-            busy = ('Opening %d file(s) for delete…'):format(#by.delete),
-            delay = 500,
-            effect = 'opened for delete',
-            single = #by.delete == 1,
-          }, function(res)
-            co.report('delete', res, #res.records)
-            co.changed(ws, { files = by.delete })
-            applied(res)
-          end)
-        end
+        apply_reconcile(items)
         view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'reconcile_apply_all',
+      desc = 'Reconcile: open every file found',
+      keys = { 'a' },
+      kinds = { section_reconcile = true },
+      footer = 10,
+      when = function()
+        return view.reconcile.state == 'done' and #(view.reconcile.recs or {}) > 0
+      end,
+      run = function()
+        local recs = view.reconcile.recs
+        local n = { edit = 0, add = 0, delete = 0 }
+        for _, r in ipairs(recs) do
+          local k = n[r.action] and r.action or 'edit'
+          n[k] = n[k] + 1
+        end
+        local parts = {}
+        for _, k in ipairs({ 'edit', 'add', 'delete' }) do
+          if n[k] > 0 then
+            parts[#parts + 1] = ('%d %s'):format(n[k], k)
+          end
+        end
+        local msg = ('Open %d file(s) found by the reconcile scan? (%s)'):format(
+          #recs,
+          table.concat(parts, ', ')
+        )
+        if require('perforated.ui.prompt').confirm(msg, '&Open\n&Cancel', 1) ~= 1 then
+          return
+        end
+        apply_reconcile(vim.list_slice(recs))
+        view.tree.marks = {}
+      end,
+    },
+    {
+      id = 'reconcile_diff',
+      desc = 'Diff against have revision',
+      keys = { 'd' },
+      kinds = { reconcile_file = true },
+      footer = 11,
+      run = function(items)
+        M.diff_reconcile(ws, items[1])
+      end,
+    },
+    {
+      id = 'reconcile_open',
+      desc = 'Open file',
+      keys = { 'o' },
+      kinds = { reconcile_file = true },
+      footer = 20,
+      when = function(item)
+        return item.action ~= 'delete'
+      end,
+      run = function(items)
+        M.open_file(view, items[1].clientFile)
       end,
     },
     {
@@ -2000,16 +2148,16 @@ local function actions(view)
         return node.kind ~= 'loading' or (node.id or ''):match('^r:') ~= nil
       end,
       run = function()
-        local cur = table.concat(M.reconcile_scope(ws), ' ')
+        local cur = M.join_scope(M.reconcile_scope(ws))
         require('perforated.ui.prompt').input({
-          prompt = 'Reconcile paths (relative to the client root, space-separated; empty = whole client): ',
+          prompt = 'Reconcile paths (space-separated; `\\ ` or quotes keep a space; empty = whole client): ',
           default = cur,
           completion = 'dir',
         }, function(input)
           if input == nil then
             return
           end
-          ws.reconcile_scope = vim.split(vim.trim(input), '%s+', { trimempty = true })
+          ws.reconcile_scope = M.split_scope(input)
           view.tree.folds['sec:reconcile'] = true
           M.scan_reconcile(view)
         end)
@@ -2670,7 +2818,15 @@ M.HELP_SECTIONS = {
   },
   {
     'Reconcile',
-    { 'reconcile_apply', 'reconcile_rescan', 'reconcile_scope', 'reconcile_cancel' },
+    {
+      { 'reconcile_apply', 'Open for add / edit / delete as found (on the header: every file)' },
+      'reconcile_apply_all',
+      { 'reconcile_diff', 'Diff a found file (have revision, not in depot, deleted locally)' },
+      { 'reconcile_open', 'Open a found file' },
+      'reconcile_rescan',
+      'reconcile_scope',
+      'reconcile_cancel',
+    },
   },
   { 'Quickfix', { 'to_qf', 'to_loclist' } },
   { 'Submitted files', { 'open_revision', 'diff_file', 'diff_file_revision' } },

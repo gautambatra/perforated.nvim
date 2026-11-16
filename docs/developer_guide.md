@@ -834,7 +834,13 @@ why keys, menus and help never disagree.
    nodes; the tree renders with one `set_lines`), so a slow query never holds back the rest.
    Until then a section shows what the previous refresh found, or "loading…" the first time.
 3. The reconcile section scans (`p4 status`) only when expanded, as a job you can stop. `a`
-   removes a file from it only once p4's records confirm it was opened. The scan passes `-m`
+   removes a file from it only once p4's records confirm it was opened; `a` on the header
+   applies the whole scan after a confirm. `d` on a found file (`M.diff_reconcile`) builds the
+   diff from the scan's own record (`workRev` is the have revision; an add gets an empty left
+   side, a delete an empty right side), with no fstat and no attached buffer needed. `p`'s
+   text is parsed by `M.split_scope` (`\ ` and quotes keep spaces), shown back by
+   `M.join_scope` and in the header by `M.show_scope`; `ui/prompt.lua`'s `<Tab>` completion
+   (`dir` / `file`) escapes a space in what it inserts and reads `\ ` as part of the word. The scan passes `-m`
    (p4 hashes only files whose mtime differs from the have list), unless
    `client_view.reconcile.mtime = false`; a server that answers `Invalid option: -m` gets the
    scan again without it, and `ws.status_no_mtime` keeps it off for the session.
@@ -2071,7 +2077,7 @@ mixed-case path. CI runs this leg on Linux.
 | `test_m1.lua` | check-out prompt and modes, signs, hunks, revert, diff, stale detection |
 | `test_m2.lua`, `test_m2_pickers.lua` | client view, changelists, diff tab, pickers, `:P4 changes` |
 | `test_m3.lua` | describe, history, annotate, blame, lookup, Swarm |
-| `test_m4.lua` | shelve, submit, sync (+jobs, preview, resolve prompt), resolve, delete, move, integrate, delete changelist, reconcile scope |
+| `test_m4.lua` | shelve, submit, sync (+jobs, preview, resolve prompt), resolve, delete, move, integrate, delete changelist, reconcile (scope, spaces, diff/open, apply all) |
 | `test_m5.lua` | time-lapse: every revision equals `p4 print`, stepping, anchoring, slider, modes, panel |
 | `test_m6.lua` | `:P4 debug timings`, the memory soak test, p4vc's removal |
 | `test_lsp.lua` | code actions |
