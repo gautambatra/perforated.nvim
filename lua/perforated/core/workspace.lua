@@ -197,6 +197,7 @@ end
 ---@field no_observe boolean?    a local command (`p4 set`): says nothing about the connection
 ---@field cwd string?           override the working directory (connection context only)
 ---@field on_record fun(rec: table)?  streamed records (fast context; see runner)
+---@field keep_records boolean?  false: data records only go to on_record (see runner)
 ---@field on_spawn fun(ctl: { cancel: fun() })?  the running process's control
 
 --- Run a p4 command for this workspace through the shared queue.
@@ -242,6 +243,7 @@ function Workspace:run(args, opts, cb)
         env_mode = opts.env_mode,
         ws = self.key,
         on_record = opts.on_record,
+        keep_records = opts.keep_records,
         on_spawn = opts.on_spawn,
       }, done)
     end,

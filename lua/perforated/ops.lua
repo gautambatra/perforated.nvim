@@ -1015,6 +1015,22 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
       or (ws_rev and ('sync workspace to ' .. ws_rev))
       or ((sync_like and 'sync ' or 'get latest ') .. what)
   )
+  -- A sync of 100k files would keep 100k records until it ends: only each file's path and
+  -- action are kept, as the records stream in (after the job's own progress count).
+  local paths, actions, count = {}, {}, 0 ---@type string[], string[], integer
+  local is_message = require('perforated.core.parse').is_message
+  local progress = run_opts.on_record
+  run_opts.keep_records = false
+  run_opts.on_record = function(rec) -- fast context: plain Lua only
+    if progress then
+      progress(rec)
+    end
+    local path = rec.clientFile
+    if path and not is_message(rec) then
+      count = count + 1
+      paths[count], actions[count] = path, rec.action or '?'
+    end
+  end
   ws:run(vim.list_extend({ 'sync' }, args), run_opts, function(res)
     local texts = messages(res)
     -- p4 still reports a record ("updated") for a file it couldn't clobber: it didn't change.
@@ -1026,10 +1042,8 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
     end
     if next(skipped) then
       local left = vim.deepcopy(skipped)
-      for _, r in ipairs(res.records) do
-        if r.clientFile then
-          left[r.clientFile] = nil
-        end
+      for i = 1, count do
+        left[paths[i]] = nil
       end
       if next(left) then
         norm = {}
@@ -1042,12 +1056,15 @@ function M._run_sync(ws, args, shown, ws_rev, sync_like, cb)
       return skipped[path] or (norm and norm[vim.fs.normalize(path)])
     end
     local changed_paths, counts = {}, {}
-    for _, r in ipairs(res.records) do
-      if r.clientFile and not was_skipped(r.clientFile) then
-        changed_paths[#changed_paths + 1] = r.clientFile
-        counts[r.action or '?'] = (counts[r.action or '?'] or 0) + 1
+    for i = 1, count do
+      local path = paths[i]
+      if not was_skipped(path) then
+        local action = actions[i]
+        changed_paths[#changed_paths + 1] = path
+        counts[action] = (counts[action] or 0) + 1
       end
     end
+    paths, actions = nil, nil -- free them before the reload and the refreshes
     local attention = clobber_items(texts)
     local to_resolve = file_items(ws, texts, 'must resolve', 'unresolved')
     vim.list_extend(attention, to_resolve)

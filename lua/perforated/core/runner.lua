@@ -21,13 +21,15 @@ local M = {}
 ---@field ws string?             workspace key, for the log
 ---@field bin string?            p4 executable override
 ---@field on_record fun(rec: table)?  each decoded record as it streams in (fast context: no API calls)
+---@field keep_records boolean? default true; false: data records only go to on_record (messages are kept), so a huge output (sync of 100k files) isn't held in memory
 ---@field on_spawn fun(ctl: { cancel: fun() })?  called once the process runs; cancel() stops it
 
 ---@class perforated.RunResult
 ---@field ok boolean             exit 0, no severity>=3 message, not timed out
 ---@field code integer
 ---@field signal integer
----@field records table[]
+---@field records table[]       empty with keep_records = false
+---@field count integer          data records seen (kept or not)
 ---@field warnings string[]
 ---@field errors string[]
 ---@field stdout string?         raw stdout (untagged calls only)
@@ -64,14 +66,21 @@ function M.run(spec, cb)
     stdin = table.concat(stdin, '\n') .. '\n'
   end
 
-  local recs, bad = {}, 0
+  local recs, bad, count = {}, 0, 0
+  local keep = spec.keep_records ~= false
   local out_chunks = {}
   local feed
   if tagged then
     feed = parse.line_splitter(function(line)
       local rec = parse.json_line(line)
       if rec then
-        recs[#recs + 1] = rec
+        local message = parse.is_message(rec)
+        if not message then
+          count = count + 1
+        end
+        if keep or message then
+          recs[#recs + 1] = rec
+        end
         if spec.on_record then
           spec.on_record(rec)
         end
@@ -113,8 +122,10 @@ function M.run(spec, cb)
       local p = parse.classify(recs, bad)
       res.records, res.warnings, res.errors = p.records, p.warnings, p.errors
       res.all = recs -- records and messages in output order
+      res.count = count
     else
       res.records, res.warnings, res.errors = {}, {}, {}
+      res.count = 0
       res.stdout = table.concat(out_chunks)
     end
     res.ok = res.code == 0 and #res.errors == 0 and not res.timed_out and not cancelled
@@ -138,7 +149,7 @@ function M.run(spec, cb)
         table.concat(argv, ' ', 2),
         tostring(res.code),
         res.ms,
-        #res.records,
+        res.count,
         #res.warnings,
         #res.errors,
         res.timed_out and ' TIMED-OUT' or '',
@@ -159,7 +170,7 @@ function M.run(spec, cb)
       argv = argv,
       cwd = spec.cwd,
       code = res.code,
-      records = tagged and #res.records or nil,
+      records = tagged and res.count or nil,
       err = err,
       ws = spec.ws,
     })

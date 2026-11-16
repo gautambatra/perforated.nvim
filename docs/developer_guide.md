@@ -1031,7 +1031,8 @@ original client returns the original workspace.
   Options: `priority`, `key` (dedup), `tagged` (default JSON), `stdin`, `timeout` (0 = none),
   `env_mode` (`'user'` for calls that may launch programs), `globals` (e.g. `-x -`), `probe`
   (skip the offline gate), `force` (run while the group is paused — login), `on_record` /
-  `on_spawn` (streaming and cancellation for jobs), `cwd` (connection context only). It also
+  `on_spawn` (streaming and cancellation for jobs), `keep_records` (false: data records only
+  stream to `on_record`; sync uses it), `cwd` (connection context only). It also
   implements the stale-auth retry: an auth failure from a call that started before a
   successful login is retried quietly instead of prompting again.
 - `ensure_info(cb)` — `p4 set -q` (local, run with the user's environment) and `p4 info`,
@@ -1085,7 +1086,11 @@ share it (`waiters[key]` is the newest job; each job keeps its callers in `cbs`)
 `-Mj -ztag` and decode JSON lines incrementally in the stdout callback
 (`parse.line_splitter`). It enforces timeouts (SIGTERM at the deadline, SIGKILL 2 s later),
 supports cancellation (`on_spawn` receives `{ cancel = fn }`) and streaming (`on_record`
-receives each record, in a fast context — plain Lua only). Every call is recorded in
+receives each record, in a fast context — plain Lua only). With `keep_records = false`, data
+records only go to `on_record` and `res.records` stays empty (messages are still kept, so
+`res.errors` / `res.warnings` / `res.all` work); `res.count` counts data records either way.
+A sync of 100k files uses it: kept, its records peaked at ~80 MB of Lua heap (~33 MB without
+them). Every call is recorded in
 `core/log` (argv, cwd, duration, outcome) and, when debugging, in the debug log.
 
 #### `core/parse.lua`
@@ -1460,7 +1465,9 @@ that changes files;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
 quickfix; "Submitting CL N…" from the command on like shelve's, hidden for the float or the
 description editor; a quiet job, so the busy pop-up and the result replace the job's
-pop-ups), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
+pop-ups), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job,
+with `keep_records = false`: each file's path and action go into two arrays as the records
+stream in, for the counts, the reload and the can't-clobber check;
 reloads unmodified buffers without prompts; afterwards can't-clobber files, files named by
 other errors and every unresolved file go to quickfix, and `after_sync` shows a centred pop-up
 whenever something didn't go as asked (files p4 wouldn't overwrite, other errors; "must

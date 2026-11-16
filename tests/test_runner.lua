@@ -73,6 +73,21 @@ T['runner']['parses JSON records and warnings'] = function()
   H.eq(calls[1].argv, { '-Mj', '-ztag', 'fstat', 'a', 'b' })
 end
 
+T['runner']['keep_records = false: records only stream to on_record; messages are kept'] = function()
+  child.lua([[
+    _G.res, _G.seen = nil, {}
+    require('perforated.core.runner').run({
+      args = { 'fstat', 'a', 'b' }, cwd = vim.uv.cwd(), keep_records = false,
+      on_record = function(rec) table.insert(_G.seen, rec.depotFile or rec.data) end,
+    }, function(r) _G.res = r end)
+  ]])
+  H.eq(H.wait(child, '_G.res ~= nil', 10000), true)
+  local r = child.lua_get('{ _G.res.records, _G.res.count, _G.res.warnings, #_G.res.all, _G.seen }')
+  H.eq(r, { {}, 1, { 'b - no such file(s).' }, 1, { '//depot/a.txt', 'b - no such file(s).\n' } })
+  -- kept by default, and counted the same
+  H.eq(run({ args = { 'fstat', 'a', 'b' }, cwd = child.cwd }).count, 1)
+end
+
 T['runner']['severity >= 3 fails even with exit 0'] = function()
   local r = run({ args = { 'opened' }, cwd = child.cwd })
   H.eq(r.ok, false)

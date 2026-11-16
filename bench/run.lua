@@ -550,13 +550,28 @@ do
     [[
     local root = ...
     local ws = require('perforated').workspace()
-    local recs = {}
-    for i = 1, 100000 do
-      recs[i] = { clientFile = ('%s/src/m%d/file%d.cpp'):format(root, i % 500, i),
-        depotFile = ('//depot/src/m%d/file%d.cpp'):format(i % 500, i), action = 'updated', rev = '2' }
+    -- What a 100k-file workspace sync streams: one record per file (the first with the totals).
+    local function rec(i)
+      return { clientFile = ('%s/src/m%d/file%d.cpp'):format(root, i % 500, i),
+        depotFile = ('//depot/src/m%d/file%d.cpp'):format(i % 500, i), action = 'updated',
+        rev = '2', fileSize = tostring(1000 + i), change = i == 1 and '1234' or nil,
+        totalFileCount = i == 1 and '100000' or nil, totalFileSize = i == 1 and '150000000' or nil }
     end
     -- What follows the measured part (the pop-up about a file not overwritten waits for a key).
     require('perforated.ops').after_sync = function() end
+    local function kb() collectgarbage(); collectgarbage(); return collectgarbage('count') end
+    local all = {}
+    for i = 1, 100000 do all[i] = rec(i) end
+    -- As the runner: records stream to on_record and are kept unless asked not to.
+    local function stream(opts, recs_of)
+      local recs = {}
+      for i = 1, 100000 do
+        local r = recs_of(i)
+        if opts.on_record then opts.on_record(r) end
+        if opts.keep_records ~= false then recs[#recs + 1] = r end
+      end
+      return recs
+    end
     local function handle(errors)
       local best = math.huge
       local run = ws.run
@@ -567,7 +582,8 @@ do
             return run(self, args, opts, cb)
           end
           t = vim.uv.hrtime()
-          cb({ ok = #errors == 0, records = recs, errors = errors, warnings = {}, all = recs })
+          local recs = stream(opts, function(i) return all[i] end)
+          cb({ ok = #errors == 0, records = recs, errors = errors, warnings = {}, all = recs, count = 100000 })
           best = math.min(best, (vim.uv.hrtime() - t) / 1e6)
         end
         require('perforated.ops')._run_sync(ws, {}, 'workspace', nil, true, function() end)
@@ -575,13 +591,33 @@ do
       ws.run = run
       return best
     end
-    return { handle({}), handle({ "Can't clobber writable file " .. root .. '/src/m1/file1.cpp' }) }
+    -- What the sync holds once p4 is done: records built as they stream in, as from p4.
+    local function held()
+      local run, heap = ws.run, nil
+      ws.run = function(self, args, opts, cb)
+        if args[1] ~= 'sync' then
+          return run(self, args, opts, cb)
+        end
+        local base = kb()
+        local recs = stream(opts, rec)
+        heap = (kb() - base) / 1024
+        cb({ ok = true, records = recs, errors = {}, warnings = {}, all = recs, count = 100000 })
+      end
+      require('perforated.ops')._run_sync(ws, {}, 'workspace', nil, true, function() end)
+      ws.run = run
+      return heap
+    end
+    local ms = { handle({}), handle({ "Can't clobber writable file " .. root .. '/src/m1/file1.cpp' }) }
+    all = nil
+    ms[3] = held()
+    return ms
   ]],
     { root }
   )
   c.stop()
   record('sync: results of 100k files', ms[1], 'ms', 100)
   record('sync: 100k files, one not overwritten', ms[2], 'ms', 120)
+  record('sync: Lua heap held, 100k files', ms[3], 'MB', 20)
 end
 
 -- Report.

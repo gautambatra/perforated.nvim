@@ -1410,7 +1410,13 @@ T['m4']["sync: a file p4 couldn't clobber isn't counted, however its path is spe
         { clientFile = root .. '/main/a.txt', action = 'updated' },
         { clientFile = root .. '/main/b.txt', action = 'updated' },
       }
-      cb({ ok = false, records = recs, all = recs, warnings = {},
+      _G.kept = opts.keep_records
+      -- as the runner does: each record streams to on_record; kept only if asked
+      for _, r in ipairs(recs) do
+        if opts.on_record then opts.on_record(r) end
+      end
+      local kept = opts.keep_records ~= false and recs or {}
+      cb({ ok = false, records = kept, all = kept, count = #recs, warnings = {},
         errors = { "Can't clobber writable file " .. root .. '/main/./b.txt' } })
     end
     _G.r = nil
@@ -1425,6 +1431,7 @@ T['m4']["sync: a file p4 couldn't clobber isn't counted, however its path is spe
     '\n'
   )
   H.neq(said:find('1 updated · 1 not updated (writable, not opened)', 1, true), nil)
+  H.eq(child.lua_get('_G.kept'), false) -- the records aren't held until the sync ends
 end
 
 T['m4']['file arguments: globs expand to every match; p4 wildcards in names are escaped'] = function()
