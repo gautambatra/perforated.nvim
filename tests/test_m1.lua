@@ -831,6 +831,44 @@ T['ops']['large files are diffed off the main thread'] = function()
   H.eq(child.lua_get('_G.async_calls') >= 1, true)
 end
 
+T['ops']['one worker diff at a time; a change made meanwhile is diffed once it is back'] = function()
+  child.lua([[
+    require('perforated.config').set({ signs = { max_lines = 3 } })
+    local engine = require('perforated.diff.engine')
+    local orig = engine.hunks_async
+    _G.held = {}
+    engine.hunks_async = function(a, b, cb)
+      table.insert(_G.held, function() orig(a, b, cb) end)
+    end
+  ]])
+  -- three changes, each after the pause: the first diff is still out, so no second one starts
+  for i = 1, 3 do
+    child.api.nvim_buf_set_lines(0, 0, 1, false, { 'edit ' .. i })
+    vim.uv.sleep(250)
+  end
+  H.eq(child.lua_get('#_G.held'), 1)
+  -- back: one more diff, of the latest text
+  child.lua('_G.held[1]()')
+  wait('#_G.held == 2')
+  child.lua('_G.held[2]()')
+  wait([[(function()
+    local st = require('perforated.buffer').get()
+    local want = require('perforated.diff.engine').hunks(st.base, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    return vim.deep_equal(st.hunks, want)
+  end)()]])
+  vim.uv.sleep(300)
+  H.eq(child.lua_get('#_G.held'), 2) -- and nothing after it
+end
+
+T['ops']['the re-diff pause grows with the file: 100 ms to 50k lines, 500 ms at 500k'] = function()
+  H.eq(
+    child.lua_get(
+      [[vim.tbl_map(require('perforated.buffer').debounce_ms, { 10, 50000, 275000, 500000, 900000 })]]
+    ),
+    { 100, 100, 300, 500, 500 }
+  )
+end
+
 --- Mark the workspace's connection down: 'offline' (unreachable) or 'offline_auth' (logged out).
 local function go_offline(state, why)
   child.lua([[local ws = require('perforated').workspace(); ws.conn:_set(...)]], { state, why })

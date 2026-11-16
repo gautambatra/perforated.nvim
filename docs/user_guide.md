@@ -70,7 +70,9 @@ reopen it. `:w other.c` offers to add `other.c`, the file you wrote, not the buf
 - Signs mark added, changed and deleted lines against your **have** revision. Stale files
   (have < head) get their own marker on the first line.
 - The base text is fetched once per revision and cached in memory. Diffs run inside Neovim,
-  on a background thread for large files, so nothing calls `p4` while you type.
+  on a background thread for large files, so nothing calls `p4` while you type. In very large
+  files the signs update after a longer pause (100 ms up to 50k lines, up to 500 ms at 500k),
+  and never more than one diff runs at a time.
 - `]h` / `[h` jump between hunks.
 - **Preview** shows the hunk in a float, in the diff views' colours. In a changed line, the
   words that changed are highlighted, as in diff mode. It follows `diff.syntax`, so it's plain

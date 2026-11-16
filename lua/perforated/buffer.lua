@@ -24,6 +24,8 @@ local M = {}
 ---@field rec table?          fstat record (shared object from ws.fstat)
 ---@field base string[]?      base lines (nil = none loaded; {} = empty base)
 ---@field base_text string?   base joined for the diff engine (cached: the base never changes)
+---@field diffing boolean?     a worker diff is running (one at a time)
+---@field dirty boolean?       changed while it ran: diff again when it's back
 ---@field base_spec string|false|nil
 ---@field hunks perforated.Hunk[]
 ---@field gen integer         diff generation (drops stale async results)
@@ -276,14 +278,45 @@ function M.update(buf)
   end
   local base = st.base_text or st.base
   if n > cfg.max_lines or #st.base > cfg.max_lines then
-    engine.hunks_async(base, lines, done)
+    -- One worker diff at a time: a big diff can outlast the pause, and overlapping ones only
+    -- waste the thread pool (stale results are dropped anyway). A change meanwhile is diffed
+    -- once this one is back.
+    if st.diffing then
+      st.dirty = true
+      return
+    end
+    st.diffing, st.dirty = true, false
+    engine.hunks_async(base, lines, function(hunks)
+      st.diffing = false
+      if st.dirty and states[buf] == st then
+        st.dirty = false
+        M.schedule_update(buf)
+      end
+      done(hunks)
+    end)
   else
     done(engine.hunks(base, lines))
   end
 end
 
+M.DEBOUNCE_MS = 100 -- the pause before a re-diff, up to DEBOUNCE_LINES lines
+M.DEBOUNCE_LINES = 50000
+M.DEBOUNCE_MAX_MS = 500 -- reached at 500k lines (signs.hard_max)
+
+--- The pause before a re-diff: longer for bigger files, whose diff costs more.
+---@param lines integer
+---@return integer ms
+function M.debounce_ms(lines)
+  if lines <= M.DEBOUNCE_LINES then
+    return M.DEBOUNCE_MS
+  end
+  local span = M.DEBOUNCE_MAX_MS - M.DEBOUNCE_MS
+  local extra = math.floor((lines - M.DEBOUNCE_LINES) * span / (500000 - M.DEBOUNCE_LINES))
+  return math.min(M.DEBOUNCE_MAX_MS, M.DEBOUNCE_MS + extra)
+end
+
 ---@param buf integer
-local function schedule_update(buf)
+function M.schedule_update(buf)
   local st = states[buf]
   if not st or not st.base then
     return
@@ -292,14 +325,13 @@ local function schedule_update(buf)
     st.timer = vim.uv.new_timer()
   end
   st.timer:stop()
-  st.timer:start(M.DEBOUNCE_MS, 0, function()
+  st.timer:start(M.debounce_ms(vim.api.nvim_buf_line_count(buf)), 0, function()
     vim.schedule(function()
       M.update(buf)
     end)
   end)
 end
-
-M.DEBOUNCE_MS = 100
+local schedule_update = M.schedule_update
 
 -- Shared by every attached buffer (callbacks receive the buffer number): no closures per buffer.
 local ATTACH_CALLBACKS = {

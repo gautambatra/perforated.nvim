@@ -688,7 +688,7 @@ fstat batch returns ─▶ buffer.apply(buf, rec)
       status: clean | opened | binary | new | unmanaged
       opened ─▶ load_base: p4 print base revision (cached if immutable)
              ─▶ update: vim.text.diff(base, buffer) → hunks → signs + status
-buffer edits ─▶ nvim_buf_attach on_lines ─▶ debounce 100 ms ─▶ update (no p4 call)
+buffer edits ─▶ nvim_buf_attach on_lines ─▶ debounce 100–500 ms ─▶ update (no p4 call)
 ```
 
 ### 17.5 Views: tree + registry
@@ -740,8 +740,12 @@ why keys, menus and help never disagree.
 4. Status variables for statuslines are updated (`status.lua`): `vim.b.perforated_status`,
    `vim.b.perforated_status_dict`, `vim.g.perforated_status`, plus a coalesced
    `User PerforatedStatus` event.
-5. Edits re-diff after a 100 ms debounce; big files (above `signs.max_lines`) diff on a worker
-   thread; beyond `signs.hard_max` there are no signs at all.
+5. Edits re-diff after a debounce: 100 ms up to 50k lines, growing linearly to 500 ms at 500k
+   (`buffer.debounce_ms`; a big diff takes longer than a short pause). Big files (above
+   `signs.max_lines`) diff on a worker thread, one at a time per buffer: a change made while
+   one runs sets `dirty`, and the latest text is diffed once it's back (at 500k lines, 6 s of
+   typing ran 13 diffs, up to 3 at once, blocking the main thread for 3.4 s; now 5 diffs and
+   1.1 s). Beyond `signs.hard_max` there are no signs at all.
 
 ### 18.4 You start typing in an unopened file
 
@@ -1172,7 +1176,8 @@ helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_de
 Per-buffer state (`BufState`, [§20](#20-data-model)) and the pipeline in
 [§18.3](#183-the-buffer-gets-its-status-and-signs). Notable details: `ATTACH_CALLBACKS` is one
 shared table for `nvim_buf_attach` (no closures per buffer); stale async diff results are
-dropped by generation; `detach` drops the cached fstat of a file that's no longer shown and
+dropped by generation, and only one worker diff runs per buffer (`diffing` / `dirty`);
+`debounce_ms(lines)` scales the re-diff pause; `detach` drops the cached fstat of a file that's no longer shown and
 isn't opened (found by the memory soak test); `rekey` recomputes keys after the case-handling
 is learned; a renamed buffer (`:saveas`) re-attaches for its new path; `find(path)` looks a
 buffer up by exact name (`vim.fn.bufnr()` treats its argument as a pattern); when enabled,
