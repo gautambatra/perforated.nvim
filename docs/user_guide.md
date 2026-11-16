@@ -219,7 +219,7 @@ The full list is `?` in the view, or `:h perforated-client-view`. Some keys need
 - **`d`** diffs an opened file against its have revision, and a shelved file against its base.
   **`w`** diffs a shelved file against your workspace file; on the "Shelved (N)" line it opens a
   diff tab of every shelved file against the workspace.
-- **`dd`** deletes an empty changelist. `d` waits for a second `d` only on a changelist;
+- **`dd`** deletes a changelist, asking first what happens to its opened files. `d` waits for a second `d` only on a changelist;
   elsewhere it diffs at once.
 - **`gs`** syncs to the latest revision: a file, a changelist's files, or "Needs attention".
   **`gS`** syncs the whole workspace.
@@ -301,10 +301,9 @@ only scans when you expand it (`l`).
 - **While a description saves**, the editor's footer says `saving…` and another `:w` waits
   for it. If the editor closes before the server answers, the save still goes through; if it
   fails, the editor opens again with your text (unless you chose to discard it).
-- **Delete one:** `dd`, or `:P4 change -d N`. In the client view `dd` is offered only on a
-  changelist with no opened files. One confirmation says what's in it; its opened files move to
-  the default changelist (or are reverted, if you choose that), its shelved files are deleted,
-  then the changelist is. The default changelist can't be deleted. What the confirmation says is
+- **Delete one:** `dd`, or `:P4 change -d N`. One confirmation says what's in it; its opened
+  files move to the default changelist (or are reverted, if you choose that), its shelved files
+  are deleted, then the changelist is. The default changelist can't be deleted. What the confirmation says is
   asked at once (the changelist with its shelf, and its opened files), as for submit, re-shelve,
   `K` on a pending changelist and its describe view.
 - **Another client's changelist** needs `change.allow_force = true`, which retries with `-f`

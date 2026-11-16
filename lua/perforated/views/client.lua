@@ -2014,9 +2014,9 @@ local function actions(view)
       desc = 'Delete changelist',
       keys = { 'dd' }, -- `d` waits for the second `d` only on changelists (ui/keys.lua)
       kinds = { change = true },
+      -- Opened files too: ops.delete_change asks whether to move them to default or revert them.
       when = function(item)
         return item.change ~= 'default'
-          and #(item.files or {}) == 0
           and (item.mine ~= false or require('perforated.config').get().change.allow_force)
       end,
       run = function(items)

@@ -1249,6 +1249,7 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     'Copy CL number',
     'Copy Swarm URL',
     'Send to quickfix',
+    'Delete changelist', -- with files too (it asks what happens to them)
     '-',
     'Revert unchanged files',
     'Revert files',

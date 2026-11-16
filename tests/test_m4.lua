@@ -71,6 +71,17 @@ local function status()
   return child.lua_get([[(require('perforated.buffer').get() or {}).status]])
 end
 
+--- Capture the confirm questions (answered with `_G.ANSWER`, default yes).
+local function capture_confirm()
+  child.lua([[
+    _G.ASKED, _G.ANSWER = {}, 1
+    require('perforated.ui.prompt').confirm = function(msg)
+      table.insert(_G.ASKED, msg)
+      return _G.ANSWER
+    end
+  ]])
+end
+
 T['m4'] = MiniTest.new_set({
   hooks = {
     pre_case = function()
@@ -306,6 +317,48 @@ T['m4']['delete changelist: files move to default, shelf deleted, CL gone'] = fu
     and require('perforated').workspace().opened['//depot/main/b.txt'].change == 'default']])
 end
 
+T['m4']['dd in the client view deletes a changelist with files: cancel, or move them'] = function()
+  setup()
+  local cl = new_change('has files')
+  p4({ 'edit', '-c', cl, root .. '/main/b.txt' })
+  capture_confirm()
+  child.cmd('P4')
+  wait(
+    [[require('perforated.views.client')._get(require('perforated').workspace().key).data ~= nil]]
+  )
+  local function on_cl()
+    for i, l in ipairs(child.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if l:find('has files', 1, true) then
+        child.api.nvim_win_set_cursor(0, { i, 0 })
+        return true
+      end
+    end
+  end
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('has files', 1, true) ~= nil]]
+  )
+  -- Cancel: the changelist and its file stay
+  child.lua('_G.ANSWER = 3')
+  on_cl()
+  child.type_keys('dd')
+  wait('#_G.ASKED == 1')
+  H.neq(child.lua_get('_G.ASKED[1]'):find('1 opened file', 1, true), nil)
+  vim.uv.sleep(300)
+  H.eq(opened()['//depot/main/b.txt'].change, cl)
+  -- Move: the file goes to default, the changelist is gone
+  child.lua('_G.ANSWER = 1')
+  on_cl()
+  child.type_keys('dd')
+  wait('#_G.ASKED == 2')
+  H.eq(
+    vim.wait(10000, function()
+      return not changes_pending():find('has files', 1, true)
+    end, 100),
+    true
+  )
+  H.eq(opened()['//depot/main/b.txt'], { action = 'edit', change = 'default' })
+end
+
 T['m4']['delete changelist: revert choice, empty CL, default refused'] = function()
   setup()
   local cl = new_change('revert me')
@@ -351,17 +404,6 @@ T['m4']['submit: confirmation float, s submits; buffer state follows'] = functio
   wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
   H.neq(p4({ 'changes', '-s', 'submitted' }):find('ship it', 1, true), nil)
   H.eq(child.lua_get([[require('perforated').workspace().sticky_cl]]), vim.NIL)
-end
-
---- Capture the confirm questions (answered with `_G.ANSWER`, default yes).
-local function capture_confirm()
-  child.lua([[
-    _G.ASKED, _G.ANSWER = {}, 1
-    require('perforated.ui.prompt').confirm = function(msg)
-      table.insert(_G.ASKED, msg)
-      return _G.ANSWER
-    end
-  ]])
 end
 
 local function wait_editor()
