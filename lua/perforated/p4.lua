@@ -291,8 +291,8 @@ end
 function M.pending_changes(ws, cb, scope, opts)
   return require('perforated.p4_cmds').pending_changes(ws, cb, scope, opts)
 end
-function M.new_change(ws, desc, cb)
-  return require('perforated.p4_cmds').new_change(ws, desc, cb)
+function M.new_change(ws, desc, cb, files)
+  return require('perforated.p4_cmds').new_change(ws, desc, cb, files)
 end
 function M.edit(ws, paths, change, cb, busy)
   return require('perforated.p4_cmds').edit(ws, paths, change, cb, busy)

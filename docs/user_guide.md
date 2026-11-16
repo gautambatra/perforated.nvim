@@ -544,6 +544,11 @@ deletes shelved files (on a shelf or a shelved file), and `g<Del>` a changelist'
 The commands are `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d` and
 `:P4 unshelve CL [-c target]`.
 
+- **The default changelist** can't be shelved by p4. `s` on it (or on its files), or
+  `:P4 shelve` on one of its files, asks whether to move them to a new changelist and shelve
+  that. The new-changelist editor opens; saving it creates the changelist with those files in
+  one call, then shelves it. Shelving some of the files moves only those; quitting the editor
+  moves nothing.
 - **Re-shelving** asks before replacing the shelf. `r` replaces the shelved copies of the
   files you're shelving. When the shelf also holds files no longer opened in the changelist,
   `a` "replace all" (`p4 shelve -r`) makes the shelf exactly the opened files; the prompt lists
@@ -567,7 +572,9 @@ The commands are `:P4 shelve [-c CL] [file…]`, `:P4 shelve -d` and
 `P` / `<C-s>`, or `:P4 submit [CL]`, opens a confirmation with the description and file
 count. It warns about out-of-date, unresolved or shelved files, checked fresh: the changelist's
 files and its shelf are asked at the same time, so the confirmation waits for one answer from
-the server, not three. `s` submits; `e` edits the description first. Failures (e.g. out of date) go to quickfix with p4's reason.
+the server, not three. `s` submits; `e` edits the description first. For the default
+changelist, `s` opens the description editor (pre-filled from `change.template`): `:w` or
+`<C-s>` submits with every line of it, `q` cancels the submit. Failures (e.g. out of date) go to quickfix with p4's reason.
 
 ### Sync
 

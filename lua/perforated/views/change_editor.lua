@@ -325,15 +325,50 @@ function M.edit(ws, change, opts)
   end)
 end
 
---- Create a new (empty) pending changelist from a description entered in the float.
+--- The description template (`change.template`) as lines, or nil.
 ---@param ws perforated.Workspace
----@param opts { on_done: fun(change: string?, desc: string?)?, desc: string? }?  desc: pre-filled (instead of the template)
-function M.new(ws, opts)
-  opts = opts or {}
+---@return string[]?
+local function template_lines(ws)
   local template = config.get().change.template
   if type(template) == 'function' then
     template = template(ws)
   end
+  return template and vim.split(template, '\n', { plain = true }) or nil
+end
+
+--- A description for submitting the default changelist: the float, pre-filled from the
+--- template. `on_done(desc)` once saved (`:w`), `on_done(nil)` when dismissed.
+---@param ws perforated.Workspace
+---@param opts { title: string, on_done: fun(desc: string?) }
+function M.compose(ws, opts)
+  local done = false
+  local function finish(desc)
+    if not done then
+      done = true
+      opts.on_done(desc)
+    end
+  end
+  open_float({
+    title = opts.title,
+    name = 'description/submit',
+    lines = template_lines(ws) or { '' },
+    insert = true,
+    on_save = function(desc, saved)
+      saved(true)
+      finish(desc)
+    end,
+    on_cancel = function()
+      finish(nil)
+    end,
+  })
+end
+
+--- Create a new pending changelist from a description entered in the float: empty, or with
+--- `opts.files` (depot paths of default-changelist files, moved into it by the same call).
+---@param ws perforated.Workspace
+---@param opts { on_done: fun(change: string?, desc: string?)?, desc: string?, files: string[]?, title: string? }?  desc: pre-filled (instead of the template)
+function M.new(ws, opts)
+  opts = opts or {}
   -- on_done runs once: a save in flight when the float is closed still decides the outcome.
   local done, saving, cancelled = false, false, false
   local function finish(cl, desc)
@@ -345,11 +380,11 @@ function M.new(ws, opts)
     end
   end
   open_float({
-    title = 'New changelist',
+    title = opts.title or 'New changelist',
     name = 'description/new',
-    lines = opts.desc and vim.split(vim.trim(opts.desc), '\n', { plain = true })
-      or template and vim.split(template, '\n', { plain = true })
-      or { '' },
+    lines = opts.desc and vim.split(vim.trim(opts.desc), '\n', { plain = true }) or template_lines(
+      ws
+    ) or { '' },
     insert = not opts.desc, -- a copied description: start in normal mode, to read it first
     on_save = function(desc, saved)
       saving = true
@@ -365,10 +400,13 @@ function M.new(ws, opts)
           return
         end
         saved(true)
-        notify('created CL ' .. cl)
+        notify(
+          opts.files and ('created CL %s with %d file(s)'):format(cl, #opts.files)
+            or ('created CL ' .. cl)
+        )
         remember(ws, cl, desc)
         finish(cl, desc)
-      end)
+      end, opts.files)
     end,
     on_cancel = function()
       cancelled = true

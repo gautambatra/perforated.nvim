@@ -1275,6 +1275,8 @@ T['client view']['changelist menu: fixed order, groups, only what applies'] = fu
     'Revert files',
     'Move all files to another changelist',
     '-',
+    'Shelve files', -- into a new changelist (ops.shelve_default)
+    '-',
     'Create new changelist',
     'Sync entire workspace',
     'Switch client',
@@ -1482,7 +1484,7 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
   local function with_tail(head)
     return vim.list_extend(head, tail)
   end
-  -- b.txt: default CL (no shelve), not stale (no get latest)
+  -- b.txt: default CL (shelved via a new changelist), not stale (no get latest)
   H.eq(
     menu_labels('b.txt'),
     with_tail({
@@ -1492,6 +1494,7 @@ T['client view']['file menu: fixed order, groups, only what applies'] = function
       'Revert if unchanged',
       'Revert',
       'Move to another changelist',
+      'Shelve',
     })
   )
   -- c.txt is stale; a.txt (CL 2) can be shelved

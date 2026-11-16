@@ -1493,9 +1493,7 @@ local function actions(view)
       multi = true,
       footer = 40,
       when = function(item)
-        return item.change ~= 'default'
-          and (item.files == nil or #item.files > 0)
-          and item.mine ~= false
+        return (item.files == nil or #item.files > 0) and item.mine ~= false
       end,
       run = function(items, ctx)
         local ops = require('perforated.ops')

@@ -353,6 +353,119 @@ T['m4']['submit: confirmation float, s submits; buffer state follows'] = functio
   H.eq(child.lua_get([[require('perforated').workspace().sticky_cl]]), vim.NIL)
 end
 
+--- Capture the confirm questions (answered with `_G.ANSWER`, default yes).
+local function capture_confirm()
+  child.lua([[
+    _G.ASKED, _G.ANSWER = {}, 1
+    require('perforated.ui.prompt').confirm = function(msg)
+      table.insert(_G.ASKED, msg)
+      return _G.ANSWER
+    end
+  ]])
+end
+
+local function wait_editor()
+  wait([[vim.bo.filetype == 'perforated-description']])
+end
+
+T['m4']['shelve the default changelist: asks, then a new CL takes its files and is shelved'] = function()
+  setup()
+  p4({ 'edit', root .. '/main/a.txt', root .. '/main/b.txt' })
+  capture_confirm()
+  child.lua([[require('perforated.ops').shelve(require('perforated').workspace(), 'default', nil)]])
+  wait_editor()
+  H.eq(child.lua_get('_G.ASKED'), {
+    "Files in the default changelist can't be shelved. Move its 2 file(s) to a new changelist and shelve that?",
+  })
+  child.type_keys('my shelf', '<C-s>')
+  wait([[require('perforated.ui.toast') ~= nil and vim.bo.filetype ~= 'perforated-description']])
+  local cl
+  for _ = 1, 150 do
+    local o = opened()
+    local a = o['//depot/main/a.txt']
+    if a and a.change ~= 'default' then
+      cl = a.change
+      break
+    end
+    vim.uv.sleep(100)
+  end
+  H.neq(cl, nil)
+  H.eq(opened()['//depot/main/b.txt'].change, cl)
+  for _ = 1, 150 do
+    if p4({ 'describe', '-S', '-s', cl }):find('//depot/main/b.txt', 1, true) then
+      break
+    end
+    vim.uv.sleep(100)
+  end
+  local d = p4({ 'describe', '-S', '-s', cl })
+  H.neq(d:find('my shelf', 1, true), nil)
+  H.neq(d:find('Shelved files', 1, true), nil)
+  H.neq(d:find('//depot/main/a.txt', 1, true), nil)
+end
+
+T['m4'][':P4 shelve on a default file moves only it; quitting the editor moves nothing'] = function()
+  setup()
+  p4({ 'edit', root .. '/main/b.txt' })
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  capture_confirm()
+  -- Cancelled in the editor: nothing moves
+  child.cmd('P4 shelve %')
+  wait_editor()
+  H.eq(child.lua_get('_G.ASKED'), {
+    "Files in the default changelist can't be shelved. Move 1 of its 2 file(s) to a new changelist and shelve that?",
+  })
+  child.type_keys('<Esc>', 'q') -- leave insert mode, then cancel (unmodified: no question)
+  wait([[vim.bo.filetype ~= 'perforated-description']])
+  vim.uv.sleep(300)
+  H.eq(opened()['//depot/main/a.txt'].change, 'default')
+  -- No to the question: no editor
+  child.lua('_G.ANSWER = 2')
+  child.cmd('P4 shelve %')
+  wait([[#_G.ASKED == 2]])
+  vim.uv.sleep(300)
+  H.neq(child.bo.filetype, 'perforated-description')
+  -- Yes: only a.txt moves
+  child.lua('_G.ANSWER = 1')
+  child.cmd('P4 shelve %')
+  wait_editor()
+  child.type_keys('just a', '<C-s>')
+  local cl
+  for _ = 1, 150 do
+    local a = opened()['//depot/main/a.txt']
+    if a and a.change ~= 'default' then
+      cl = a.change
+      break
+    end
+    vim.uv.sleep(100)
+  end
+  H.neq(cl, nil)
+  H.eq(opened()['//depot/main/b.txt'].change, 'default')
+  for _ = 1, 150 do
+    if p4({ 'describe', '-S', '-s', cl }):find('Shelved files', 1, true) then
+      break
+    end
+    vim.uv.sleep(100)
+  end
+  H.neq(p4({ 'describe', '-S', '-s', cl }):find('Shelved files', 1, true), nil)
+end
+
+T['m4']['submit the default changelist: the description editor, every line kept'] = function()
+  setup()
+  child.cmd('P4 edit')
+  wait([[(require('perforated.buffer').get() or {}).status == 'opened']])
+  child.lua_notify(
+    [[require('perforated.ops').submit(require('perforated').workspace(), 'default')]]
+  )
+  vim.uv.sleep(1500) -- the float waits for a key (the child can't answer RPC meanwhile)
+  child.type_keys('s')
+  wait_editor()
+  child.type_keys('line one', '<CR>', '<CR>', 'line three', '<C-s>')
+  wait([[(require('perforated.buffer').get() or {}).status == 'clean']])
+  local d = p4({ 'describe', '-s', '2' })
+  H.neq(d:find('line one\n\t\n\tline three', 1, true), nil)
+end
+
 T['m4']['submit / delete changelist: busy pop-up from the command on, hidden while asking'] = function()
   setup()
   H.record_timeline(child)

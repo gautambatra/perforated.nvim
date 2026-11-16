@@ -196,8 +196,9 @@ More: [time-lapse](docs/user_guide.md#time-lapse).
 ### 🚀 Shelve, submit, sync, resolve, integrate
 
 - **Shelve / unshelve** a changelist or chosen files. Re-shelving asks before replacing the
-  shelf.
-- **Submit** after a confirmation that warns about stale, unresolved or shelved files.
+  shelf. Shelving the default changelist moves its files to a new changelist first.
+- **Submit** after a confirmation that warns about stale, unresolved or shelved files. The
+  default changelist gets the full description editor.
 - **Sync** the workspace, some files, or to a changelist, label or date, with a preview first.
   Anything that didn't sync is listed, and open buffers reload.
 - **Resolve** takes the clean merges, then opens your merge tool (`$P4MERGE`) for each

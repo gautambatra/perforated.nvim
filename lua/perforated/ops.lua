@@ -127,6 +127,60 @@ end
 -- Shelve
 -- ---------------------------------------------------------------------------------------------
 
+--- p4 can't shelve the default changelist: offer to move its files (all, or `paths`) to a new
+--- changelist (the description float; one `change -i` with the files) and shelve that.
+---@param ws perforated.Workspace
+---@param paths string[]?  nil = every file opened in the default changelist
+---@param cb fun(ok: boolean)
+function M.shelve_default(ws, paths, cb)
+  cls.fstat_change(ws, 'default', function(recs, res)
+    if not recs then
+      notify("can't shelve: " .. (res.errors[1] or vim.trim(res.stderr or '')), vim.log.levels.WARN)
+      return cb(false)
+    end
+    local want
+    if paths then
+      want = {}
+      for _, path in ipairs(paths) do
+        want[p4.key(ws, path)] = true
+      end
+    end
+    local depot, local_paths = {}, {}
+    for _, r in ipairs(recs) do
+      if
+        not want
+        or (r.clientFile and want[p4.key(ws, r.clientFile)])
+        or want[p4.key(ws, r.depotFile)]
+      then
+        depot[#depot + 1] = r.depotFile
+        local_paths[#local_paths + 1] = r.clientFile or r.depotFile
+      end
+    end
+    if #depot == 0 then
+      notify('nothing to shelve in the default changelist', vim.log.levels.WARN)
+      return cb(false)
+    end
+    local all = #depot == #recs
+    local msg = ("Files in the default changelist can't be shelved. Move %s to a new changelist and shelve that?"):format(
+      all and ('its %d file(s)'):format(#depot) or ('%d of its %d file(s)'):format(#depot, #recs)
+    )
+    if not confirm(msg, '&Shelve in a new changelist\n&Cancel', 1) then
+      return cb(false)
+    end
+    require('perforated.views.change_editor').new(ws, {
+      title = ('New changelist for %d file(s) to shelve'):format(#depot),
+      files = depot,
+      on_done = function(cl)
+        if not cl then
+          return cb(false)
+        end
+        co.changed(ws, { files = local_paths, changes = { 'default', cl } })
+        M.shelve(ws, cl, nil, cb)
+      end,
+    })
+  end)
+end
+
 --- Shelve a changelist's opened files (or some of them), replacing shelved versions after a
 --- confirmation. Shelving a whole changelist whose shelf also holds files no longer opened in
 --- it offers a third choice, "replace all" (`shelve -r`): the shelf becomes exactly the opened
@@ -138,11 +192,7 @@ end
 function M.shelve(ws, change, paths, cb)
   cb = cb or function() end
   if change == 'default' then
-    notify(
-      'files in the default changelist cannot be shelved: move them to a numbered changelist first (gm)',
-      vim.log.levels.WARN
-    )
-    return cb(false)
+    return M.shelve_default(ws, paths, cb)
   end
   -- From the command on, while the shelf is checked too (hidden while a question is up).
   local task = require('perforated.ui.toast').task(
@@ -703,7 +753,7 @@ function M.submit(ws, change, cb)
       end
     end
     if change == 'default' then
-      header = { '  (the default changelist: you will be asked for a description)' }
+      header = { '  (the default changelist: the description editor opens next)' }
     end
     header[#header + 1] = ''
     local nstale, nunres = 0, 0
@@ -757,15 +807,15 @@ function M.submit(ws, change, cb)
       return cb(false)
     end
     if change == 'default' then
-      return require('perforated.ui.prompt').input(
-        { prompt = 'Submit description: ' },
-        function(input)
-          if not input or vim.trim(input) == '' then
+      return require('perforated.views.change_editor').compose(ws, {
+        title = 'Submit the default changelist',
+        on_done = function(text)
+          if not text then
             return cb(false)
           end
-          M.run_submit(ws, change, input, cb, files, task)
-        end
-      )
+          M.run_submit(ws, change, text, cb, files, task)
+        end,
+      })
     end
     M.run_submit(ws, change, nil, cb, files, task)
   end

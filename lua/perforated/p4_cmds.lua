@@ -46,14 +46,23 @@ function M.pending_changes(ws, cb, scope, opts)
   end)
 end
 
---- Create an empty pending changelist. Specs are sent untagged (-Mj breaks `change -i`).
+--- Create a pending changelist: empty, or holding `files` (depot paths of files opened in the
+--- default changelist: p4 moves them in the same call). Specs are sent untagged (-Mj breaks
+--- `change -i`).
 ---@param ws perforated.Workspace
 ---@param desc string
 ---@param cb fun(change: string?, err: string?)
-function M.new_change(ws, desc, cb)
+---@param files string[]?
+function M.new_change(ws, desc, cb, files)
   local lines = { 'Change: new', 'Description:' }
   for _, l in ipairs(vim.split(desc, '\n', { plain = true })) do
     lines[#lines + 1] = '\t' .. l
+  end
+  if files and #files > 0 then
+    lines[#lines + 1] = 'Files:'
+    for _, f in ipairs(files) do
+      lines[#lines + 1] = '\t' .. f
+    end
   end
   ws:run(
     { 'change', '-i' },

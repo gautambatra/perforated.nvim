@@ -1406,6 +1406,12 @@ delete asks `shelf` (status, client, description, shelf) with `fstat_change` (th
 or revert), plus a `describe -s` only for another client's changelist (`change.allow_force`),
 whose opened files only it sees; re-shelving a whole changelist asks `shelved_files` with
 `opened -c`.
+The default changelist can't be shelved: `shelve_default` asks `fstat_change(default)` for
+the depot paths (all, or those of the given files), confirms, opens `change_editor.new` with
+`files`, whose `p4.new_change` sends them in the spec's `Files:` field (p4 moves them with the
+same `change -i`; it accepts only depot paths there), then shelves the new changelist. Submitting
+the default changelist takes its description from `change_editor.compose` (the float, no p4
+call; `submit -d` keeps every line).
 Shelve (`shelve -f`, plus `-a leaveunchanged` with `shelve.unchanged = 'leave'` and
 `--parallel=threads=N` with `shelve.parallel`; the report counts the files p4 named minus its
 "unchanged, not shelved" records, and notes unchanged files whose older version `-f` kept in the
@@ -1420,8 +1426,8 @@ they check the shelf or find the target, hidden while the confirmation or picker
 again for p4's work; they move file content, so they run through `jobs.run`, like every command
 that changes files;
 submit (a confirmation float with warnings about stale/unresolved/shelved files; failures to
-quickfix; "Submitting CL N…" from the command on like shelve's, hidden for the float, the
-description editor or input; a quiet job, so the busy pop-up and the result replace the job's
+quickfix; "Submitting CL N…" from the command on like shelve's, hidden for the float or the
+description editor; a quiet job, so the busy pop-up and the result replace the job's
 pop-ups), sync (confirmation with an on-request **Preview** via `sync -n`; runs as a job;
 reloads unmodified buffers without prompts; afterwards can't-clobber files, files named by
 other errors and every unresolved file go to quickfix, and `after_sync` shows a centred pop-up
