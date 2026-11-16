@@ -209,7 +209,7 @@ There's no timer. `<F5>`, or `:P4` again, refreshes every section on demand.
   history, `i` edits a description and `dd` deletes a changelist. The keys these views used before (`gL`, `C` and
   `<Del>` in describe) still work for now, but `?` doesn't list them.
 - **The footer** shows the keys for the current line. Off a changelist or file, it offers `gS`
-  (sync the workspace) and `W` (switch client).
+  (sync the workspace) and `W` (all my clients, or back to this client).
 - **P4V's shortcuts** work alongside the Vim-style keys: `<C-d>` diff, `<C-r>` revert, `<C-n>`
   new changelist, `<C-w>` close, `<F5>` refresh, `<C-1>`/`<C-2>` jump to a section.
   `keys.p4v = false` turns them off.
@@ -231,7 +231,7 @@ The full list is `?` in the view, or `:h perforated-client-view`. Some keys need
   description, the files and the shelved files. `D` there opens the diff tab, and `i` turns
   the pop-up into the description editor (`q` goes back). It works in `:P4 changes` too, so
   you can read other people's changelists.
-- **`A`** toggles between this client and all your clients. **`W`** switches the view to
+- **`W`** toggles between this client and all your clients. **`gW`** switches the view to
   another of your clients, picked from a list with their root, host and stream. If Perforce
   refuses (say, a client bound to another host), the view keeps its client. Your open files
   are unaffected: each stays in its own workspace.
@@ -292,8 +292,8 @@ only scans when you expand it (`l`).
 - **Create one:** `c` in the client view, or `:P4 change new`. A small editor opens for the
   description: `:w` or `<C-s>` saves, `q` cancels. Check-out's "new changelist" uses the same
   editor.
-- **Edit a description:** `i` (in the client view, `:P4 changes`, describe and the `K`
-  pop-up) or `:P4 change [N]`. This works on
+- **Edit a description:** `i`, or `A` to start typing at the end of the text (in the client
+  view, `:P4 changes`, describe and the `K` pop-up), or `:P4 change [N]`. This works on
   pending *and* submitted changelists; for your own submitted ones it uses `p4 change -u`.
   Only the description changes, so the file list can't be edited by accident. `gS` in the
   editor, or `:P4 change! N`, opens the full spec instead. The default changelist has no

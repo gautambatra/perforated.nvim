@@ -26,7 +26,7 @@ end
 --- float may be gone by then (left, closed, discarded): the save still counts. A failed save
 --- whose float was closed without discarding opens the float again with the text, so it isn't
 --- lost; `saved` then returns true. One save at a time: `:w` while one runs is ignored.
----@param opts { title: string, name: string, lines: string[], insert: boolean?, win: integer?, modified: boolean?, on_save: fun(desc: string, saved: fun(ok: boolean): boolean?), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
+---@param opts { title: string, name: string, lines: string[], insert: boolean?, at_end: boolean?, win: integer?, modified: boolean?, on_save: fun(desc: string, saved: fun(ok: boolean): boolean?), on_cancel: fun(how: 'cancel'|'leave')?, on_full: fun()? }
 ---@return integer buf, integer win
 local function open_float(opts)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -188,7 +188,16 @@ local function open_float(opts)
   vim.api.nvim_buf_set_extmark(buf, vim.api.nvim_create_namespace('perforated.desc'), 0, 0, {
     line_hl_group = 'PerforatedTitle',
   })
-  if opts.insert then
+  if opts.at_end then
+    -- `A`: after the last character of the text (trailing blank lines skipped).
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local n = #lines
+    while n > 1 and vim.trim(lines[n]) == '' do
+      n = n - 1
+    end
+    vim.api.nvim_win_set_cursor(win, { n, 0 })
+  end
+  if opts.insert or opts.at_end then
     vim.cmd('startinsert!')
   end
   return buf, win
@@ -251,9 +260,11 @@ end
 --- `opts.win`: turn this float into the editor instead of opening one. `on_done(saved, how)`
 --- runs once: saved = true after a save; nil when dismissed, `how` = 'cancel' (q, <Esc>) or
 --- 'leave' (the cursor left the float).
----@param opts { submitted: boolean?, win: integer?, on_done: fun(ok: boolean?, how: string?)? }?
+---@param opts { submitted: boolean?, win: integer?, at_end: boolean?, on_done: fun(ok: boolean?, how: string?)? }?
 function M.edit(ws, change, opts)
   opts = opts or {}
+  local at_end = opts.at_end or M._at_end
+  M._at_end = nil
   if change == 'default' then
     return notify(
       'the default changelist has no description: move its files to a new changelist (gm)',
@@ -280,6 +291,7 @@ function M.edit(ws, change, opts)
       name = 'description/' .. change,
       lines = vim.split(desc, '\n', { plain = true }),
       win = opts.win,
+      at_end = at_end,
       on_cancel = function(how)
         done(nil, how)
       end,
@@ -361,6 +373,28 @@ function M.compose(ws, opts)
       finish(nil)
     end,
   })
+end
+
+--- `A` next to a view's `i` (edit description): the same action, with the cursor after the end
+--- of the text, in insert mode. Not in the `.` menu or the footer (the `?` help lists it).
+---@param a perforated.Action  the view's edit_description action
+---@return perforated.Action
+function M.at_end_action(a)
+  local b = {}
+  for k, v in pairs(a) do
+    b[k] = v
+  end
+  b.id, b.desc, b.keys, b.nomenu = a.id .. '_end', 'Edit description, from its end', { 'A' }, true
+  b.old, b.p4v, b.footer, b.footer_when, b.footer_desc = nil, nil, nil, nil, nil
+  b.run = function(...)
+    M._at_end = true -- read (and cleared) by M.edit, which the action calls
+    local ok, err = pcall(a.run, ...)
+    M._at_end = nil
+    if not ok then
+      error(err, 0)
+    end
+  end
+  return b
 end
 
 --- Create a new pending changelist from a description entered in the float: empty, or with

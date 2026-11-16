@@ -37,7 +37,7 @@ local M = {}
 ---@field multi boolean?
 ---@field footer integer?
 ---@field footer_when (fun(item: any, node: perforated.TreeNode?): boolean)?
----@field footer_desc string?  a shorter label for the footer
+---@field footer_desc (string|fun(): string)?  a shorter label for the footer
 ---@field nomenu boolean|'layout'|nil  hide from the `.` menu (navigation keys); 'layout': only
 ---  where a menu layout lists it
 
@@ -526,6 +526,16 @@ function M.help(actions, title, sections)
   end
 end
 
+---@param a perforated.Action
+---@return string?
+local function footer_desc(a)
+  local d = a.footer_desc
+  if type(d) == 'function' then
+    return d()
+  end
+  return d
+end
+
 --- Footer text: the most useful valid actions for the node, by `footer` order.
 ---@param actions perforated.Action[]
 ---@param node perforated.TreeNode?
@@ -546,7 +556,7 @@ function M.footer(actions, node, max)
     if keys[1] then
       chunks[#chunks + 1] = { ' ' .. keys[1], 'PerforatedBarBold' }
       chunks[#chunks + 1] =
-        { ' ' .. (list[i].footer_desc or list[i].desc:lower()) .. ' ', 'PerforatedBarText' }
+        { ' ' .. (footer_desc(list[i]) or list[i].desc:lower()) .. ' ', 'PerforatedBarText' }
     end
   end
   for _, a in ipairs(actions) do

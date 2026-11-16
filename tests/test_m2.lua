@@ -81,6 +81,20 @@ local function goto_line(text)
   error('line not found: ' .. text .. '\n' .. table.concat(lines(), '\n'))
 end
 
+--- The client view footer's text for the line holding `text`.
+local function footer_at(text)
+  goto_line(text)
+  child.cmd('doautocmd CursorMoved')
+  return child.lua_get([[(function()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      local c = vim.api.nvim_win_get_config(w)
+      if c.relative == 'win' and c.focusable == false then
+        return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)[1]
+      end
+    end
+  end)()]])
+end
+
 local function has_line(text)
   for _, l in ipairs(lines()) do
     if l:find(text, 1, true) then
@@ -113,7 +127,7 @@ T['client view'] = MiniTest.new_set({
   },
 })
 
-T['client view']['W switches to another of your clients in the same window'] = function()
+T['client view']['gW switches to another of your clients in the same window'] = function()
   local root2 = server.dir .. '/ws2'
   server:client('alice_other', root2)
   server:p4({ 'sync' }, { client = 'alice_other', cwd = root2 })
@@ -127,7 +141,7 @@ T['client view']['W switches to another of your clients in the same window'] = f
   child.lua([[vim.ui.select = function(items, _, cb)
     for _, it in ipairs(items) do if it.client == 'alice_other' then return cb(it) end end
   end]])
-  child.type_keys('W')
+  child.type_keys('gW')
   wait([[(function()
     for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
       if l:find('Other work', 1, true) then return true end
@@ -148,7 +162,7 @@ T['client view']['W switches to another of your clients in the same window'] = f
   child.lua([[vim.ui.select = function(items, _, cb)
     for _, it in ipairs(items) do if it.client == 'alice_ws' then return cb(it) end end
   end]])
-  child.type_keys('W')
+  child.type_keys('gW')
   wait([[(function()
     for _, l in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
       if l:find('Fix parser', 1, true) then return true end
@@ -157,7 +171,7 @@ T['client view']['W switches to another of your clients in the same window'] = f
   H.eq(has_line('Client alice_ws'), true)
 end
 
-T['client view']['W keeps the client and shows p4 message when the switch fails'] = function()
+T['client view']['gW keeps the client and shows p4 message when the switch fails'] = function()
   local spec = server:p4({ 'client', '-o', 'alice_far' }).stdout
   spec = spec:gsub('\nRoot:[^\n]*', '\nRoot:\t' .. server.dir .. '/far')
   spec = spec:gsub('\nHost:[^\n]*', '\nHost:\telsewhere')
@@ -169,7 +183,7 @@ T['client view']['W keeps the client and shows p4 message when the switch fails'
   child.lua([[vim.ui.select = function(items, _, cb)
     for _, it in ipairs(items) do if it.client == 'alice_far' then return cb(it) end end
   end]])
-  child.type_keys('W')
+  child.type_keys('gW')
   H.eq(H.wait_message(child, 'can only be used from host', 15000), true)
   H.eq(H.wait_message(child, 'Perforce: error'), true)
   H.eq(has_line('Client alice_ws'), true)
@@ -349,19 +363,6 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
   H.eq(has_line('Workspace reconcile'), true)
   H.eq(goto_line('Workspace reconcile') < goto_line('Recent submitted'), true)
   -- The footer float shows the keys for the cursor's node.
-  local footer_expr = [[(function()
-    for _, w in ipairs(vim.api.nvim_list_wins()) do
-      local c = vim.api.nvim_win_get_config(w)
-      if c.relative == 'win' and c.focusable == false then
-        return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false)[1]
-      end
-    end
-  end)()]]
-  local function footer_at(text)
-    goto_line(text)
-    child.cmd('doautocmd CursorMoved')
-    return child.lua_get(footer_expr)
-  end
   local footer = footer_at('b.txt')
   H.expect.no_equality(footer:find('d diff', 1, true), nil)
   H.expect.no_equality(footer:find('r revert', 1, true), nil)
@@ -372,7 +373,7 @@ T['client view']['shows pending CLs, files, shelves, stale files, submitted, rec
     footer = footer_at(line)
     H.eq(footer:find('send to quickfix', 1, true), nil)
     H.expect.no_equality(footer:find('gS sync workspace', 1, true), nil)
-    H.expect.no_equality(footer:find('W switch client', 1, true), nil)
+    H.expect.no_equality(footer:find('W all my clients', 1, true), nil)
   end
   -- A shelf: no "send to quickfix" either.
   footer = footer_at('Shelved (1)')
@@ -2801,20 +2802,103 @@ T['client view']['Q sends a CL to quickfix; action menu lists only valid actions
   H.eq(vim.tbl_contains(valid, 'edit_description'), false)
 end
 
-T['client view']['A switches to all my clients'] = function()
+T['client view']['W switches to all my clients and back; A no longer does'] = function()
   local root2 = server.dir .. '/ws2'
   server:client('alice_ws2', root2)
   server:p4({ 'sync' }, { client = 'alice_ws2', cwd = root2 })
   server:p4({ 'edit', root2 .. '/d.txt' }, { client = 'alice_ws2', cwd = root2 })
   open_view()
   H.eq(has_line('@alice_ws2'), false)
+  -- A on a line that isn't a changelist: nothing (it was the scope toggle)
+  goto_line('Pending')
   child.type_keys('A')
+  vim.uv.sleep(500)
+  H.eq(has_line('[all my clients]'), false)
+  H.expect.no_equality(footer_at('Pending'):find('W all my clients', 1, true), nil)
+  child.type_keys('W')
   wait(
     ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("@alice_ws2", 1, true) ~= nil'):format(
       view_expr(root)
     )
   )
   H.eq(has_line('[all my clients]'), true)
+  H.expect.no_equality(footer_at('Pending'):find('W this client', 1, true), nil)
+  goto_line('Pending')
+  child.type_keys('W')
+  wait(
+    ('table.concat(vim.api.nvim_buf_get_lines(%s.buf, 0, -1, false), "\\n"):find("@alice_ws2", 1, true) == nil'):format(
+      view_expr(root)
+    )
+  )
+end
+
+--- In the description editor, in insert mode, after the last character of `last` (line `n`).
+local function at_end_of(n, last)
+  wait([[vim.bo.filetype == 'perforated-description']])
+  -- `startinsert!` applies once the child is back in its main loop: poll from here.
+  H.eq(
+    vim.wait(5000, function()
+      return child.lua_get('vim.fn.mode()') == 'i'
+    end, 50),
+    true
+  )
+  H.eq(child.api.nvim_win_get_cursor(0), { n, #last })
+  H.eq(child.api.nvim_buf_get_lines(0, n - 1, n, false), { last })
+end
+
+T['client view']['A edits a description from its end: client view, K, describe, changes'] = function()
+  -- Trailing blank lines are skipped
+  server:p4({ 'change', '-i' }, {
+    client = 'alice_ws',
+    cwd = root,
+    stdin = server
+      :p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
+      :gsub('\tsecond line\n', '\tsecond line\n\t\n\t\n'),
+  })
+  open_view()
+  goto_line('CL 2  Fix parser')
+  child.type_keys('A')
+  at_end_of(2, 'second line')
+  child.type_keys(' and more', '<Esc>', '<C-s>')
+  wait([[vim.bo.filetype == 'perforated']])
+  local function spec()
+    return server:p4({ 'change', '-o', '2' }, { client = 'alice_ws', cwd = root }).stdout
+  end
+  H.eq(
+    vim.wait(5000, function()
+      return spec():find('\tsecond line and more\n', 1, true) ~= nil
+    end, 100),
+    true
+  )
+  -- Not in the `.` menu (the `?` help lists it)
+  H.eq(vim.tbl_contains(menu_labels('CL 2  Fix parser'), 'Edit description, from its end'), false)
+  -- The K popup
+  goto_line('CL 2  Fix parser')
+  child.type_keys('K')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  child.type_keys('A')
+  at_end_of(2, 'second line and more')
+  child.type_keys('<Esc>', 'q')
+  wait([[vim.bo.filetype == 'perforated-changelist']])
+  child.type_keys('q')
+  -- Describe
+  child.cmd('P4 describe 2')
+  wait(
+    [[vim.api.nvim_buf_get_name(0):find('describe', 1, true) ~= nil
+    and table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('a.txt', 1, true) ~= nil]]
+  )
+  child.type_keys('A')
+  at_end_of(2, 'second line and more')
+  child.type_keys('<Esc>', 'q')
+  wait([[vim.api.nvim_buf_get_name(0):find('describe', 1, true) ~= nil]])
+  -- :P4 changes: your own submitted changelist
+  child.cmd('P4 changes')
+  wait(
+    [[table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('initial import', 1, true) ~= nil]]
+  )
+  goto_line('initial import')
+  child.type_keys('A')
+  at_end_of(1, 'initial import')
 end
 
 T['client view']['P4V keys are mapped; keys.p4v = false removes them'] = function()

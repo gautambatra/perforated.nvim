@@ -1411,8 +1411,14 @@ local function actions(view)
     {
       id = 'scope',
       desc = 'Toggle scope: this client / all my clients',
-      keys = { 'A' },
-      nomenu = true,
+      keys = { 'W' },
+      footer = 71,
+      footer_desc = function()
+        return view.scope == 'user' and 'this client' or 'all my clients'
+      end,
+      footer_when = function(item, node)
+        return not on_item(item, node)
+      end,
       run = function()
         view.scope = view.scope == 'user' and 'client' or 'user'
         M.refresh(view)
@@ -1421,12 +1427,7 @@ local function actions(view)
     {
       id = 'switch_client',
       desc = 'Switch client (pick one of your clients)',
-      keys = { 'W' },
-      footer = 71,
-      footer_desc = 'switch client',
-      footer_when = function(item, node)
-        return not on_item(item, node)
-      end,
+      keys = { 'gW' },
       run = function()
         M.switch_client(view)
       end,
@@ -2189,6 +2190,13 @@ local function actions(view)
       end,
     },
   }
+  -- `A`: edit the description from its end (next to `i`; not in the menu).
+  for _, a in ipairs(list) do
+    if a.id == 'edit_description' then
+      table.insert(list, require('perforated.views.change_editor').at_end_action(a))
+      break
+    end
+  end
   -- Files of the recent submitted changelists (as in :P4 changes).
   return vim.list_extend(list, require('perforated.views.changes').file_actions(ws))
 end
@@ -2766,6 +2774,7 @@ M.HELP_SECTIONS = {
     {
       'new_change',
       'edit_description',
+      'edit_description_end',
       'view_change',
       'diff_all',
       'submit',

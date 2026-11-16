@@ -648,6 +648,13 @@ local function actions(view)
       end,
     },
   })
+  -- `A`: edit the description from its end (next to `i`; not in the menu).
+  for _, a in ipairs(list) do
+    if a.id == 'edit_description' then
+      table.insert(list, require('perforated.views.change_editor').at_end_action(a))
+      break
+    end
+  end
   return list
 end
 

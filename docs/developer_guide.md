@@ -1140,7 +1140,7 @@ client, description — and its shelf, shelved files or not), `fstat_change` (`f
 //client/...`: this client's files opened in one changelist, `default` too), `all(fns, cb)`
 (runs queries at once and answers when every one has: the pre-checks before a pop-up never
 wait on each other), `submitted_changes` (paged, scoped to the client by default; `anywhere` for
-every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `W`), `status` (`p4 status [-m]` for reconcile, with job options),
+every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `gW`), `status` (`p4 status [-m]` for reconcile, with job options),
 `reopen`, `opened_by_user` (the "all my clients" scope), `change_status`, and the change spec
 helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_description`,
 `spec_set_description`).
@@ -1580,7 +1580,8 @@ the `·` in `PerforatedDim`),
 `PerforatedBarText`; an action's
 `footer_when(item, node)` narrows where it's shown without changing where the key works —
 the client view's `Q` only on changelists and files that aren't shelved, `gS` and `W` only
-off them — and `footer_desc` is a shorter label). Keys of actions that take several items (`multi`) are also mapped in visual mode:
+off them — and `footer_desc` is a shorter label, or a function for one that changes, like
+`W`'s "all my clients" / "this client"). Keys of actions that take several items (`multi`) are also mapped in visual mode:
 `selection(view)` turns the selected rows into nodes and `dispatch(a, view, selected)` runs
 the action on those that apply (instead of the marks), dropping a node whose ancestor is also
 in the list, so a changelist selected with its files counts once. `menu_items` builds the `.` menu: valid actions in definition order, unless the view
@@ -1786,7 +1787,7 @@ scoped by `client_view.reconcile.paths` or `p`, runs as a job), Recent submitted
 opens `views/changes.lua` with `{ user, anywhere = true }`), with blank spacer rows between
 sections. `refresh(view, what)` runs the queries in parallel and redraws as each
 answers (coalescing refreshes: one in flight, the rest merged into one more); `what` limits
-it to what an event named ([§18.7](#187-you-open-the-client-view-p4)). `switch_client(view)` (`W`) picks
+it to what an event named ([§18.7](#187-you-open-the-client-view-p4)). `switch_client(view)` (`gW`) picks
 another of the user's clients, checks it with `p4 -c <client> opened -m 1` (p4's message on
 failure) and shows it in the same window through `workspace.for_client`. `actions(view)` defines every key of the view, and `M.MENU_LAYOUT` the order and grouping
 of the `.` menu on changelists and opened files. A `BufWritePost`
@@ -1848,8 +1849,11 @@ the client view's extra groups vanish in `:P4 changes`) are shared with the clie
 shelved files; `fetch` gets them, `render` builds lines + highlights, `show` opens the float,
 and `previewer(ws)` puts the same content in a picker's preview buffer: a placeholder, then
 the content once fetched, cached per changelist for that picker, and written only while the
-buffer still previews that changelist; `i` (or the older `C`) turns the same float into the description editor, and a save or cancel
-comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save;
+buffer still previews that changelist; `i` (or the older `C`) turns the same float into the description editor, `A` does too with
+the cursor at the end, and a save or cancel comes back to the popup); the description editor (a float with only the description; `:w`/`<C-s>` save; `at_end`
+puts the cursor after the last non-blank line's end, in insert mode, for `A`, whose action
+each view derives from its `i` one with `at_end_action(a)` (`nomenu`, no footer, listed in
+`?`; it sets `M._at_end` for the `edit` call the action makes);
 only the Description field of the spec is replaced, so the file list can't be edited by
 accident; submitted changelists use `change -u`, with an opt-in `-f` retry). `open_float`'s
 `on_save(desc, saved)` starts the save and the caller calls `saved(ok)` when p4 answers: the

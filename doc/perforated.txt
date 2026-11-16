@@ -193,8 +193,8 @@ Client view (:P4)                                     *perforated-client-view*
     ?                 Help
 
   Workspace
-    W                 Switch client (pick one of your clients)
-    A                 Toggle scope: this client / all my clients
+    gW                Switch client (pick one of your clients)
+    W                 Toggle scope: this client / all my clients
     gS · <C-S-g>      Sync workspace
     g/ · <C-g>        Go to changelist / path / user
     gn                All my submitted changelists
@@ -202,6 +202,7 @@ Client view (:P4)                                     *perforated-client-view*
   Changelists
     c · <C-n>         New changelist
     i                 Edit description
+    A                 Edit description, from its end
     K                 View changelist
     D · <C-d>         Diff all files
     P · <C-s>         Submit
@@ -283,6 +284,7 @@ Describe buffer (:P4 describe)                           *perforated-describe*
   I                 Integrate into this workspace
   Q                 Files to quickfix
   gX                Copy Swarm URL
+  A                 Edit description, from its end
 
 File history (:P4 filelog)                                *perforated-history*
 
@@ -369,6 +371,7 @@ Submitted changelists (:P4 changes)                       *perforated-changes*
   q · <C-w>         Close
   ?                 Help
   . · <RightMouse>  Action menu
+  A                 Edit description, from its end
   o                 Open
   d · <CR> · <C-d>  Diff against previous revision
   gD                Diff against revision…

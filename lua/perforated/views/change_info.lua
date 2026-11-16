@@ -259,10 +259,11 @@ function M.show(ws, item, d, shelved)
     end, { buffer = buf, nowait = true })
   end
   if editable then
-    local function edit()
+    local function edit(at_end)
       require('perforated.views.change_editor').edit(ws, rec.change, {
         submitted = rec.status == 'submitted',
         win = win,
+        at_end = at_end == true,
         on_done = function(_, how)
           -- Back to the popup (re-read, so a saved description shows), unless the cursor
           -- simply left the editor.
@@ -275,6 +276,9 @@ function M.show(ws, item, d, shelved)
     -- `i` as in the client view; `C` was the key before.
     vim.keymap.set('n', 'i', edit, { buffer = buf, nowait = true })
     vim.keymap.set('n', 'C', edit, { buffer = buf, nowait = true })
+    vim.keymap.set('n', 'A', function()
+      edit(true) -- the cursor after the end of the text
+    end, { buffer = buf, nowait = true })
   end
   return buf, win
 end
