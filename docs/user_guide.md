@@ -318,6 +318,9 @@ only scans when you expand it (`l`).
   - `D` on a file does the same for the changelist it is in (the shelf, for a shelved file),
     and the tab starts on that file.
   - Moving through the panel switches files, as do `<Tab>` / `<S-Tab>` from any window.
+    Holding `j` (or `<Tab>`) only moves the cursor: the file you stop on loads once you have
+    paused for 50 ms, so files you pass over aren't read from the server. A single move
+    loads its file at once.
   - Each shelved or `#head` file is read from the server once per diff tab, while you
     move between files or leave the tab and come back. It shows what it was when first
     shown: after someone re-shelves, press `<F5>` to see the new shelf.
@@ -332,8 +335,9 @@ only scans when you expand it (`l`).
     shown; `files = 0` turns it off). Closing the tab frees what it loaded.
   - Opening the tab, the first file loads while the plugin checks which files are identical,
     so the tab is ready one server round trip sooner. A shelf against your workspace (`w`)
-    is compared in batches of 50 files instead of one file at a time, and what that reads
-    is kept (up to `diff.prefetch.max_kb`), so showing those files needs no further call.
+    is checked in one call that compares checksums, without reading the shelved files;
+    files that call can't answer (not synced to your workspace, or with unsaved changes in
+    Neovim) are compared by content, in batches of 50.
   - In the panel the cursor stays on the file list, and `j` / `k` wrap around at both ends.
     Each line shows the file name first, then its folder, so a narrow panel cuts off the
     folder rather than the name.

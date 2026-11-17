@@ -3,7 +3,7 @@
 --- Sources: a pending CL's opened files (depot base ↔ workspace file), a shelf (base ↔
 --- shelved), a submitted CL (#rev-1 ↔ #rev), or every opened file (`:P4 diff -a`).
 --- Files load lazily when selected (the next one is prefetched). Moving the cursor in the
---- panel selects; `q` closes the tab; `<Tab>`/`<S-Tab>` step through files from any window.
+--- panel selects (a quick run of moves only the file it stops on: `M.SELECT_MS`); `q` closes the tab; `<Tab>`/`<S-Tab>` step through files from any window.
 --- The panel's keys come from the action registry (`ui/keys.lua`): `?`, the `.` menu and the
 --- footer, `o` opens the file and `r` reverts an opened one.
 
@@ -12,6 +12,9 @@ local cls = require('perforated.changelists')
 local dv = require('perforated.diff.view')
 
 local M = {}
+
+--- Moves through the panel closer together than this (ms) show only the file they stop on.
+M.SELECT_MS = 50
 
 local ns = vim.api.nvim_create_namespace('perforated.difftab')
 local ns_current = vim.api.nvim_create_namespace('perforated.difftab.current')
@@ -516,7 +519,7 @@ open_tab = function(ws, title, entries, listed, focus, reload, snapshot)
     return s
   end
 
-  local function show_entry(i)
+  local function show_now(i)
     local e = entries[i]
     if not e or state.current == i or not vim.api.nvim_tabpage_is_valid(tab) then
       return
@@ -572,15 +575,49 @@ open_tab = function(ws, title, entries, listed, focus, reload, snapshot)
     prefetch(i)
   end
 
+  -- Moving through the panel quickly (a held `j`, `<Tab>` repeated) only moves the cursor:
+  -- the file it stops on shows once no move has come for `M.SELECT_MS`. A move after a pause
+  -- shows its file at once.
+  local timer = assert(vim.uv.new_timer())
+  local pending ---@type integer?  the entry to show when the moves stop
+  local last_move = 0 -- when the last move came (ms, `vim.uv.hrtime`)
+  --- Show entry `i` now (a revert, a refresh, the timer): no move is waiting any more.
+  local function show_entry(i)
+    pending = nil
+    timer:stop()
+    show_now(i)
+  end
+  local function move_to(i)
+    local now = vim.uv.hrtime() / 1e6
+    local quiet = now - last_move >= M.SELECT_MS
+    last_move = now
+    if quiet and not pending then
+      return show_entry(i)
+    end
+    pending = i
+    timer:stop()
+    timer:start(
+      M.SELECT_MS,
+      0,
+      vim.schedule_wrap(function()
+        local n = pending
+        pending = nil
+        if n then
+          show_entry(n)
+        end
+      end)
+    )
+  end
+
   state.select = show_entry
   state.count = #entries
   state.panel = panel
   function state.step(delta)
-    local n = ((state.current or 0) - 1 + delta) % #entries + 1
+    local n = ((pending or state.current or 0) - 1 + delta) % #entries + 1
     if vim.api.nvim_win_is_valid(panel) then
       vim.api.nvim_win_set_cursor(panel, { n + 2, 0 })
     end
-    show_entry(n)
+    move_to(n)
   end
 
   local group = vim.api.nvim_create_augroup('perforated.difftab.' .. tab, { clear = true })
@@ -606,7 +643,7 @@ open_tab = function(ws, title, entries, listed, focus, reload, snapshot)
         vim.api.nvim_win_set_cursor(panel, { row, 0 })
       end
       if row - 2 <= #entries then
-        show_entry(row - 2)
+        move_to(row - 2)
       end
       state.update_footer()
     end,
@@ -621,6 +658,9 @@ open_tab = function(ws, title, entries, listed, focus, reload, snapshot)
         return
       end
       closed = true
+      pending = nil
+      timer:stop()
+      timer:close()
       -- Now, while the windows exist: a closing window saves its options for its buffer.
       dv.clear_header(lwin)
       dv.clear_header(rwin)

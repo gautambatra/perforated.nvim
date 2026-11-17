@@ -3,6 +3,8 @@
 ---
 ---   * depot revision vs depot revision: digests from one batched `fstat -Ol` (no content);
 ---   * an opened file vs its base, saved: one batched `p4 diff -sr` (p4 compares locally);
+---   * any other depot revision (a shelf's `@=CL` too) vs a saved workspace file: one batched
+---     `p4 diff -f -sl` (p4 compares the file with the revision's digest; no content comes);
 ---   * anything else (unsaved buffers, a revision vs the workspace file): the contents, the
 ---     depot sides printed together (`p4.print_batch`, 50 a call).
 ---
@@ -59,6 +61,8 @@ function M.check(ws, list, cb, opts)
   local result = {}
   local digest_specs, digest_seen = {}, {}
   local sr_paths = {} -- path → { pair indexes } for `diff -sr`
+  local sl = {} -- { spec, path, pair indexes } for `diff -sl`, one per workspace file
+  local sl_at = {} -- path key → its `sl` entry
   local content = {} -- pair indexes compared by content
   local todo = 1 -- held until every comparison has been queued
   local finished = false
@@ -94,9 +98,23 @@ function M.check(ws, list, cb, opts)
       -- A saved workspace file against its opened file's base: let p4 compare.
       local spec, path = l.spec or r.spec, l.path or r.path
       local rec = path and ws.fstat and ws.fstat[p4.key(ws, path)]
+      local k = path and p4.key(ws, path)
       if spec and path and rec and rec.action and p4.base_spec(rec) == spec then
         sr_paths[path] = sr_paths[path] or {}
         table.insert(sr_paths[path], i)
+      elseif
+        spec
+        and path
+        and spec:sub(1, 2) == '//'
+        and (not sl_at[k] or sl_at[k].spec == spec)
+      then
+        -- (A second revision against the same file is compared by content: the answers
+        -- name the file, not the revision asked about.)
+        if not sl_at[k] then
+          sl_at[k] = { spec = spec, path = path, idxs = {} }
+          sl[#sl + 1] = sl_at[k]
+        end
+        table.insert(sl_at[k].idxs, i)
       else
         content[#content + 1] = i
       end
@@ -185,7 +203,8 @@ function M.check(ws, list, cb, opts)
 
   -- Content comparisons: local sides read here, depot sides printed (together where they can).
   local wanted, waiting = {}, {} -- specs to print; spec → fns for its lines
-  for _, i in ipairs(content) do
+  local printed = {} -- spec → its lines (false: couldn't print), once answered
+  local function compare(i)
     todo = todo + 1
     local got = {}
     for k = 1, 2 do
@@ -205,6 +224,8 @@ function M.check(ws, list, cb, opts)
         set(s.lines)
       elseif s.path then
         set(read(s.path))
+      elseif printed[s.spec] ~= nil then
+        set(printed[s.spec] or nil)
       else
         if not waiting[s.spec] then
           waiting[s.spec] = {}
@@ -214,27 +235,68 @@ function M.check(ws, list, cb, opts)
       end
     end
   end
+  for _, i in ipairs(content) do
+    compare(i)
+  end
   local function answer(spec, lines)
+    printed[spec] = lines or false
     for _, fn in ipairs(waiting[spec]) do
       fn(lines)
     end
   end
-  local batch, budget = {}, opts.keep_kb and { bytes = opts.keep_kb * 1024 } or nil
-  for _, spec in ipairs(wanted) do
-    if opts.alone and opts.alone[spec] or #wanted == 1 then
-      p4.print(ws, spec, { snapshot = opts.snapshot }, function(lines)
-        answer(spec, lines)
+  local budget = opts.keep_kb and { bytes = opts.keep_kb * 1024 } or nil
+  --- Print what the comparisons queued since the last call.
+  local function print_wanted()
+    local batch = {}
+    for _, spec in ipairs(wanted) do
+      if opts.alone and opts.alone[spec] or #wanted == 1 then
+        p4.print(ws, spec, { snapshot = opts.snapshot }, function(lines)
+          answer(spec, lines)
+        end)
+      else
+        batch[#batch + 1] = spec
+      end
+    end
+    wanted = {}
+    for first = 1, #batch, M.BATCH do
+      local chunk = vim.list_slice(batch, first, first + M.BATCH - 1)
+      p4.print_batch(ws, chunk, { snapshot = opts.snapshot, budget = budget }, function(got)
+        for _, spec in ipairs(chunk) do
+          answer(spec, got[spec])
+        end
       end)
-    else
-      batch[#batch + 1] = spec
     end
   end
-  for first = 1, #batch, M.BATCH do
-    local chunk = vim.list_slice(batch, first, first + M.BATCH - 1)
-    p4.print_batch(ws, chunk, { snapshot = opts.snapshot, budget = budget }, function(got)
-      for _, spec in ipairs(chunk) do
-        answer(spec, got[spec])
+  print_wanted()
+
+  -- Revisions against workspace files: `diff -f -sl` answers same / diff / missing per file
+  -- (opened or not). A file it doesn't answer (not synced to this client, not in its view, the
+  -- revision not found) is compared by content.
+  if #sl > 0 then
+    todo = todo + 1
+    local specs = vim.tbl_map(function(x)
+      return x.spec
+    end, sl)
+    ws:run({ 'diff', '-f', '-sl' }, { globals = { '-x', '-' }, stdin = specs }, function(res)
+      local status = {}
+      for _, rec in ipairs(res.records or {}) do
+        if rec.clientFile and rec.status then
+          status[p4.key(ws, rec.clientFile)] = rec.status
+        end
       end
+      for _, x in ipairs(sl) do
+        local st = status[p4.key(ws, x.path)]
+        for _, i in ipairs(x.idxs) do
+          if st == 'same' or st == 'diff' or st == 'missing' then
+            result[i] = st == 'same'
+          else
+            compare(i)
+          end
+        end
+      end
+      print_wanted()
+      todo = todo - 1
+      done()
     end)
   end
 

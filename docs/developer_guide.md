@@ -551,7 +551,7 @@ lua/perforated/
     view.lua                 side-by-side diff tab, $P4DIFF launcher, revision specs
     tab.lua                  multi-file diff tab with a file panel
     look.lua                 colours of diff windows (diff.colors / diff.syntax), per window
-  same.lua                   "are these sides identical?" (digests / p4 diff -sr / content)
+  same.lua                   "are these sides identical?" (digests / diff -sr / diff -sl / content)
   revs.lua                   helpers for comparison sides (spec / path / empty)
   history.lua                filelog, annotate (+cache), Swarm URL
   timelapse.lua              time-lapse engine (annotate -a → every revision in memory)
@@ -1329,12 +1329,17 @@ a message instead (`same.lua`).
 `M.open` makes the tab's snapshot before the identical-files check (a refresh renews the open
 tab's, `state.renew`), starts printing the first file's sides into it (the focused one, or
 the first: `alone`, so the check's own print of them joins those runner jobs) and passes it
-to `same.check` with `keep_kb = diff.prefetch.max_kb`. `same.check` prints the depot sides
+to `same.check` with `keep_kb = diff.prefetch.max_kb`. A shelf against the workspace is
+answered by one `diff -f -sl` (see `same.lua`). `same.check` prints the depot sides
 of content comparisons with `p4.print_batch`, `same.BATCH` (50) specs a call, sharing one
 byte `budget` across the calls: content within it is kept (snapshot or content cache), the
 rest only compared. With no tab to show (every file identical), the snapshot is released.
 
-The multi-file diff tab: a file panel plus a native diff pair; files load when selected (the
+The multi-file diff tab: a file panel plus a native diff pair; files load when selected
+(`move_to`, from `CursorMoved` and `state.step`: a move after `M.SELECT_MS` (50 ms) of
+stillness shows its file at once, closer moves restart a timer and only the last one shows;
+`state.step` counts from the file pending, and `show_entry`, the direct path for a revert or
+refresh, drops it) (the
 files after the shown one print ahead with `p4.print_batch`, into the tab's `p4.snapshot()`,
 so shelved and `#head` sides print once for the tab's life, revisits and tab switches
 included). `prefetch(i)` looks at the next `diff.prefetch.files` entries and asks for those
@@ -1406,8 +1411,14 @@ outlives the diff.
 
 #### `same.lua`
 `check(ws, pairs, cb)` answers "identical?" for many pairs, cheaply: depot-vs-depot by digest
-(one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call), and
-only otherwise by content. `or_open(ws, left, right, open)` either says "identical" or opens;
+(one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call), any
+other revision (a shelf's `@=CL` too) vs a saved workspace file by one `p4 -x - diff -f -sl`
+(`same`/`diff`/`missing` per file, opened or not: p4 checks the local file against the
+revision's digest, so no content comes back; measured, 940 bytes from the server for a 23 MB
+shelved file, against 23 MB for `print`), and only otherwise by content. `diff -sl` answers
+name the client file, not the revision, so a second revision against the same file, and any
+file it doesn't answer (not on the client, not in its view, the revision not found), falls
+back to content; specs already printed by then are reused (`printed`). `or_open(ws, left, right, open)` either says "identical" or opens;
 it starts the single-file diff's "Opening diff view…" (`diff.view.start_busy`, also started
 earlier by `diff.view.open` and the client view's file diff), which `diff.view.pair` closes
 once both sides have their content (`uri.when_loaded`) and the identical answer closes at once.

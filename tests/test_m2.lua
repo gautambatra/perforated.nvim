@@ -45,6 +45,8 @@ local function setup()
     },
   })
   child.o.lines, child.o.columns = 40, 140
+  -- Each panel move shows its file at once (the tests below move faster than a person).
+  child.lua([[require('perforated.diff.tab').SELECT_MS = 0]])
   child.cmd('edit ' .. root .. '/d.txt')
   H.wait(child, [[(require('perforated.buffer').get() or {}).status == 'clean']], 15000)
 end
@@ -4282,38 +4284,161 @@ local function shelf_vs_workspace_tab()
   H.wait_idle(child)
 end
 
-T['client view']['shelf vs workspace: one print for the check, none to show the files'] = function()
+T['client view']['shelf vs workspace: the check is one diff -sl, no prints'] = function()
   shelf_vs_workspace_tab()
-  -- a.txt (the first file) prints alone, from the start; the others in one call.
-  H.eq(
-    child.lua_get('_G.BATCHES'),
-    { { '//depot/b.txt@=2', '//depot/c.txt@=2', '//depot/d.txt@=2' } }
-  )
-  -- (loading the workspace files prints their bases for gutter signs: not the tab's)
-  -- (sorted: the log has them as they finish, and the two run at once)
-  local function shelf_prints()
-    local prints = vim.tbl_filter(function(c)
-      return c:find('^print') and not c:find('#%d+$')
-    end, child.lua_get('_G.CALLS'))
-    table.sort(prints)
-    return prints
-  end
-  H.eq(shelf_prints(), { 'print -q', 'print -q //depot/a.txt@=2' })
   H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil)
+  local calls = child.lua_get('_G.CALLS')
+  H.eq(#vim.tbl_filter(function(c)
+    return c == 'diff -f -sl'
+  end, calls), 1)
+  -- Only the files shown print: a.txt (the first, while the check runs), b.txt (the first
+  -- that differs) and, ahead of it, d.txt. (Loading the workspace files prints their bases
+  -- for gutter signs: not the tab's.)
+  H.eq(child.lua_get('_G.BATCHES'), { { '//depot/d.txt@=2' } })
+  local prints = vim.tbl_filter(function(c)
+    return c:find('^print') and not c:find('#%d+$')
+  end, calls)
+  table.sort(prints)
+  H.eq(prints, { 'print -q', 'print -q //depot/a.txt@=2', 'print -q //depot/b.txt@=2' })
   child.type_keys('<Tab>')
   shown_left('d.txt@=2')
-  H.eq(#shelf_prints(), 2)
   H.eq(buf_lines('//depot/d.txt@=2'), { 'd2' })
 end
 
-T['client view']['shelf vs workspace: check content beyond prefetch.max_kb is not kept'] = function()
-  child.lua([[require('perforated.config').set({ diff = { prefetch = { max_kb = 0 } } })]])
-  shelf_vs_workspace_tab()
-  H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil) -- still right
-  -- b.txt wasn't kept: shown, it printed alone.
-  H.eq(#vim.tbl_filter(function(c)
+--- The shelf vs workspace tab with all four files changed locally (a … d at rows 3 … 6),
+--- the panel's moves debounced by `ms`; `_G.SHOWN` lists the shelved sides shown, in order.
+local function four_file_tab(ms)
+  four_file_shelf()
+  for _, f in ipairs({ 'a', 'b', 'c', 'd' }) do
+    H.write(root .. '/' .. f .. '.txt', f .. '-local\n')
+  end
+  open_view_quiet()
+  child.lua(([[require('perforated.diff.tab').SELECT_MS = %d
+    _G.SHOWN = {}
+    local dv = require('perforated.diff.view')
+    local side_buf = dv.side_buf
+    dv.side_buf = function(ws, sd, ...)
+      if sd.spec then
+        table.insert(_G.SHOWN, vim.fs.basename(sd.spec))
+      end
+      return side_buf(ws, sd, ...)
+    end]]):format(ms))
+  goto_line('Shelved (4)')
+  child.type_keys('w')
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+  shown_left('a.txt@=2')
+  vim.uv.sleep(ms + 100) -- the panel has been still a while
+  H.wait_idle(child)
+end
+
+--- Move the panel's cursor to each row in turn, as fast as a held key.
+local MOVES = [[for _, row in ipairs({ ... }) do
+    vim.api.nvim_win_set_cursor(0, { row, 0 })
+    vim.api.nvim_exec_autocmds('CursorMoved', { buffer = 0 })
+  end
+  return _G.SHOWN]]
+
+T['client view']['diff tab: a quick run of moves shows only the file it stops on'] = function()
+  four_file_tab(200)
+  -- The first move, after a pause, shows its file at once; the next ones only move the cursor.
+  H.eq(child.lua(MOVES, { 4, 5, 6 }), { 'a.txt@=2', 'b.txt@=2' })
+  shown_left('d.txt@=2')
+  H.eq(child.lua_get('_G.SHOWN'), { 'a.txt@=2', 'b.txt@=2', 'd.txt@=2' })
+  H.eq(buf_lines('//depot/c.txt@=2'), nil) -- passed over: never loaded
+  -- <Tab> from a diff side steps from the file it is heading to, not the one shown.
+  vim.uv.sleep(300)
+  child.cmd('wincmd l')
+  child.lua([[vim.api.nvim_input('<Tab><Tab>')]])
+  shown_left('b.txt@=2')
+  H.eq(child.lua_get('_G.SHOWN'), { 'a.txt@=2', 'b.txt@=2', 'd.txt@=2', 'a.txt@=2', 'b.txt@=2' })
+end
+
+T['client view']['diff tab: a single move after a pause shows its file at once'] = function()
+  four_file_tab(200)
+  H.eq(child.lua(MOVES, { 4 }), { 'a.txt@=2', 'b.txt@=2' })
+  vim.uv.sleep(300)
+  H.eq(child.lua(MOVES, { 5 }), { 'a.txt@=2', 'b.txt@=2', 'c.txt@=2' })
+end
+
+T['client view']['identical-files check: files diff -sl does not answer are compared by content'] = function()
+  four_file_shelf()
+  -- new.txt isn't in the depot (diff -sl says "not on client"); other.txt is a.txt's content
+  -- under another name (its answer names a.txt, not other.txt).
+  H.write(root .. '/other.txt', 'a2\n')
+  child.lua(
+    [[_G.CALLS = {}
+    local ws = require('perforated').workspace(vim.fn.bufnr())
+    local run = ws.run
+    ws.run = function(self, args, ...)
+      table.insert(_G.CALLS, table.concat(args, ' '))
+      return run(self, args, ...)
+    end
+    require('perforated.same').check(ws, {
+      { left = { spec = '//depot/b.txt@=2' }, right = { path = ... .. '/b.txt' } },
+      { left = { spec = '//depot/a.txt@=2' }, right = { path = ... .. '/other.txt' } },
+      { left = { spec = '//depot/a.txt@=2' }, right = { path = ... .. '/new.txt' } },
+      { left = { spec = '//depot/c.txt#1' }, right = { path = ... .. '/c.txt' } },
+    }, function(same) _G.SAME = same end)]],
+    { root }
+  )
+  wait('_G.SAME ~= nil')
+  H.eq(child.lua_get('_G.SAME'), { true, true, false, false })
+  local calls = child.lua_get('_G.CALLS')
+  H.eq(calls[1], 'diff -f -sl')
+end
+
+T['client view']['shelf vs workspace: an unsaved buffer is compared by content'] = function()
+  four_file_shelf()
+  child.cmd('edit ' .. root .. '/a.txt')
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'a-unsaved' })
+  H.write(root .. '/c.txt', 'c-disk\n')
+  child.cmd('edit ' .. root .. '/c.txt')
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { 'c2' }) -- as shelved, unsaved
+  open_view_quiet()
+  goto_line('Shelved (4)')
+  child.type_keys('w')
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+  shown_left('a.txt@=2')
+  -- a.txt differs only in its buffer; c.txt only on disk (its unsaved buffer is as shelved).
+  local text = table.concat(lines(), '\n')
+  H.neq(text:find('Identical (3)', 1, true), nil)
+  H.eq(#vim.tbl_filter(function(l)
+    return l:find('c.txt', 1, true) ~= nil
+  end, lines()), 1)
+end
+
+--- The shelf vs workspace tab with a.txt and b.txt changed in unsaved buffers (compared by
+--- content); how many times b.txt printed by itself, by the time it is shown.
+local function unsaved_shelf_tab()
+  four_file_shelf()
+  for _, f in ipairs({ 'a', 'b' }) do
+    child.cmd('edit ' .. root .. '/' .. f .. '.txt')
+    child.api.nvim_buf_set_lines(0, 0, -1, false, { f .. '-unsaved' })
+  end
+  open_view_quiet()
+  goto_line('Shelved (4)')
+  child.type_keys('w')
+  wait((DIFF_TAB:gsub('== 2', '== 3')))
+  shown_left('a.txt@=2')
+  H.neq(table.concat(lines(), '\n'):find('Identical (2)', 1, true), nil)
+  child.type_keys('<Tab>')
+  shown_left('b.txt@=2')
+  return #vim.tbl_filter(function(c)
     return c == 'print -q //depot/b.txt@=2'
-  end, child.lua_get('_G.CALLS')), 1)
+  end, child.lua_get('_G.CALLS'))
+end
+
+-- (No prefetch: b.txt's content can come only from the check.)
+T['client view']['shelf vs workspace: content compared is kept, so showing it prints nothing'] = function()
+  child.lua([[require('perforated.config').set({ diff = { prefetch = { files = 0 } } })]])
+  H.eq(unsaved_shelf_tab(), 0)
+end
+
+T['client view']['shelf vs workspace: check content beyond prefetch.max_kb is not kept'] = function()
+  child.lua(
+    [[require('perforated.config').set({ diff = { prefetch = { files = 0, max_kb = 0 } } })]]
+  )
+  H.eq(unsaved_shelf_tab(), 1) -- b.txt wasn't kept: shown, it printed alone
 end
 
 T['client view']['diff tab: the first file prints while the identical-files check runs'] = function()
