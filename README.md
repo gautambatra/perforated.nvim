@@ -344,7 +344,7 @@ opts = {
   },
   icons = { provider = 'auto', style = 'auto', glyphs = {} }, -- provider: 'auto'|'mini'|'devicons'|false; style: 'nerd'|'ascii'|'auto'
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 }, -- ms
-  cache = { content_mb = 32 }, -- in-memory cache of depot revisions
+  cache = { content_mb = 48 }, -- in-memory cache of depot revisions
   log = { size = 500 }, -- entries kept for :P4 log
   debug = {
     enabled = false, -- or env PERFORATED_DEBUG=1|trace, or :P4 debug on

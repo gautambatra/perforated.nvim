@@ -485,7 +485,7 @@ keys):
         format = "CL {change} • {user} • {date} • {desc}"
       },
       cache = {
-        content_mb = 32
+        content_mb = 48
       },
       change = {
         allow_force = false

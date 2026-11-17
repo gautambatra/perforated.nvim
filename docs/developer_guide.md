@@ -1113,7 +1113,7 @@ environment (`PWD = cwd`; internal mode neutralises `P4DIFF`/`P4MERGE`/`P4EDITOR
 #### `core/cache.lua`
 `lru(max_bytes)` — a doubly-linked, byte-accounted LRU. `content()` is the session-wide cache
 of revision content (`<server>|<depotFile>#<rev>`, only for immutable numbered revisions),
-sized by `cache.content_mb`.
+sized by `cache.content_mb` (48 MB).
 
 #### `core/log.lua`
 A ring buffer (size `log.size`) of every p4 invocation, shown by `:P4 log` and aggregated by
@@ -1142,8 +1142,8 @@ when they contain wildcards). A `#rev`/`@CL` suffix is cut only from depot paths
 local name that isn't an existing file, so `icon@2x.png` keeps its name. `base_spec(rec)` decides the diff base (`#have`,
 or the moved-from file). `print(ws, spec)` returns lines, cached when immutable (other specs from `opts.snapshot`, a
 `snapshot()`, once printed into it);
-`print_many` prints several specs in one call (keyed `depotFile#rev`); `print_batch(ws, specs,
-opts)` does too but keeps each answer as `print` would (content cache, or `opts.snapshot`),
+`print_batch(ws, specs, opts)` prints several specs in one call and keeps each answer as
+`print` would (every cache entry is sized as its bytes plus 40 per line, the Lua strings) (content cache, or `opts.snapshot`),
 and a `print` of one of its specs meanwhile waits for it (`batched`), printing alone if the
 batch had no answer for it. p4 answers `-x - print` in order and skips what it can't print,
 so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N` by
@@ -1151,8 +1151,9 @@ so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N
 (`cached`, only ones not cached before); `release(snap)` drops them and its content.
 `pending_changes`, `new_change`, `edit`, `add`, `reconcile_add` and `revert` are forwarders
 to `p4_cmds.lua` (run on request, so loaded with the first one). `snapshot`, `release`,
-`renew`, `print_batch` and `print_many` are forwarders to
-`p4_batch.lua`, which only the diff tab, the identical-files check and the lists use: it
+`renew` and `print_batch` are forwarders to
+`p4_batch.lua`, which only the diff tab, the identical-files check and the lists (`:P4 hunks`
+prints the bases it needs with `print_batch`) use: it
 loads with them, keeping its code out of the startup memory (`make bench`). `print` and
 `keep` stay here, and `print_batch` reaches the shared state as `p4._batched` and
 `p4._keep`. `pending_changes`, `new_change`, `edit`, `add`,

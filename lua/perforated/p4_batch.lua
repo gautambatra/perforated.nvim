@@ -122,33 +122,4 @@ function M.print_batch(ws, specs, opts, cb)
   end)
 end
 
---- Print several revision specs in one call (-Mj: header record, data chunks, next header…).
----@param ws perforated.Workspace
----@param specs string[]
----@param opts perforated.RunOpts?
----@param cb fun(contents: table<string, string[]>)  keyed by "depotFile#rev"
-function M.print_many(ws, specs, opts, cb)
-  opts = vim.tbl_extend('force', { stdin = specs }, opts or {})
-  opts.globals = { '-x', '-' }
-  ws:run({ 'print', '-q' }, opts, function(res)
-    local out, cur, chunks = {}, nil, {}
-    local function flush()
-      if cur then
-        out[cur] = p4.split_lines(table.concat(chunks))
-      end
-      chunks = {}
-    end
-    for _, rec in ipairs(res.records) do
-      if rec.depotFile and rec.rev then
-        flush()
-        cur = rec.depotFile .. '#' .. rec.rev
-      elseif rec.data and cur then
-        chunks[#chunks + 1] = rec.data
-      end
-    end
-    flush()
-    cb(out)
-  end)
-end
-
 return M

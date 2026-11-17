@@ -122,7 +122,7 @@ local defaults = {
   },
   icons = { provider = 'auto', style = 'auto', glyphs = {} },
   runner = { concurrency = 4, timeout = 10000, background_timeout = 5000 },
-  cache = { content_mb = 32 },
+  cache = { content_mb = 48 },
   log = { size = 500 },
   --- Debug log file (also: env PERFORATED_DEBUG=1|trace, or :P4 debug on).
   debug = { enabled = false, level = 'debug', file = nil, max_kb = 5120 },

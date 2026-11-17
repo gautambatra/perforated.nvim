@@ -264,10 +264,6 @@ end
 function M.print_batch(ws, specs, opts, cb)
   return require('perforated.p4_batch').print_batch(ws, specs, opts, cb)
 end
-function M.print_many(ws, specs, opts, cb)
-  return require('perforated.p4_batch').print_many(ws, specs, opts, cb)
-end
-
 --- Split file content into lines the way Neovim shows a buffer (CRLF → LF, no final empty line).
 ---@param text string
 ---@return string[]

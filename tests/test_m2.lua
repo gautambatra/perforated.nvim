@@ -3698,10 +3698,10 @@ T['client view']['the hunks list prints no base of an unchanged file'] = functio
   child.lua(
     [[_G.printed = {}
     local p4 = require('perforated.p4')
-    local many = p4.print_many
-    p4.print_many = function(ws, specs, ...)
+    local batch = p4.print_batch
+    p4.print_batch = function(ws, specs, ...)
       vim.list_extend(_G.printed, specs)
-      return many(ws, specs, ...)
+      return batch(ws, specs, ...)
     end
     _G.items = nil
     require('perforated.lists').all_hunk_items(require('perforated').workspace(), function(items) _G.items = items end)]]
@@ -3710,6 +3710,53 @@ T['client view']['the hunks list prints no base of an unchanged file'] = functio
   -- b.txt and c.txt are opened unchanged: only a.txt's base is printed.
   H.eq(child.lua_get('_G.printed'), { '//depot/a.txt#1' })
   H.eq(child.lua_get('#_G.items') > 0, true)
+end
+
+--- `:P4 hunks` over every opened file; a.txt (opened, edited) is the one with a base to print.
+local function hunk_items(before)
+  child.lua(
+    [[_G.items = nil
+    require('perforated.core.cache').content():clear()
+    ]]
+      .. (before or '')
+      .. [[
+    require('perforated.lists').all_hunk_items(require('perforated').workspace(), function(items) _G.items = items end)]]
+  )
+  wait('_G.items ~= nil')
+end
+
+T['client view']['the hunks list caches a base at its real size'] = function()
+  open_view_cached()
+  hunk_items()
+  -- a.txt#1 is "a1\n": its bytes, and 40 for each line (the Lua string), as `print` counts.
+  H.eq(
+    child.lua_get([[(function()
+      local ws = require('perforated').workspace()
+      local node = require('perforated.core.cache').content().map[ws:server_key() .. '|//depot/a.txt#1']
+      return node and node.bytes
+    end)()]]),
+    3 + 40
+  )
+end
+
+T['client view']['a print of a base the hunks list is printing waits for its answer'] = function()
+  open_view_cached()
+  track_calls()
+  -- A file's own print (its change signs, a diff) asked once the hunks list's print is out.
+  hunk_items([[local ws = require('perforated').workspace()
+    local run = ws.run
+    ws.run = function(self, args, opts, ...)
+      local r = run(self, args, opts, ...)
+      if args[1] == 'print' and opts and opts.stdin then
+        require('perforated.p4').print(ws, '//depot/a.txt#1', {}, function(l) _G.alone = l end)
+      end
+      return r
+    end]])
+  wait('_G.alone ~= nil')
+  H.eq(child.lua_get('_G.alone'), { 'a1' })
+  H.eq(#vim.tbl_filter(function(c)
+    return c:find('^print') ~= nil
+  end, child.lua_get('_G.CALLS')), 1)
 end
 
 T['client view']['a new base revision asks the marker again, the file untouched'] = function()

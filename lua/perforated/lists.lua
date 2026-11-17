@@ -251,10 +251,7 @@ function M.all_hunk_items(ws, cb)
           local base = {}
           if spec then
             local k = ws:server_key() .. '|' .. spec
-            base = cache:get(k) or fetched[spec]
-            if fetched[spec] then
-              cache:set(k, fetched[spec], 40 * #fetched[spec])
-            end
+            base = cache:get(k) or fetched[spec] -- (printed ones are cached by print_batch)
           end
           if base then
             local b = loaded[p4.key(ws, r.clientFile)]
@@ -276,7 +273,7 @@ function M.all_hunk_items(ws, cb)
       if #need == 0 then
         return finish({})
       end
-      p4.print_many(ws, need, {}, finish)
+      p4.print_batch(ws, need, {}, finish)
     end)
   end)
 end
