@@ -1876,7 +1876,10 @@ and date on every line, coloured by age (`PerforatedAge1..10`, a gradient derive
 `Comment` → `DiagnosticWarn` or `annotate.gradient`). Local edits show "Not submitted"
 (mapped through the buffer's hunks). `~` re-annotates the revision before the line's change
 (following a branch back to its source), `<BS>` returns; `d` diffs that change; `Q` lists the
-lines from that changelist. Highlights come from a decoration provider.
+lines from that changelist. Highlights come from a decoration provider. The file actions
+(`gh`, `t`) take the file and revision from `file_of(view)`: the annotate's answer, or the
+spec asked for while that is still on its way (`view.ann` is nil until then); the line
+actions need the drawn lines, so they wait for it.
 
 #### `views/timelapse.lua` and `views/slider.lua`
 The time-lapse view: a read-only buffer with the file's filetype, stepping with incremental

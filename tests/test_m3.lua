@@ -611,6 +611,19 @@ T['m3']['describe: the old keys gL, C and <Del> still work but are not listed'] 
   H.eq(child.lua_get([[vim.fn.maparg('X', 'n', false, true).desc]]), 'perforated: File history')
 end
 
+T['m3']['annotate: gh and t work while the annotate is still on its way'] = function()
+  slow_annotate('exec sleep 30')
+  child.lua(SPIES)
+  child.lua([[require('perforated.views.timelapse').open = function(_, path, o)
+    table.insert(_G.spied, 'timelapse ' .. path .. ' ' .. tostring(o.rev))
+  end]])
+  child.cmd('P4 annotate')
+  wait([[next(require('perforated.views.annotate')._views) ~= nil and vim.bo.buftype == 'nofile']])
+  child.type_keys('gh')
+  child.type_keys('t')
+  H.eq(child.lua_get('_G.spied'), { 'open //depot/a.txt', 'timelapse //depot/a.txt 3' })
+end
+
 T['m3']['annotate and time-lapse: gh is the history, gL still works'] = function()
   child.lua(SPIES)
   child.cmd('P4 annotate')

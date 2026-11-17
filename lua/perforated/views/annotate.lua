@@ -184,6 +184,16 @@ function M.render(view)
   end
 end
 
+--- The file and revision the view annotates: from its answer, or from the spec it asked for
+--- while that is still on its way (`gh`, `t` work before the annotate is in).
+---@return string path, integer? rev
+local function file_of(view)
+  if view.ann then
+    return view.ann.depotFile, tonumber(view.ann.rev)
+  end
+  return (view.spec:gsub('[#@].*$', '')), tonumber(view.spec:match('#(%d+)$'))
+end
+
 --- The node under the cursor in the annotate window (for the action registry).
 local function node_at(view)
   local l = vim.api.nvim_win_get_cursor(view.win)[1]
@@ -440,10 +450,8 @@ local function actions(view)
       p4v = { '<C-S-t>' },
       run = function()
         local line = rev_line(view, vim.api.nvim_win_get_cursor(view.win)[1])
-        require('perforated.views.timelapse').open(ws, view.ann.depotFile, {
-          rev = tonumber(view.ann.rev),
-          line = line,
-        })
+        local path, rev = file_of(view)
+        require('perforated.views.timelapse').open(ws, path, { rev = rev, line = line })
       end,
     },
     {
@@ -455,7 +463,7 @@ local function actions(view)
       run = function()
         require('perforated.views.history').open(
           ws,
-          view.ann.depotFile,
+          (file_of(view)),
           { local_path = view.local_file and view.local_path or nil }
         )
       end,
