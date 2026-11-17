@@ -894,6 +894,8 @@ end
 T['ops']['offline: :P4 opened and gr keep the list and say why'] = function()
   child.cmd('P4 opened')
   wait('#vim.fn.getqflist() > 0')
+  -- Its queries done (else the next one could share a running query that still answers).
+  H.wait_idle(child)
   local n = qf_count()
   go_offline('offline', 'gone')
   child.cmd('P4 opened')

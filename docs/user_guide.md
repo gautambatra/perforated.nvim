@@ -757,7 +757,8 @@ What was fetched in the last 5 seconds (`poll.reuse`) answers again instead of a
 server: opening a file just refreshed (from the client view, a diff tab), entering its buffer,
 and the pickers and changelist prompts right after the background check or a view refresh.
 Any change you make from the plugin ends that at once. A change made outside Neovim in
-those seconds shows at the next check or on `<F5>`; `poll.reuse = 0` always asks.
+those seconds shows at the next check or on `<F5>`; `poll.reuse = 0` always asks. While the
+server is unreachable or you're logged out, nothing is reused: you get the reason instead.
 
 Entering a buffer asks for its file's status only when the file changed on disk since it was
 last asked (a sync from a terminal rewrites it), and right away then; your own saves don't

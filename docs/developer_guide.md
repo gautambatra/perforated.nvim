@@ -812,7 +812,8 @@ why keys, menus and help never disagree.
 4. Reuse: state fetched moments ago answers again (`poll.reuse`, 5 s; 0 = off). Each answer
    carries a `p4.stamp(ws)` taken when it was asked (time and `ws.opened_gen`), and
    `p4.fresh(ws, stamp)` holds while it's younger than `poll.reuse` and no change has bumped
-   the generation since. Stamped: each `fstat` record (`ws.fstat_at`, from a buffer's fstat or
+   the generation since, and never while `ws.conn` is `offline`, `offline_auth` or
+   `auth_needed` (the request goes on and fails with the reason). Stamped: each `fstat` record (`ws.fstat_at`, from a buffer's fstat or
    a refresh; a merged follow-up answer stamps only the files it asked about), the opened
    files of a full refresh (`ws.opened_stamp`), and this client's pending changelists
    (`ws.pending_kept`, from the probe or `pending_changes`; a new changelist drops it).

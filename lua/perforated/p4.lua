@@ -130,14 +130,17 @@ function M.stamp(ws)
 end
 
 --- Whether state with this stamp may answer again (`poll.reuse`: a change made since, or an
---- older answer, means asking).
+--- older answer, means asking). Not while the server is known to be down or logged out: the
+--- request then goes on, so it says why instead of showing the list as if all were well.
 ---@param ws perforated.Workspace
 ---@param stamp { t: integer, gen: integer }?
 ---@return boolean
 function M.fresh(ws, stamp)
   local reuse = require('perforated.config').get().poll.reuse or 0
+  local down = { offline = true, offline_auth = true, auth_needed = true }
   return stamp ~= nil
     and reuse > 0
+    and not (ws.conn and down[ws.conn.state])
     and stamp.gen == (ws.opened_gen or 0)
     and vim.uv.now() - stamp.t < reuse * 1000
 end
