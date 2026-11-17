@@ -96,7 +96,7 @@ end
 
 local CACHE_SIZE = 8
 local cache = {} ---@type { key: string, ann: perforated.Annotation }[]  most recent first
-local waiting = {} ---@type table<string, function[]>
+local waiting = {} ---@type table<string, table>  key → the request its callers share
 
 --- Forget cached annotations (tests, :P4 refresh).
 function M.clear_cache()
@@ -152,16 +152,23 @@ M._annotate_lines = annotate_lines
 
 --- Annotate a revision: `annotate -c -i -u -q [-I] spec`. `-i` follows branches, so a line
 --- keeps the change that wrote it rather than the one that branched the file; `-u` gives each
---- line's user and date. One p4 call.
+--- line's user and date. One p4 call, with no timeout (a large file's annotate can take long
+--- on a slow server; it only reads, and it can be cancelled).
 ---
 --- `descriptions` (for the blame line) also runs `filelog -l -i` in parallel for the
 --- changelist descriptions; changelists it doesn't reach are described in one more call.
+---
+--- Callers asking for the same numbered revision share one request. The returned `cancel()`
+--- drops this caller (its `cb` is never called); the p4 calls stop once no caller is left.
 ---@param ws perforated.Workspace
 ---@param spec string   //depot/path#rev (or a local path)
 ---@param opts { integrations: boolean?, descriptions: boolean? }?
 ---@param cb fun(a: perforated.Annotation?, err: string?)
+---@return { cancel: fun() }
 function M.annotate(ws, spec, opts, cb)
   opts = opts or {}
+  local entry = { cb = cb } -- this caller
+  local handle = {}
   -- A numbered revision never changes: reuse a recent result (blame line, re-opened views).
   local ckey = spec:match('#%d+$')
     and (
@@ -176,30 +183,89 @@ function M.annotate(ws, spec, opts, cb)
       if e.key == ckey then
         table.remove(cache, i)
         table.insert(cache, 1, e)
-        return vim.schedule(function()
-          cb(e.ann)
+        function handle.cancel()
+          entry.cancelled = true
+        end
+        vim.schedule(function()
+          if not entry.cancelled then
+            cb(e.ann)
+          end
         end)
-      end
-    end
-    local inflight = waiting[ckey]
-    if inflight then
-      inflight[#inflight + 1] = cb
-      return
-    end
-    waiting[ckey] = { cb }
-    local orig = cb
-    cb = function(a, err)
-      local cbs = waiting[ckey] or { orig }
-      waiting[ckey] = nil
-      if a then
-        table.insert(cache, 1, { key = ckey, ann = a })
-        cache[CACHE_SIZE + 1] = nil
-      end
-      for _, f in ipairs(cbs) do
-        f(a, err)
+        return handle
       end
     end
   end
+  local req = ckey and waiting[ckey]
+  if not req then
+    req = { entries = {}, ctls = {} }
+    if ckey then
+      waiting[ckey] = req
+    end
+  end
+  table.insert(req.entries, entry)
+  function handle.cancel()
+    if entry.cancelled or req.finished then
+      return
+    end
+    entry.cancelled = true
+    for _, e in ipairs(req.entries) do
+      if not e.cancelled then
+        return
+      end
+    end
+    req.cancelled = true
+    if ckey and waiting[ckey] == req then
+      waiting[ckey] = nil
+    end
+    for c in pairs(req.ctls) do
+      c.cancel()
+    end
+    req.ctls = {}
+  end
+  if #req.entries > 1 then
+    return handle -- joined a request already running
+  end
+
+  local function finish(a, err)
+    if req.cancelled then
+      return
+    end
+    req.finished = true
+    if ckey and waiting[ckey] == req then
+      waiting[ckey] = nil
+    end
+    if a and ckey then
+      table.insert(cache, 1, { key = ckey, ann = a })
+      cache[CACHE_SIZE + 1] = nil
+    end
+    for _, e in ipairs(req.entries) do
+      if not e.cancelled then
+        e.cb(a, err)
+      end
+    end
+  end
+  local function run(args, k)
+    local ctl
+    ws:run(args, {
+      timeout = 0,
+      on_spawn = function(c)
+        if req.cancelled then
+          c.cancel()
+        else
+          ctl = c
+          req.ctls[c] = true
+        end
+      end,
+    }, function(res)
+      if ctl then
+        req.ctls[ctl] = nil
+      end
+      if not req.cancelled then
+        k(res)
+      end
+    end)
+  end
+
   local path = spec:gsub('[#@].*$', '')
   local ann, descs, errmsg
   local pending = opts.descriptions and 2 or 1
@@ -209,10 +275,10 @@ function M.annotate(ws, spec, opts, cb)
       return
     end
     if not ann then
-      return cb(nil, errmsg or 'annotate failed')
+      return finish(nil, errmsg or 'annotate failed')
     end
     if not opts.descriptions then
-      return cb(ann)
+      return finish(ann)
     end
     local missing, seen = {}, {}
     for _, c in ipairs(ann.cls) do
@@ -225,7 +291,7 @@ function M.annotate(ws, spec, opts, cb)
       end
     end
     if #missing == 0 then
-      return cb(ann)
+      return finish(ann)
     end
     require('perforated.changelists').describe(ws, missing, {}, function(by)
       for ch, d in pairs(by) do
@@ -234,7 +300,7 @@ function M.annotate(ws, spec, opts, cb)
           m.desc = first_line(d.rec.desc)
         end
       end
-      cb(ann)
+      finish(ann)
     end)
   end
   local args = { 'annotate', '-c', '-i', '-u', '-q' }
@@ -242,7 +308,7 @@ function M.annotate(ws, spec, opts, cb)
     args[#args + 1] = '-I'
   end
   args[#args + 1] = spec
-  ws:run(args, {}, function(res)
+  run(args, function(res)
     local head, count, cls, meta = annotate_lines(res.records)
     if head.depotFile then
       for _, c in ipairs(cls) do
@@ -263,7 +329,7 @@ function M.annotate(ws, spec, opts, cb)
   end)
   if opts.descriptions then
     local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
-    ws:run({ 'filelog', '-l', '-i', '-m', tostring(max), path }, {}, function(res)
+    run({ 'filelog', '-l', '-i', '-m', tostring(max), path }, function(res)
       descs = {}
       for _, rec in ipairs(res.records) do
         if rec.depotFile then
@@ -278,6 +344,7 @@ function M.annotate(ws, spec, opts, cb)
       done()
     end)
   end
+  return handle
 end
 
 --- The Swarm URL for this server (config `swarm.url`, else the `P4.Swarm.URL` property).

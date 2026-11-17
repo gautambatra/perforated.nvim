@@ -1275,7 +1275,11 @@ chunk and the row highlight.
 Current-line blame: a debounced `CursorMoved` handler reads the annotation of the file's
 revision (cached by `history.annotate`), maps the cursor line to the base line through the
 buffer's hunks (`views/base.base_line`), and shows `CL {change} • {user} • {date} • {desc}`
-as end-of-line virtual text.
+as end-of-line virtual text. One request at a time (`current`): asking for another revision
+cancels the one before (after asking, so the same revision keeps sharing its request). A
+failed annotate is kept in `failed` (workspace key + spec → time) and not asked again for
+`M.FAIL_MS` (5 min); cancellations never call back, so they aren't failures. `forget()`
+(from `:P4 refresh`) clears it.
 
 ### Diffs and revisions
 
@@ -1435,7 +1439,10 @@ Helpers for comparison sides (`{ spec }`, `{ path }`, `{ empty }`): `lines` (con
 including the "branched from" source), `annotate(ws, spec, opts)` (`annotate -c -i -u -q`: one
 call gives each line's changelist, user and date; with `descriptions = true` it also runs
 `filelog -l -i` for descriptions; results for numbered revisions are cached, 8 entries, with
-in-flight sharing), and the Swarm URL (`swarm.url` or the `P4.Swarm.URL` server property)
+in-flight sharing; both calls run with no timeout. It returns `{ cancel }`: a cancelled
+caller's `cb` is never called, and once every caller sharing the request has cancelled, its
+p4 calls are killed (`on_spawn` controls) and the next ask starts afresh; the annotate view
+cancels on close and on `~` / `<BS>`), and the Swarm URL (`swarm.url` or the `P4.Swarm.URL` server property)
 with `swarm(ws, change)`, which copies a changelist's review URL.
 
 #### `timelapse.lua`

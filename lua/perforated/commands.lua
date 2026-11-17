@@ -855,6 +855,10 @@ M.commands = {
       ctx.fstat = {}
       ctx.clmemo = {}
       ctx.info, ctx.settings = nil, nil
+      local blame = package.loaded['perforated.blame']
+      if blame then
+        blame.forget() -- the blame line asks again for revisions that failed
+      end
       -- Open buffers and opened files are asked again (nothing else would with polling off).
       local function recheck()
         local todo, ok_all, n = 2, true, 0

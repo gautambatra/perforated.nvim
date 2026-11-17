@@ -382,6 +382,107 @@ T['m3']['annotate: local edits show "Not submitted"; q closes'] = function()
   H.eq(child.wo.scrollbind, false)
 end
 
+--- Run p4 through a wrapper whose `annotate` runs `body` first (sh), e.g. a sleep.
+local function slow_annotate(body)
+  local wrapper = server.dir .. '/wrap-p4'
+  H.write(
+    wrapper,
+    ('#!/bin/sh\ncase "$*" in *" annotate "*) %s;; esac\nexec %s "$@"\n'):format(body, P.p4)
+  )
+  vim.uv.fs_chmod(wrapper, tonumber('755', 8))
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { p4 = ... })
+    require('perforated.config').reload(); require('perforated.core.env').reset()]],
+    { wrapper }
+  )
+end
+
+local BLAME_MARKS =
+  [[#vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces()['perforated.blame'], 0, -1, {})]]
+
+--- The last log entry of an `annotate` call: its err ('cancelled'), or false while it runs.
+local LAST_ANNOTATE = [[(function()
+  local last
+  for _, e in ipairs(require('perforated.core.log').entries()) do
+    if vim.tbl_contains(e.argv, 'annotate') then last = e end
+  end
+  return last and (last.err or 'ok') or false
+end)()]]
+
+T['m3']['annotate: slower than the runner timeout, it still answers'] = function()
+  child.lua([[require('perforated.config').set({ runner = { timeout = 300 } })]])
+  slow_annotate('sleep 1')
+  child.cmd('P4 annotate')
+  wait([[next(require('perforated.views.annotate')._views) ~= nil]])
+  child.lua([[vim.api.nvim_set_current_win(require('perforated.views.annotate')._last.win)]])
+  wait_text('bob')
+end
+
+T['m3']['annotate: closing the view stops its annotate'] = function()
+  child.lua([[require('perforated.core.log').clear()]])
+  slow_annotate('exec sleep 30') -- (exec: a cancel kills what holds the pipes)
+  child.cmd('P4 annotate')
+  wait([[require('perforated.core.queue').global().running >= 1]])
+  vim.uv.sleep(300)
+  child.lua(
+    [[require('perforated.views.annotate').close(require('perforated.views.annotate')._last)]]
+  )
+  wait(LAST_ANNOTATE .. " == 'cancelled'", 5000)
+end
+
+T['m3']['annotate: a caller cancelling leaves a shared request running for the others'] = function()
+  slow_annotate('sleep 1')
+  child.lua([[_G.got = {}
+    local h = require('perforated.history')
+    local ws = require('perforated').workspace(0)
+    local spec = '//depot/a.txt#3'
+    local a = h.annotate(ws, spec, {}, function(ann) _G.got.a = ann and ann.count end)
+    h.annotate(ws, spec, {}, function(ann) _G.got.b = ann and ann.count end)
+    a.cancel()]])
+  wait('_G.got.b ~= nil')
+  H.eq(child.lua_get('_G.got'), { b = 3 })
+  H.eq(#p4_calls(' annotate '), 1)
+end
+
+T['m3']['blame line: moving to another file stops the first file annotate'] = function()
+  child.lua([[require('perforated.core.log').clear()]])
+  slow_annotate('exec sleep 30') -- (exec: a cancel kills what holds the pipes)
+  child.cmd('P4 blame on')
+  child.type_keys('<Ignore>')
+  wait(
+    [[#vim.tbl_filter(function(e) return vim.tbl_contains(e.argv, 'annotate') end,
+    require('perforated.core.log').entries()) == 0 and require('perforated.core.queue').global().running >= 1]]
+  )
+  child.cmd('edit ' .. root .. '/b.txt')
+  wait(LAST_ANNOTATE .. " == 'cancelled'", 5000)
+end
+
+T['m3']['blame line: a failed annotate is not asked again on every cursor stop'] = function()
+  child.lua([[require('perforated.blame').FAIL_MS = 1500]])
+  slow_annotate('echo "annotate broke" >&2; exit 1')
+  child.lua([[require('perforated.core.log').clear()]])
+  child.cmd('P4 blame on')
+  child.type_keys('<Ignore>')
+  wait(LAST_ANNOTATE .. ' ~= false')
+  for row = 1, 3 do
+    child.api.nvim_win_set_cursor(0, { row, 0 })
+    child.type_keys('<Ignore>')
+    vim.uv.sleep(250) -- past the blame_line.delay debounce
+  end
+  H.wait_idle(child)
+  H.eq(#p4_calls(' annotate '), 1)
+  H.eq(child.lua_get(BLAME_MARKS), 0)
+  vim.uv.sleep(1500) -- remembered no longer
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  child.type_keys('<Ignore>')
+  wait(
+    ('#(%s) == 2'):format(
+      [[vim.tbl_filter(function(e) return vim.tbl_contains(e.argv, 'annotate') end,
+    require('perforated.core.log').entries())]]
+    )
+  )
+end
+
 T['m3']['blame line: virtual text after the debounce, one annotate for many moves'] = function()
   child.lua([[require('perforated.core.log').clear()]])
   child.cmd('P4 blame on')

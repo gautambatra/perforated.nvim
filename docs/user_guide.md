@@ -494,11 +494,17 @@ show "Not submitted".
 It follows branches (`p4 annotate -i`), so each line shows the change that wrote it, not the
 one that branched the file. `annotate.integrations = true` follows integrations too (`-I`).
 
+A large file with a long history can take a while to annotate on a slow server: the view
+waits for it however long it takes (it shows "annotating…"), and closing the view, or
+moving on with `~` / `<BS>`, stops it.
+
 ### Current-line blame
 
 `:P4 blame`, or `blame_line = { enabled = true }`, shows who last changed the current line as
 virtual text (`blame_line.format`). The file is annotated once per revision, so moving the
-cursor makes no p4 calls.
+cursor makes no p4 calls. Moving to another file stops an annotate still running for the
+last one. If a file's annotate fails, the blame line leaves that revision alone for 5
+minutes instead of asking again at every cursor stop; `:P4 refresh` makes it ask again.
 
 ### Lookup and Swarm
 

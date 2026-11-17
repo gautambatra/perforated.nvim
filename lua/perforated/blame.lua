@@ -4,6 +4,10 @@
 --- The whole file is annotated once per `depotFile#rev` (history.annotate caches it); cursor
 --- moves only read that result, after a `blame_line.delay` debounce. Lines changed locally
 --- show "Not submitted".
+---
+--- One annotate at a time: asking for another revision (the cursor in another file) cancels
+--- the one still running. A revision that failed isn't asked again for `M.FAIL_MS` (else each
+--- cursor stop would start it again); `:P4 refresh` forgets the failures.
 
 local M = {}
 
@@ -11,6 +15,16 @@ local ns = vim.api.nvim_create_namespace('perforated.blame')
 local group = nil ---@type integer?
 local timer = nil ---@type uv.uv_timer_t?
 M.enabled = nil ---@type boolean?  nil = follow config
+
+--- How long (ms) a revision whose annotate failed isn't asked again.
+M.FAIL_MS = 5 * 60 * 1000
+local failed = {} ---@type table<string, integer>  workspace key + spec → when it failed
+local current ---@type { key: string, req: { cancel: fun() } }?  the annotate running
+
+--- Forget failed annotates (`:P4 refresh`, tests).
+function M.forget()
+  failed = {}
+end
 
 local function is_enabled()
   if M.enabled ~= nil then
@@ -70,34 +84,64 @@ function M.update()
   if not spec then
     return clear(buf)
   end
+  local key = st.ws.key .. '\0' .. spec
+  local at = failed[key]
+  if at and vim.uv.now() - at < M.FAIL_MS then
+    return clear(buf)
+  end
+  failed[key] = nil
   local win = vim.api.nvim_get_current_win()
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  require('perforated.history').annotate(st.ws, spec, { descriptions = true }, function(ann)
-    if not ann or not vim.api.nvim_buf_is_valid(buf) then
-      return
-    end
-    -- Still on that line (a later move re-runs the update)?
-    if vim.api.nvim_get_current_buf() ~= buf or vim.api.nvim_win_get_cursor(0)[1] ~= lnum then
-      return
-    end
-    local b = require('perforated.views.base').base_line(st.hunks or {}, lnum)
-    local text
-    if not b then
-      text = 'Not submitted'
-    else
-      local cl = ann.cls[b]
-      if not cl then
-        return clear(buf)
+  local prev = current
+  local this = { key = key }
+  current = this
+  this.req = require('perforated.history').annotate(
+    st.ws,
+    spec,
+    { descriptions = true },
+    function(ann)
+      if current == this then
+        current = nil
       end
-      text = M.format(ann.meta[cl] or { change = cl })
+      if not ann then
+        failed[key] = vim.uv.now()
+        return
+      end
+      M._show(buf, lnum, st, ann)
     end
-    clear(buf)
-    vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, 0, {
-      virt_text = { { '    ' .. text, 'PerforatedBlame' } },
-      virt_text_pos = 'eol',
-      hl_mode = 'combine',
-    })
-  end)
+  )
+  -- After asking: the same revision asked again keeps sharing its request.
+  if prev and prev.req then
+    prev.req.cancel()
+  end
+end
+
+--- Show the blame of `lnum` from `ann`, if the cursor is still there.
+function M._show(buf, lnum, st, ann)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  -- Still on that line (a later move re-runs the update)?
+  if vim.api.nvim_get_current_buf() ~= buf or vim.api.nvim_win_get_cursor(0)[1] ~= lnum then
+    return
+  end
+  local b = require('perforated.views.base').base_line(st.hunks or {}, lnum)
+  local text
+  if not b then
+    text = 'Not submitted'
+  else
+    local cl = ann.cls[b]
+    if not cl then
+      return clear(buf)
+    end
+    text = M.format(ann.meta[cl] or { change = cl })
+  end
+  clear(buf)
+  vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, 0, {
+    virt_text = { { '    ' .. text, 'PerforatedBlame' } },
+    virt_text_pos = 'eol',
+    hl_mode = 'combine',
+  })
 end
 
 local function schedule_update()

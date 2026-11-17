@@ -214,6 +214,9 @@ function M.close(view)
     return
   end
   view.closed = true
+  if view.req then
+    view.req.cancel() -- an annotate still running for it stops
+  end
   pcall(vim.api.nvim_del_augroup_by_id, view.aug)
   set_bind(view.src_win, false)
   if vim.api.nvim_win_is_valid(view.src_win) and view.src_wrap ~= nil then
@@ -230,37 +233,45 @@ end
 local function annotate(view, cb)
   local cfg = require('perforated.config').get().annotate
   local buf = view.src_buf
-  history.annotate(view.ws, view.spec, { integrations = cfg.integrations }, function(ann, err)
-    -- A newer `~` / `<BS>` may have moved on while this revision was being annotated.
-    if view.closed or view.src_buf ~= buf then
-      return
-    end
-    if not ann then
-      return notify('annotate failed: ' .. tostring(err), vim.log.levels.ERROR)
-    end
-    -- A depot revision's text loads asynchronously: render once it is in.
-    local function ready(k)
-      if vim.b[buf].perforated_loaded == false and k < 400 then
-        return vim.defer_fn(function()
-          ready(k + 1)
-        end, 25)
-      end
+  if view.req then
+    view.req.cancel() -- `~` / `<BS>` moved on: the revision before isn't wanted any more
+  end
+  view.req = history.annotate(
+    view.ws,
+    view.spec,
+    { integrations = cfg.integrations },
+    function(ann, err)
+      -- A newer `~` / `<BS>` may have moved on while this revision was being annotated.
       if view.closed or view.src_buf ~= buf then
         return
       end
-      view.ann = ann
-      M.render(view)
-      if cb then
-        cb()
+      if not ann then
+        return notify('annotate failed: ' .. tostring(err), vim.log.levels.ERROR)
       end
-      if vim.api.nvim_win_is_valid(view.win) then
-        vim.api.nvim_win_call(view.win, function()
-          vim.cmd('syncbind')
-        end)
+      -- A depot revision's text loads asynchronously: render once it is in.
+      local function ready(k)
+        if vim.b[buf].perforated_loaded == false and k < 400 then
+          return vim.defer_fn(function()
+            ready(k + 1)
+          end, 25)
+        end
+        if view.closed or view.src_buf ~= buf then
+          return
+        end
+        view.ann = ann
+        M.render(view)
+        if cb then
+          cb()
+        end
+        if vim.api.nvim_win_is_valid(view.win) then
+          vim.api.nvim_win_call(view.win, function()
+            vim.cmd('syncbind')
+          end)
+        end
       end
+      ready(0)
     end
-    ready(0)
-  end)
+  )
 end
 
 --- The revision a changelist made to the annotated file or, since `annotate -i` follows
