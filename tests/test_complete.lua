@@ -76,6 +76,8 @@ end
 
 T['complete']['depot paths: dirs and files, spaces escaped, kept for the next <Tab>'] = function()
   setup()
+  -- The answers, not the wait limit (tested below): a loaded machine can take over 300 ms.
+  child.lua([[require('perforated.config').set({ complete = { wait = 5000 } })]])
   H.eq(complete('P4 filelog //'), { '//depot/', '//team/' })
   H.eq(complete('P4 filelog //depot/'), {
     '//depot/README',
