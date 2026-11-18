@@ -190,6 +190,12 @@ end
 --- Users → their submitted changelists.
 function M.users(ws)
   ws:run({ 'users' }, {}, function(res)
+    if require('perforated.core.runner').cut(res) or (not res.ok and #res.records == 0) then
+      return require('perforated.ui.toast').notify(
+        '[perforated] could not list users: ' .. (res.err or res.errors[1] or 'p4 failed'),
+        vim.log.levels.ERROR
+      )
+    end
     picker.pick({
       title = 'Users',
       items = res.records,

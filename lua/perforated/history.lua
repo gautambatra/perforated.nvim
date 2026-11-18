@@ -369,6 +369,9 @@ function M.swarm_url(ws, cb)
     end)
   end
   ws:run({ 'property', '-l', '-n', 'P4.Swarm.URL' }, {}, function(res)
+    if require('perforated.core.runner').cut(res) then
+      return cb(nil, res.err) -- (not remembered: asked again next time)
+    end
     local url = res.records[1] and res.records[1].value
     ws.swarm_url = url and url ~= '' and (url:gsub('/+$', '')) or false
     cb(ws.swarm_url or nil)
@@ -379,7 +382,13 @@ end
 ---@param ws perforated.Workspace
 ---@param change string
 function M.swarm(ws, change)
-  M.swarm_url(ws, function(base)
+  M.swarm_url(ws, function(base, err)
+    if err then
+      return require('perforated.ui.toast').notify(
+        '[perforated] could not read the Swarm URL: ' .. err,
+        vim.log.levels.ERROR
+      )
+    end
     if not base then
       return require('perforated.ui.toast').notify(
         '[perforated] no Swarm URL (set swarm.url, or the server property P4.Swarm.URL)',

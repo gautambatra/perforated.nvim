@@ -296,6 +296,15 @@ function M.shelve(ws, change, paths, cb)
     end
   end
   cls.all(asks, function(r)
+    if r[1][2] then
+      -- Unknown is not "no shelf": `shelve -f` would replace one without asking.
+      task.done()
+      notify(
+        ("can't shelve CL %s: reading its shelf failed: %s"):format(change, r[1][2]),
+        vim.log.levels.ERROR
+      )
+      return cb(false)
+    end
     local existing = r[1][1][change] or {}
     if #existing == 0 then
       return run(false)
@@ -496,6 +505,10 @@ function M.delete_change(ws, change, cb)
     end,
   }, function(r)
     local rec, shelved, recs = r[1][1], r[1][2], r[2][1]
+    if r[1][3] then
+      notify(('could not read CL %s: %s'):format(change, r[1][3]), vim.log.levels.ERROR)
+      return cb(false)
+    end
     if not rec or rec.status ~= 'pending' then
       notify(('CL %s is not a pending changelist'):format(change), vim.log.levels.ERROR)
       return cb(false)

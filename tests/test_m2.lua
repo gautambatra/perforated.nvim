@@ -4866,4 +4866,72 @@ T['cut-off answers']['a cut-off fstat after a change drops no opened file it did
   H.eq(child.lua_get([[require('perforated').workspace().opened['//depot/c.txt'] ~= nil]]), true)
 end
 
+--- Once the flag file exists, the p4 commands matching `pattern` (a shell case pattern) fail
+--- without a message (a dropped connection).
+local function failing(pattern)
+  return wrap_p4(([[case "$*" in %s) [ -e "$FLAG" ] && exit 1;; esac]]):format(pattern))
+end
+
+--- The newest pop-up's first line.
+local function last_toast()
+  return child.lua_get(
+    [[(require('perforated.ui.toast').history()[#require('perforated.ui.toast').history()] or { lines = {} }).lines[1] ]]
+  )
+end
+
+T['cut-off answers']['shelve does not replace a shelf it could not read'] = function()
+  local flag, log = failing('*"describe -S -s"*')
+  H.write(flag, '')
+  child.lua(
+    [[_G.r = nil
+    require('perforated.ops').shelve(require('perforated').workspace(), '2', nil, function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), false)
+  H.neq(last_toast():find("can't shelve CL 2", 1, true), nil)
+  H.eq(table.concat(vim.fn.readfile(log), '\n'):find(' shelve ', 1, true), nil)
+end
+
+T['cut-off answers'][':P4 change N whose status could not be checked opens no editor'] = function()
+  local flag, log = failing('*"describe -s -m 1"*')
+  H.write(flag, '')
+  child.cmd('P4 change 1')
+  wait([[(require('perforated.ui.toast').history()[1] or {}).lines ~= nil]])
+  H.neq(last_toast():find('could not check CL 1', 1, true), nil)
+  vim.uv.sleep(300)
+  H.eq(table.concat(vim.fn.readfile(log), '\n'):find('change -o', 1, true), nil)
+end
+
+T['cut-off answers']['integrate of a changelist it could not read says so'] = function()
+  local flag = failing('*"describe -s"*')
+  H.write(flag, '')
+  child.lua(
+    [[_G.r = nil
+    require('perforated.integrate').run(require('perforated').workspace(), '1', function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r ~= nil')
+  H.neq(last_toast():find('could not read CL 1', 1, true), nil)
+end
+
+T['cut-off answers']['a Swarm URL that could not be read is asked again'] = function()
+  local flag = failing('*"property -l -n"*')
+  H.write(flag, '')
+  child.lua([[require('perforated.history').swarm(require('perforated').workspace(), '1')]])
+  wait([[(require('perforated.ui.toast').history()[1] or {}).lines ~= nil]])
+  H.neq(last_toast():find('could not read the Swarm URL', 1, true), nil)
+  H.eq(child.lua_get([[require('perforated').workspace().swarm_url]]), vim.NIL)
+end
+
+T['cut-off answers']['a users list that could not be read says so'] = function()
+  local flag = failing('*" users"')
+  H.write(flag, '')
+  -- (A stand-in picker: an empty real one waits for input, which would stall the test.)
+  child.lua([[_G.picked = nil
+    require('perforated.picker').pick = function(spec) _G.picked = spec end
+    require('perforated.picker.sources').users(require('perforated').workspace())]])
+  wait([[_G.picked ~= nil or (require('perforated.ui.toast').history()[1] or {}).lines ~= nil]])
+  H.eq(child.lua_get('_G.picked'), vim.NIL)
+  H.neq(last_toast():find('could not list users', 1, true), nil)
+end
+
 return T

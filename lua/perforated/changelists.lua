@@ -47,7 +47,7 @@ end
 --- Shelved files of several changelists in one call (`describe -S -s cl…`).
 ---@param ws perforated.Workspace
 ---@param changes string[]
----@param cb fun(by_change: table<string, table[]>, err: string?)  change → { depotFile, action, rev, type }; err: p4 answered nothing
+---@param cb fun(by_change: table<string, table[]>, err: string?)  change → { depotFile, action, rev, type }; err: p4 answered nothing, or was cut off
 function M.shelved_files(ws, changes, cb)
   if #changes == 0 then
     return vim.schedule(function()
@@ -65,7 +65,9 @@ function M.shelved_files(ws, changes, cb)
       end
     end
     -- A changelist deleted meanwhile is an error beside the others' records: still an answer.
-    cb(out, not res.ok and #res.records == 0 and res.err or nil)
+    -- A cut-off one isn't: the shelves it didn't get to are unknown, not empty.
+    local failed = require('perforated.core.runner').cut(res) or (not res.ok and #res.records == 0)
+    cb(out, failed and (res.err or 'describe failed') or nil)
   end)
 end
 
@@ -73,10 +75,14 @@ end
 --- client, description — comes with it, shelved files or not).
 ---@param ws perforated.Workspace
 ---@param change string
----@param cb fun(rec: table?, shelved: table[])  rec nil: no such changelist (or p4 answered nothing)
+---@param cb fun(rec: table?, shelved: table[], err: string?)  rec nil: no such changelist, or
+---  (err) p4 didn't answer
 function M.shelf(ws, change, cb)
   ws:run({ 'describe', '-S', '-s', change }, {}, function(res)
     local rec = res.records[1]
+    if require('perforated.core.runner').cut(res) then
+      return cb(nil, {}, res.err or 'describe failed')
+    end
     if not (rec and rec.change) then
       return cb(nil, {})
     end
@@ -224,10 +230,13 @@ end
 --- 'pending' | 'submitted' | 'shelved' | nil for a changelist number.
 ---@param ws perforated.Workspace
 ---@param change string
----@param cb fun(status: string?)
+---@param cb fun(status: string?, err: string?)  err: p4 didn't answer (status unknown)
 function M.change_status(ws, change, cb)
   ws:run({ 'describe', '-s', '-m', '1', change }, {}, function(res)
     local rec = res.records[1]
+    if require('perforated.core.runner').cut(res) then
+      return cb(nil, res.err or 'describe failed')
+    end
     cb(rec and rec.status or nil)
   end)
 end

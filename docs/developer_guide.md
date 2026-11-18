@@ -1179,7 +1179,10 @@ wait on each other), `submitted_changes` (paged, scoped to the client by default
 every depot), `have_change` (the Sync CL), `clients` (the user's clients, for `gW`), `status` (`p4 status [-m]` for reconcile, with job options),
 `reopen`, `opened_by_user` (the "all my clients" scope), `change_status`, and the change spec
 helpers used by the description editor (`change_spec`, `save_spec`, `spec_get_description`,
-`spec_set_description`).
+`spec_set_description`). `describe`, `shelved_files`, `shelf` and `change_status` pass an
+`err` when p4 didn't answer or was cut off (`runner.cut`), so their callers can tell "no
+such changelist" or "no shelf" from "unknown": `:P4 change N`, integrate and delete say they
+couldn't read the changelist instead of acting on a wrong answer.
 
 ### Buffers, signs, status
 
@@ -1459,7 +1462,8 @@ shown but not cached. It returns `{ cancel }`: a cancelled
 caller's `cb` is never called, and once every caller sharing the request has cancelled, its
 p4 calls are killed (`on_spawn` controls) and the next ask starts afresh; the annotate view
 cancels on close and on `~` / `<BS>`), and the Swarm URL (`swarm.url` or the `P4.Swarm.URL` server property)
-with `swarm(ws, change)`, which copies a changelist's review URL.
+with `swarm(ws, change)`, which copies a changelist's review URL. A property query that
+failed isn't remembered (only an answer, even "none", is kept for the session).
 
 #### `timelapse.lua`
 The time-lapse engine ([§18.8](#188-you-step-through-a-time-lapse)): `load` (filelog +
@@ -1481,7 +1485,8 @@ The checks before a confirmation run at once (`changelists.all`): submit asks
 delete asks `shelf` (status, client, description, shelf) with `fstat_change` (the files to move
 or revert), plus a `describe -s` only for another client's changelist (`change.allow_force`),
 whose opened files only it sees; re-shelving a whole changelist asks `shelved_files` with
-`opened -c`.
+`opened -c`. A shelf that couldn't be read stops the shelve: `shelve -f` would otherwise
+replace it without the "Replace?" question.
 The default changelist can't be shelved: `shelve_default` asks `fstat_change(default)` for
 the depot paths (all, or those of the given files), confirms, opens `change_editor.new` with
 `files`, whose `p4.new_change` sends them in the spec's `Files:` field (p4 moves them with the

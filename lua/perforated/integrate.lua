@@ -226,8 +226,12 @@ function M.run(ws, change, cb)
       end
     )
   end
-  require('perforated.changelists').describe(ws, { change }, {}, function(by)
+  require('perforated.changelists').describe(ws, { change }, {}, function(by, err)
     local d = by[change]
+    if not d and err then
+      notify(('could not read CL %s: %s'):format(change, err), vim.log.levels.ERROR)
+      return cb(false)
+    end
     if not d or d.rec.status ~= 'submitted' then
       notify(('CL %s is not a submitted changelist'):format(change), vim.log.levels.ERROR)
       return cb(false)
