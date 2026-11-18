@@ -117,8 +117,12 @@ function H.child(opts)
     vim.env[k] = v
   end
   -- vim.ui.select backend by default: tests stub it (mini.pick is on the test rtp).
-  local config =
-    vim.tbl_deep_extend('force', { picker = 'select' }, opts.config or { p4 = H.fake_p4 })
+  local config = vim.tbl_deep_extend(
+    'force',
+    -- (No confirmation grace: tests answer faster than a person; its own tests set it.)
+    { picker = 'select', toast = { confirm_grace = 0 } },
+    opts.config or { p4 = H.fake_p4 }
+  )
   child.lua('vim.g.perforated = ...', { config })
   return child
 end

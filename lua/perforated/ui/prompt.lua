@@ -14,9 +14,129 @@ local function popups()
   return require('perforated.config').get().toast.backend ~= 'notify'
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Keys typed ahead of a question
+--
+-- A view action that asks p4 something before its question (shelve: what's in the shelf?)
+-- leaves a gap in which the view is live: a key typed for the coming question would run
+-- another action instead (`S` then `r` reverted the files). Three guards:
+-- - while a question is on its way (`hold`), view actions don't run (`keys.dispatch`);
+-- - keys pressed in the first `toast.confirm_grace` ms of a confirmation don't answer it;
+-- - a confirmation opened by a view action never answers to that action's key (`r` twice
+--   doesn't revert): the choice with that letter gets another one (`y` when free).
+-- ---------------------------------------------------------------------------------------------
+
+--- A hold not released by then lapses (a safety net: callers release it when p4 answers).
+M.HOLD_MAX_MS = 60000
+
+local holds = {} ---@type table<table, string>
+
+--- The key of the view action running now (`opener`), kept while a question it holds for
+--- is on its way. `holds`: how many of those are.
+---@type { keys: table<string, true>, holds: integer }?
+M.opener = nil
+
+--- A question is on its way: until `release()`, view actions don't run (the keys typed
+--- meanwhile were meant for it). Release it when p4 has answered, before asking.
+---@param what string  what is being checked, for the note ("CL 5's shelf")
+---@return fun() release
+function M.hold(what)
+  local id, opener = {}, M.opener
+  holds[id] = what
+  if opener then
+    opener.holds = opener.holds + 1
+  end
+  local released = false
+  local function release()
+    if released then
+      return
+    end
+    released = true
+    holds[id] = nil
+    if opener then
+      opener.holds = opener.holds - 1
+      if opener.holds == 0 then
+        -- (After the question this callback is about to ask.)
+        vim.schedule(function()
+          if M.opener == opener and opener.holds == 0 then
+            M.opener = nil
+          end
+        end)
+      end
+    end
+  end
+  vim.defer_fn(release, M.HOLD_MAX_MS)
+  return release
+end
+
+--- What a question on its way is waiting for, or nil.
+---@return string?
+function M.held()
+  local _, what = next(holds)
+  return what
+end
+
+--- A view action started by `lhs` begins (`keys.dispatch`); returns its end, called when its
+--- `run` returns. Its questions don't answer to the letters of `lhs` (case aside).
+---@param lhs string?
+---@return fun() finish
+function M.begin(lhs)
+  local keys = {}
+  for c in ((lhs or ''):gsub('<[^>]*>', '')):gmatch('%w') do
+    keys[c:lower()] = true
+  end
+  local opener = next(keys) and { keys = keys, holds = 0 } or nil
+  M.opener = opener
+  return function()
+    if M.opener == opener and (not opener or opener.holds == 0) then
+      M.opener = nil
+    end
+  end
+end
+
+--- Choices `{ letter, label, given }` from `&Yes\n&No`; one whose letter is the running
+--- action's key gets another (`y`, else a free letter of its label, else a digit). Cancel
+--- keeps its own (answering it twice is harmless).
+---@param choices string
+---@return { letter: string, label: string, given: string }[]
+local function parse_choices(choices)
+  local list = {}
+  for _, c in ipairs(vim.split(choices, '\n', { plain = true })) do
+    list[#list + 1] =
+      { letter = (c:match('&(.)') or c:sub(1, 1)):lower(), label = (c:gsub('&', '', 1)), given = c }
+  end
+  local o = M.opener
+  if not o then
+    return list
+  end
+  local used = {}
+  for _, c in ipairs(list) do
+    used[c.letter] = true
+  end
+  for _, c in ipairs(list) do
+    if o.keys[c.letter] and not c.label:match('^Cancel') then
+      local cands = { 'y' }
+      for ch in c.label:lower():gmatch('%w') do
+        cands[#cands + 1] = ch
+      end
+      for d = 1, 9 do
+        cands[#cands + 1] = tostring(d)
+      end
+      for _, cand in ipairs(cands) do
+        if not used[cand] and not o.keys[cand] then
+          used[cand], c.letter, c.given = true, cand, nil
+          break
+        end
+      end
+    end
+  end
+  return list
+end
+
 --- Like `vim.fn.confirm`: returns the 1-based index of the choice, 0 when cancelled.
 --- `choices` uses the same `&Yes\n&No` syntax; the `&` letter chooses (either case) and `<CR>`
---- chooses the default.
+--- chooses the default. Keys pressed in its first `toast.confirm_grace` ms don't answer it, and
+--- one opened by a view action doesn't answer to that action's key (see above).
 ---@param msg string
 ---@param choices string?  default '&Ok'
 ---@param default integer?  default 1
@@ -24,13 +144,26 @@ end
 function M.confirm(msg, choices, default)
   choices = choices or '&Ok'
   default = default or 1
+  local list = parse_choices(choices)
   if not popups() then
-    return vim.fn.confirm(msg, choices, default)
+    -- (No grace here: what was typed ahead of it is dropped instead.)
+    local typed = vim.fn.getchar(0)
+    while typed ~= 0 do
+      typed = vim.fn.getchar(0)
+    end
+    local given = vim.tbl_map(function(c)
+      if c.given then
+        return c.given
+      end
+      local at = c.label:lower():find(c.letter, 1, true)
+      return at and (c.label:sub(1, at - 1) .. '&' .. c.label:sub(at))
+        or (c.label .. ' (&' .. c.letter .. ')')
+    end, list)
+    return vim.fn.confirm(msg, table.concat(given, '\n'), default)
   end
   local items = {}
-  for i, c in ipairs(vim.split(choices, '\n', { plain = true })) do
-    local letter = c:match('&(.)') or c:sub(1, 1)
-    local label = c:gsub('&', '', 1)
+  for i, c in ipairs(list) do
+    local letter, label = c.letter, c.label
     items[#items + 1] = {
       key = letter:lower(),
       label = label .. (i == default and '  (<CR>)' or ''),
@@ -50,6 +183,8 @@ function M.confirm(msg, choices, default)
     header_hl = false,
     items = items,
     relative = 'editor',
+    -- (Pressed in the grace period, keys are dropped: confirm doesn't replay them.)
+    grace = require('perforated.config').get().toast.confirm_grace,
   })
   return choice and choice.value or 0
 end

@@ -94,8 +94,18 @@ end
 --- takes several and marks exist), else the cursor's node.
 ---@param a perforated.Action
 ---@param view table { tree = perforated.Tree }
+--- Not while a question is on its way (`prompt.hold`): the key was meant for it.
 ---@param selected perforated.TreeNode[]?  rows selected in visual mode
-function M.dispatch(a, view, selected)
+---@param lhs string?  the key that started it: its questions don't answer to it
+function M.dispatch(a, view, selected, lhs)
+  local prompt = require('perforated.ui.prompt')
+  local waiting = prompt.held()
+  if waiting then
+    return require('perforated.ui.toast').notify(
+      ('[perforated] %s not run: a question about %s is on its way'):format(a.desc, waiting),
+      vim.log.levels.WARN
+    )
+  end
   local tree = view.tree
   local node = tree:node_at()
   local nodes = {}
@@ -137,7 +147,13 @@ function M.dispatch(a, view, selected)
   local items = vim.tbl_map(function(n)
     return n.item
   end, nodes)
-  a.run(items, { tree = tree, node = node, nodes = nodes, view = view })
+  local finish = prompt.begin(lhs)
+  local ok, err =
+    xpcall(a.run, debug.traceback, items, { tree = tree, node = node, nodes = nodes, view = view })
+  finish()
+  if not ok then
+    error(err, 0)
+  end
 end
 
 --- Move the cursor to the mouse position, if the mouse is over a window showing `buf`.
@@ -212,7 +228,7 @@ function M.attach(buf, actions, view)
           for _, a in ipairs(multi) do
             for _, n in ipairs(sel) do
               if M.applies(a, n) then
-                return M.dispatch(a, view, sel)
+                return M.dispatch(a, view, sel, lhs)
               end
             end
           end
@@ -250,7 +266,7 @@ function M.attach(buf, actions, view)
         end
         for _, a in ipairs(list) do
           if M.applies(a, node) or (a.multi and mark_applies(a)) then
-            return M.dispatch(a, view)
+            return M.dispatch(a, view, nil, lhs)
           end
         end
         for _, a in ipairs(doubles[lhs] or {}) do
@@ -258,7 +274,7 @@ function M.attach(buf, actions, view)
             -- `dd`: only here does `d` wait for its second key.
             local ok, second = pcall(vim.fn.getcharstr)
             if ok and second == lhs then
-              return M.dispatch(a, view)
+              return M.dispatch(a, view, nil, lhs)
             end
             return
           end
@@ -375,7 +391,7 @@ function M.menu(actions, view)
     relative = 'cursor',
   })
   if choice then
-    M.dispatch(choice.value, view)
+    M.dispatch(choice.value, view, nil, choice.key)
   end
 end
 

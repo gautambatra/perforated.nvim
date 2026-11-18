@@ -133,7 +133,9 @@ end
 ---@param paths string[]?  nil = every file opened in the default changelist
 ---@param cb fun(ok: boolean)
 function M.shelve_default(ws, paths, cb)
+  local release = require('perforated.ui.prompt').hold("the default changelist's files")
   cls.fstat_change(ws, 'default', function(recs, res)
+    release()
     if not recs then
       notify("can't shelve: " .. (res.errors[1] or vim.trim(res.stderr or '')), vim.log.levels.WARN)
       return cb(false)
@@ -295,7 +297,9 @@ function M.shelve(ws, change, paths, cb)
       ws:run({ 'opened', '-c', change }, {}, done)
     end
   end
+  local release = require('perforated.ui.prompt').hold(("CL %s's shelf"):format(change))
   cls.all(asks, function(r)
+    release()
     if r[1][2] then
       -- Unknown is not "no shelf": `shelve -f` would replace one without asking.
       task.done()
@@ -490,8 +494,10 @@ function M.delete_change(ws, change, cb)
   end
   -- From the command on, while the changelist is looked at too (hidden while asking).
   local task = require('perforated.ui.toast').task(('Deleting CL %s…'):format(change))
+  local release = require('perforated.ui.prompt').hold('CL ' .. change)
   local outer = cb
   cb = function(ok)
+    release()
     task.done()
     outer(ok)
   end
@@ -568,6 +574,7 @@ function M.delete_change(ws, change, cb)
       local msg = #what > 0 and (title .. '\nIt has ' .. table.concat(what, ' and ') .. '.')
         or title
       local mode
+      release()
       task.pause()
       if #paths > 0 then
         local choice = require('perforated.ui.prompt').confirm(
@@ -804,6 +811,7 @@ function M.submit(ws, change, cb)
       header = header,
       items = items,
       relative = 'editor',
+      grace = require('perforated.config').get().toast.confirm_grace, -- (keys dropped)
     })
     local v = choice and choice.value
     if v == 'edit' then
@@ -844,7 +852,11 @@ function M.submit(ws, change, cb)
       cls.shelf(ws, change, done)
     end
   end
+  local release = require('perforated.ui.prompt').hold(
+    change == 'default' and "the default changelist's files" or ("CL %s's files"):format(change)
+  )
   cls.all(asks, function(r)
+    release()
     local files, res = r[1][1], r[1][2]
     if not files then
       -- Offline, logged out…: not the same as an empty changelist.

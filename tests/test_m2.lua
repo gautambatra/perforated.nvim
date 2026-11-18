@@ -4934,4 +4934,125 @@ T['cut-off answers']['a users list that could not be read says so'] = function()
   H.neq(last_toast():find('could not list users', 1, true), nil)
 end
 
+T['typed ahead'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      if not P.available() then
+        MiniTest.skip('p4/p4d not available (make deps)')
+      end
+      setup()
+    end,
+    post_case = function()
+      child.stop()
+    end,
+  },
+})
+
+--- The text of the single-key menus on screen (they never take the cursor).
+local MENU_TEXT = [[(function()
+  local out = {}
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    local c = vim.api.nvim_win_get_config(w)
+    if c.relative ~= '' and c.focusable == false then
+      vim.list_extend(out, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(w), 0, -1, false))
+    end
+  end
+  return table.concat(out, '\n')
+end)()]]
+
+local MENU_OPEN = [[require('perforated.ui.float').active ~= nil]]
+
+local function toasts()
+  return table.concat(
+    child.lua_get([[vim.tbl_map(function(t) return table.concat(t.lines, ' ') end,
+      require('perforated.ui.toast').history())]]),
+    '\n'
+  )
+end
+
+T['typed ahead']['a key typed while s checks the shelf runs nothing'] = function()
+  local flag, log = wrap_p4([[case "$*" in *"describe -S -s"*) [ -e "$FLAG" ] && sleep 1.5;; esac]])
+  open_view()
+  -- (Asked from p4's callback, a real question would hold off the test's own requests.)
+  child.lua([[_G.asked = nil
+    require('perforated.ui.prompt').confirm = function(msg)
+      _G.asked = { msg = msg, held = require('perforated.ui.prompt').held() }
+      return 1
+    end]])
+  goto_line('CL 2  Fix parser')
+  H.write(flag, '')
+  -- `r` (meant for "Replace") before the question is up: on this line it is Revert.
+  child.type_keys('s', 'r')
+  H.eq(child.lua_get([[require('perforated.ui.prompt').held()]]), "CL 2's shelf")
+  wait('_G.asked ~= nil')
+  H.neq(child.lua_get('_G.asked.msg'):find('already has 1 shelved file', 1, true), nil)
+  H.eq(child.lua_get('_G.asked.held'), vim.NIL) -- (released before asking)
+  H.neq(toasts():find("Revert not run: a question about CL 2's shelf is on its way", 1, true), nil)
+  H.eq(
+    vim.wait(5000, function()
+      return table.concat(vim.fn.readfile(log), '\n'):find('shelve %-f') ~= nil
+    end, 50),
+    true
+  )
+  H.eq(table.concat(vim.fn.readfile(log), '\n'):find('revert', 1, true), nil)
+  H.neq(opened()['//depot/a.txt'], nil)
+  -- Once it has asked, keys run actions again.
+  goto_line('b.txt')
+  child.type_keys('r')
+  wait([[_G.asked.msg:find('Revert', 1, true) ~= nil]])
+end
+
+T['typed ahead']['a confirmation does not take keys pressed as it appears'] = function()
+  child.lua(
+    [[vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { toast = { confirm_grace = 400 } })
+    require('perforated.config').reload()
+    _G.c = nil]]
+  )
+  child.lua_notify([[_G.c = require('perforated.ui.prompt').confirm('Go on?', '&Yes\n&No', 2)]])
+  wait(MENU_OPEN)
+  child.type_keys('y') -- typed ahead: not an answer
+  H.eq(child.lua_get('_G.c'), vim.NIL)
+  H.eq(child.lua_get(MENU_OPEN), true)
+  vim.uv.sleep(500)
+  child.type_keys('y')
+  wait('_G.c ~= nil')
+  H.eq(child.lua_get('_G.c'), 1)
+end
+
+T['typed ahead']['r twice does not revert: the question answers to y'] = function()
+  open_view()
+  goto_line('b.txt')
+  child.type_keys('r')
+  wait(MENU_OPEN)
+  local text = child.lua_get(MENU_TEXT)
+  H.neq(text:find('y      Revert', 1, true), nil)
+  child.type_keys('r') -- the reflex: no answer
+  vim.uv.sleep(200)
+  H.eq(child.lua_get(MENU_OPEN), true)
+  H.neq(opened()['//depot/b.txt'], nil)
+  child.type_keys('y')
+  wait(
+    [[not table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'):find('b.txt', 1, true)]]
+  )
+  H.eq(opened()['//depot/b.txt'], nil)
+end
+
+T['typed ahead']['only a question of the action keeps off its key (Neovim confirm too)'] = function()
+  child.lua([[_G.given = {}
+    vim.fn.confirm = function(_, choices) table.insert(_G.given, choices); return 0 end
+    vim.g.perforated = vim.tbl_deep_extend('force', vim.g.perforated, { toast = { backend = 'notify' } })
+    require('perforated.config').reload()
+    local prompt = require('perforated.ui.prompt')
+    local finish = prompt.begin('r')
+    prompt.confirm('Revert?', '&Revert\n&Cancel', 2)
+    prompt.confirm('Remove?', '&Remove\n&Yes\nC&ancel', 3)
+    finish()
+    prompt.confirm('Revert?', '&Revert\n&Cancel', 2)]])
+  H.eq(child.lua_get('_G.given'), {
+    'Revert (&y)\n&Cancel',
+    'R&emove\n&Yes\nC&ancel',
+    '&Revert\n&Cancel',
+  })
+end
+
 return T

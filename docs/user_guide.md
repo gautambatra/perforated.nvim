@@ -725,6 +725,15 @@ The check-out menu is the exception: it opens at the cursor, where you were typi
   merge tool runs.
 - **Questions** are pop-ups too. Confirmations are a small menu: the underlined letter
   chooses, `<CR>` takes the default, `<Esc>` cancels. Text prompts are a one-line input box.
+- **Typing ahead of a question.** Some actions ask the server something before their
+  question: `s` checks what is already in the shelf, `dd` and `P` read the changelist. Until
+  the question is up, keys in the views run nothing: a note says the key was ignored, so a key
+  meant for the question can't start another action (an `r` for "Replace" that would have
+  reverted the file under the cursor). Keys pressed in a confirmation's first 300 ms
+  (`toast.confirm_grace`) don't answer it either. And a confirmation never answers to the key
+  that opened it: `r` asks "Revert?" and `y` answers, so pressing `r` twice can't revert
+  anything (the menu shows the letter to press). With `toast.backend = 'notify'` (Neovim's own
+  confirm), keys typed before the question are dropped instead of the 300 ms.
 - **Closing.** Every pop-up you can focus closes with `q` or `<Esc>`: `K`, history, the client
   view as a float, menus, prompts, the picker, `?` help, `:P4 jobs`. The hunk preview closes
   with `<Esc>` or when you move.

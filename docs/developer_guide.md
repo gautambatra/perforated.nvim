@@ -1637,7 +1637,9 @@ dispatch to the first that applies to the node under the cursor (so `r` reverts 
 rescans on the reconcile section). A doubled key (`dd`) gets no mapping of its own, which would
 make every `d` wait 'timeoutlen': the `d` mapping reads the second key with `getcharstr()`, and
 only on a node where no single-key `d` action applies (a changelist), so a diff on a file
-still starts at once. `nomenu = 'layout'` keeps an action out of the generic menus but lets a
+still starts at once. `dispatch(a, view, selected, lhs)` runs nothing while
+a question is on its way (`prompt.held()`), and wraps `run` in `prompt.begin(lhs)` (see
+`ui/prompt.lua`). `nomenu = 'layout'` keeps an action out of the generic menus but lets a
 menu layout list it (`Q`/`gQ` on changelists, `m` in the file menus). A mouse key (`<RightMouse>` → menu) first moves the cursor to the
 clicked line (`cursor_to_mouse`), since the mapping replaces Vim's own cursor move; a click
 outside the view does nothing. `menu` (the `.` menu), `help` (`?`; with a view's sections,
@@ -1741,6 +1743,29 @@ is an empty answer, `<Esc>`/`<C-c>`/leaving cancels with nil, `<Tab>` completes 
 `opts.completion` is set), or `vim.ui.input` with the notify backend. Never call
 `vim.fn.confirm` / `vim.ui.input` directly, and always call these through the module at call
 time: tests replace them (`require('perforated.ui.prompt').confirm = function() return 1 end`).
+
+**Keys typed ahead of a question.** An action that asks p4 before its question leaves the
+view live meanwhile, so a key typed for the question would run another action (`s`, then `r`
+for "Replace", reverted the file under the cursor). Three guards:
+- `hold(what)` → `release`: a question is on its way. Until it is released (or after
+  `HOLD_MAX_MS`), `keys.dispatch` runs no action and says why (`held()` gives `what`). Release
+  it first thing in p4's callback, before asking (every path: also when it gives up).
+  `ops.shelve`, `shelve_default`, `delete_change` and `submit` hold. A long job before a
+  question (unshelve's "overwrite writable files?", integrate's preview) doesn't: the view
+  would be unusable for its length; the other two guards cover those.
+- `confirm` passes `toast.confirm_grace` (300 ms) to `float.menu` as `grace`; the menu returns
+  the keys pressed then for replay and `confirm` drops them. On the notify backend it drops
+  the typeahead before `vim.fn.confirm` instead. (`H.child` sets the grace to 0: tests answer
+  at once.) `ops.submit`'s own menu passes it too.
+- `begin(lhs)` (from `keys.dispatch`, with the key that started the action) → `finish`:
+  while the action runs, and while a hold it started is on, `M.opener` names its key's
+  letters, and `confirm` gives a choice with one of them (Cancel aside) another letter: `y`
+  if free, else a free letter of its label, else a digit (`Revert (&y)` for `vim.fn.confirm`).
+  So `r` twice doesn't revert, and `dd` then `d` doesn't delete.
+
+A question asked from a p4 callback (a scheduled callback) blocks the event loop's other
+callbacks, and RPC requests too: a test can't inspect it while it's open, so tests stub
+`confirm` for those (the menu asked from a keymap can be inspected).
 
 #### `ui/bufname.lua`
 `set(buf, name)` names a scratch buffer `perforated://<name>`, adding ` (2)`, ` (3)`, … when

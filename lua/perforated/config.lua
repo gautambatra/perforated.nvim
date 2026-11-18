@@ -110,7 +110,12 @@ local defaults = {
     bufenter_max_age = 600,
     reuse = 5,
   },
-  toast = { timeout = 3000, backend = 'float', history = 50 },
+  toast = {
+    timeout = 3000,
+    backend = 'float',
+    history = 50,
+    confirm_grace = 300, -- ms: keys pressed right after a confirmation appears don't answer it
+  },
   statusline = {
     -- File part. Tokens: {client} {action} (icon, action@CL) {change} {modified} (marker when
     -- the file differs from its have revision) {rev} (#have, or "not in depot") {head}

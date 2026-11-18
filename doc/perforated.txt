@@ -607,6 +607,7 @@ keys):
       },
       toast = {
         backend = "float",
+        confirm_grace = 300,
         history = 50,
         timeout = 3000
       }

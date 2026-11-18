@@ -335,7 +335,7 @@ opts = {
   -- a buffer whose file is untouched asks p4 again only once its status is this old
   poll = { interval = 30, focus_throttle = 2, bufenter_throttle = 60, bufenter_max_age = 600, reuse = 5 },
   -- reuse: state fetched this recently (and no change made since) answers again without a p4 call
-  toast = { timeout = 3000, backend = 'float', history = 50 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify
+  toast = { timeout = 3000, backend = 'float', history = 50, confirm_grace = 300 }, -- all messages; timeout 0 = sticky; backend 'notify' = vim.notify; confirm_grace: ms in which keys don't answer a new confirmation
   statusline = {
     format = '{client} {action} {modified} {rev} {stale} {unresolved}', -- or function(dict)
     stale = '↓',
