@@ -48,23 +48,27 @@ function M.opened_with(ws, files, opts, cb)
       end
     end
     local opened, named = vim.tbl_extend('force', {}, ws.opened), {}
+    -- Cut off (timed out, killed): a file it didn't get to stays as it was (not "no longer
+    -- opened").
+    local cut = require('perforated.core.runner').cut(r.res)
     for i, path in ipairs(files) do
       local k = p4.key(ws, path)
       local pos = r.by_index[i] or {}
       local rec = (path:match('^//') and by_depot[path]) or r.files[k] or pos.rec
+      local missing = r.missing[k] or pos.missing
       if rec then
         opened[rec.depotFile] = rec.action and rec or nil
         if rec.clientFile then
           named[p4.key(ws, rec.clientFile)] = { rec = rec }
         end
-      else
+      elseif missing or not cut then
         -- Not in the depot (a reverted add) or not in the view: not opened either.
         for depot, o in pairs(opened) do
           if depot == path or (o.clientFile and p4.key(ws, o.clientFile) == k) then
             opened[depot] = nil
           end
         end
-        named[k] = { missing = r.missing[k] or pos.missing }
+        named[k] = { missing = missing }
       end
     end
     cb(sorted(opened), r.res, named)

@@ -20,7 +20,7 @@ end
 
 -- Environment-only state (one `p4 info` per session).
 local env = {
-  state = 'unknown', ---@type 'unknown'|'pending'|'ready'|'none'
+  state = 'unknown', ---@type 'unknown'|'pending'|'ready'|'none'|'retry'
   root = nil, ---@type string?
   icase = false,
   info = nil, ---@type table?
@@ -83,9 +83,15 @@ local function flush_env_pending()
   end
 end
 
+--- After an environment-only `p4 info` that couldn't reach the server (timed out, no
+--- connection), the next one waits this long, doubling up to `ENV_RETRY_MAX_MS`.
+M.ENV_RETRY_MS = 30000
+M.ENV_RETRY_MAX_MS = 600000
+
 ---@param dir string a directory with no P4CONFIG above it (so cwd can't change the connection)
 local function start_env_probe(dir)
   env.state = 'pending'
+  env.retry_gen = (env.retry_gen or 0) + 1
   local ctx = workspace.connection()
   ctx:run({ 'info' }, {
     priority = require('perforated.core.queue').PRIORITY.background,
@@ -107,10 +113,27 @@ local function start_env_probe(dir)
       env.root = workspace.normalize(rec.clientRoot)
       env.icase = rec.caseHandling == 'insensitive'
       env.info = rec
+      env.retry_ms = nil
+    elseif
+      require('perforated.core.runner').cut(res)
+      or require('perforated.core.conn').classify(res) == 'connect'
+    then
+      -- No answer (a slow or unreachable server) isn't "no workspace here": ask again later,
+      -- the buffers that waited for it still waiting.
+      env.state = 'retry'
+      local wait, gen = env.retry_ms or M.ENV_RETRY_MS, env.retry_gen
+      env.retry_ms = math.min(wait * 2, M.ENV_RETRY_MAX_MS)
+      vim.defer_fn(function()
+        if env.state == 'retry' and env.retry_gen == gen then
+          start_env_probe(dir)
+        end
+      end, wait)
     else
       env.state = 'none'
     end
-    flush_env_pending()
+    if env.state ~= 'retry' then
+      flush_env_pending()
+    end
     local waiters = env.waiters or {}
     env.waiters = nil
     for _, w in ipairs(waiters) do
@@ -138,7 +161,7 @@ function M.attach(buf, path, found)
     if workspace.is_under(env.root, path, env.icase) then
       bind(env_ws(), buf)
     end
-  elseif env.state == 'unknown' or env.state == 'pending' then
+  elseif env.state == 'unknown' or env.state == 'pending' or env.state == 'retry' then
     env.pending[#env.pending + 1] = { buf = buf, path = path }
     if env.state == 'unknown' then
       start_env_probe(vim.fs.dirname(path))
@@ -175,7 +198,8 @@ function M.resolve(dir, cb)
   table.insert(env.waiters, function()
     cb(M.for_dir(dir))
   end)
-  if env.state == 'unknown' then
+  -- (After a failed one, a command asks again at once.)
+  if env.state == 'unknown' or env.state == 'retry' then
     start_env_probe(dir)
   end
 end

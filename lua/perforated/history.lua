@@ -226,6 +226,7 @@ function M.annotate(ws, spec, opts, cb)
     return handle -- joined a request already running
   end
 
+  local partial = false -- descriptions missing (their query failed): shown, not cached
   local function finish(a, err)
     if req.cancelled then
       return
@@ -234,7 +235,7 @@ function M.annotate(ws, spec, opts, cb)
     if ckey and waiting[ckey] == req then
       waiting[ckey] = nil
     end
-    if a and ckey then
+    if a and ckey and not partial then
       table.insert(cache, 1, { key = ckey, ann = a })
       cache[CACHE_SIZE + 1] = nil
     end
@@ -293,7 +294,8 @@ function M.annotate(ws, spec, opts, cb)
     if #missing == 0 then
       return finish(ann)
     end
-    require('perforated.changelists').describe(ws, missing, {}, function(by)
+    require('perforated.changelists').describe(ws, missing, {}, function(by, derr)
+      partial = partial or derr ~= nil
       for ch, d in pairs(by) do
         local m = ann.meta[tonumber(ch)]
         if m then
@@ -310,7 +312,9 @@ function M.annotate(ws, spec, opts, cb)
   args[#args + 1] = spec
   run(args, function(res)
     local head, count, cls, meta = annotate_lines(res.records)
-    if head.depotFile then
+    -- (Cut off: only the first lines came. Not an annotate of the file.)
+    local cut = require('perforated.core.runner').cut(res)
+    if head.depotFile and not cut then
       for _, c in ipairs(cls) do
         meta[c] = meta[c] or { change = c }
       end
@@ -323,7 +327,7 @@ function M.annotate(ws, spec, opts, cb)
         meta = meta,
       }
     else
-      errmsg = res.errors[1] or res.warnings[1]
+      errmsg = res.errors[1] or res.warnings[1] or (cut and res.err) or nil
     end
     done()
   end)
@@ -331,6 +335,7 @@ function M.annotate(ws, spec, opts, cb)
     local max = tonumber(require('perforated.config').get().annotate.history_max) or 1000
     run({ 'filelog', '-l', '-i', '-m', tostring(max), path }, function(res)
       descs = {}
+      -- (Cut off: the rest come from `describe`, below.)
       for _, rec in ipairs(res.records) do
         if rec.depotFile then
           for _, r in ipairs(parse.indexed(rec, { 'change', 'desc' })) do

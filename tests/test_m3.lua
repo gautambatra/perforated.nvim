@@ -418,6 +418,31 @@ T['m3']['annotate: slower than the runner timeout, it still answers'] = function
   wait_text('bob')
 end
 
+T['m3']['annotate: one whose descriptions could not be fetched is not cached'] = function()
+  local flag = server.dir .. '/no-descs'
+  slow_annotate(':') -- (the wrapper in place; annotate itself as usual)
+  H.write(
+    server.dir .. '/wrap-p4',
+    ('#!/bin/sh\ncase "$*" in *"filelog -l -i"*|*"describe -s"*) [ -e %s ] && exit 1;; esac\nexec %s "$@"\n'):format(
+      flag,
+      P.p4
+    )
+  )
+  H.write(flag, '')
+  local ask = [[_G.ann = nil
+    require('perforated.history').annotate(require('perforated').workspace(), '//depot/a.txt#3',
+      { descriptions = true }, function(a) _G.ann = a end)]]
+  child.lua(ask)
+  wait('_G.ann ~= nil')
+  H.eq(child.lua_get('_G.ann.meta[2].desc'), vim.NIL)
+  -- Asked again once they can be fetched: a new annotate, with them.
+  vim.uv.fs_unlink(flag)
+  child.lua(ask)
+  wait('_G.ann ~= nil')
+  H.eq(child.lua_get('_G.ann.meta[2].desc'), 'bob fixes line 2')
+  H.eq(#p4_calls('annotate'), 2)
+end
+
 T['m3']['annotate: closing the view stops its annotate'] = function()
   child.lua([[require('perforated.core.log').clear()]])
   slow_annotate('exec sleep 30') -- (exec: a cancel kills what holds the pipes)

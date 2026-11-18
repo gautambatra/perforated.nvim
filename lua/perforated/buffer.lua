@@ -88,29 +88,34 @@ local function flush(ws, cb)
     if not r.res.ok and next(r.files) == nil and next(r.missing) == nil then
       return cb and cb(false) -- connection trouble; conn state/statusline already reflect it
     end
+    -- Cut off (timed out, killed): the files it didn't get to are unknown, not "not in the
+    -- depot". They keep their status until the next check.
+    local cut = require('perforated.core.runner').cut(r.res)
     for i, path in ipairs(paths) do
       local k = p4.key(ws, path)
       local pos = r.by_index[i] or {}
       local rec = r.files[k] or pos.rec
       local missing = r.missing[k] or pos.missing
-      local shown = false
-      for buf, st in pairs(states) do
-        if st.ws == ws and st.key == k then
-          M.apply(buf, rec, missing)
-          st.seen = { sig = sigs[path], t = stamp.t }
-          shown = true
+      if rec or missing or not cut then
+        local shown = false
+        for buf, st in pairs(states) do
+          if st.ws == ws and st.key == k then
+            M.apply(buf, rec, missing)
+            st.seen = { sig = sigs[path], t = stamp.t }
+            shown = true
+          end
         end
-      end
-      -- Cache only what's still needed: files shown in a buffer, or opened in Perforce (a
-      -- buffer wiped while its fstat was in flight must not leave an entry behind).
-      if shown or (rec and rec.action) then
-        ws.fstat[k], ws.fstat_at[k] = rec, rec and stamp or nil
-      else
-        ws.fstat[k], ws.fstat_at[k] = nil, nil
+        -- Cache only what's still needed: files shown in a buffer, or opened in Perforce (a
+        -- buffer wiped while its fstat was in flight must not leave an entry behind).
+        if shown or (rec and rec.action) then
+          ws.fstat[k], ws.fstat_at[k] = rec, rec and stamp or nil
+        else
+          ws.fstat[k], ws.fstat_at[k] = nil, nil
+        end
       end
     end
     if cb then
-      cb(true)
+      cb(not cut)
     end
   end)
 end

@@ -171,6 +171,26 @@ T['workspaces']['environment-only setup: one p4 info learns the root'] = functio
   H.eq(#H.calls_matching(child.fake.log, 'info') <= 2, true)
 end
 
+T['workspaces']['environment-only setup: an info that could not reach the server is asked again'] = function()
+  local root = H.tmp()
+  local reached = H.tmp() .. '/reached'
+  local rules = info_rules(root, 'envws')
+  table.insert(rules, 1, {
+    match = '^info',
+    code = 1,
+    stderr = 'Perforce client error:\n\tConnect to server failed; check $P4PORT.\n',
+    unless = reached,
+    touch = reached,
+  })
+  child = H.child({ fake = { rules = rules }, env = { P4CLIENT = 'envws' } })
+  child.lua([[require('perforated.core.activation').ENV_RETRY_MS = 200]])
+  H.write(root .. '/a.c', 'x')
+  edit(root .. '/a.c')
+  -- The first one failed; the buffer waits for the next, not "no workspace".
+  H.eq(H.wait(child, 'vim.b.perforated_ws ~= nil', 5000), true)
+  H.eq(ws_key(), root)
+end
+
 T['workspaces']['goes idle when its last buffer closes and cwd is outside'] = function()
   local root = H.tmp()
   H.write(root .. '/.p4config', 'P4CLIENT=ws1\n')

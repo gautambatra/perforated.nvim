@@ -141,7 +141,8 @@ end
 ---@param ws perforated.Workspace
 ---@param changes string[]
 ---@param opts { shelved: boolean? }?
----@param cb fun(by_change: table<string, { rec: table, files: table[] }>)
+---@param cb fun(by_change: table<string, { rec: table, files: table[] }>, err: string?)  err: it
+---  failed or was cut off (the changelists it got to are still there)
 function M.describe(ws, changes, opts, cb)
   local args = { 'describe', '-s' }
   if opts and opts.shelved then
@@ -160,7 +161,8 @@ function M.describe(ws, changes, opts, cb)
         }
       end
     end
-    cb(out)
+    local failed = require('perforated.core.runner').cut(res) or (not res.ok and #res.records == 0)
+    cb(out, failed and (res.err or res.errors[1] or 'describe failed') or nil)
   end)
 end
 

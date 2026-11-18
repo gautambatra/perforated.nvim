@@ -892,7 +892,9 @@ the one that last changed the line, history, annotate, time-lapse.
   directory and its parents (in Lua, cached, starting no processes). Every p4 command for that
   workspace runs from the directory containing it, so all its buffers see the same settings.
   Without a `P4CONFIG` file but with `P4CLIENT` set, one background `p4 info` per session
-  learns the client root.
+  learns the client root. If it can't reach the server (slow, or down), it is asked again
+  after 30 s, then less and less often (up to every 10 minutes), and the buffers opened
+  meanwhile wait for it; a `:P4` command asks at once.
 - **Several workspaces** can be open in one session; each keeps its own connection, caches and
   settings. Several Neovim instances on one machine never interfere.
 - **Expired login:** exactly one password prompt, then the calls that failed are retried. If

@@ -76,12 +76,13 @@ function M.print_batch(ws, specs, opts, cb)
     keys[i] = ws:server_key() .. '|' .. spec
     p4._batched[keys[i]] = p4._batched[keys[i]] or {}
   end
-  opts = vim.tbl_extend('force', { stdin = specs }, opts or {})
+  -- No timeout by default: the time grows with the files' size.
+  opts = vim.tbl_extend('force', { stdin = specs, timeout = 0 }, opts or {})
   opts.globals = { '-x', '-' }
   opts.snapshot, opts.budget = nil, nil
   ws:run({ 'print', '-q' }, opts, function(res)
     local got, sizes = {}, {}
-    local cur, chunks, next_i = nil, {}, 1
+    local cur, chunks, next_i, last = nil, {}, 1, nil
     local function flush()
       if cur then
         local text = table.concat(chunks)
@@ -94,7 +95,7 @@ function M.print_batch(ws, specs, opts, cb)
         flush()
         for i = next_i, #specs do
           if header_is(specs[i], rec) then
-            cur, next_i = specs[i], i + 1
+            cur, next_i, last = specs[i], i + 1, specs[i]
             break
           end
         end
@@ -103,6 +104,11 @@ function M.print_batch(ws, specs, opts, cb)
       end
     end
     flush()
+    -- A cut-off answer stops inside the file it was printing: that one is incomplete (the
+    -- files before it ended where the next one began).
+    if last and require('perforated.core.runner').cut(res) then
+      got[last], sizes[last] = nil, nil
+    end
     for i, spec in ipairs(specs) do
       if got[spec] and (not budget or sizes[spec] <= budget.bytes) then
         if budget then

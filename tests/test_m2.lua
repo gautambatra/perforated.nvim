@@ -4778,4 +4778,92 @@ T['change command']['check-out "n" uses the description editor'] = function()
   H.expect.no_equality(out:find('Line one\nLine two', 1, true), nil)
 end
 
+T['cut-off answers'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      if not P.available() then
+        MiniTest.skip('p4/p4d not available (make deps)')
+      end
+      setup()
+    end,
+    post_case = function()
+      child.stop()
+    end,
+  },
+})
+
+--- Once the flag file exists, each `fstat -T` (buffers, the opened files a change named)
+--- answers its first file only, then fails without a message.
+local function first_fstat_only()
+  return wrap_p4(
+    ([[case "$*" in *"fstat -T"*) [ -e "$FLAG" ] && { %s "$@" | head -n 1; exit 1; };; esac]]):format(
+      P.p4
+    )
+  )
+end
+
+T['cut-off answers']['print_batch keeps no file the answer stopped inside'] = function()
+  local big = {}
+  for i = 1, 20000 do
+    big[i] = ('line %05d of a file p4 sends in several pieces'):format(i)
+  end
+  server:submit_files(
+    'bob_ws',
+    server.dir .. '/bob',
+    { ['big.txt'] = table.concat(big, '\n') .. '\n', ['small.txt'] = 's1\n' },
+    'big and small',
+    'bob'
+  )
+  wrap_p4(([[case "$*" in *"print -q"*) %s "$@" | head -c 200000; exit 1;; esac]]):format(P.p4))
+  child.lua(
+    [[
+    local p4, ws = require('perforated.p4'), require('perforated').workspace()
+    _G.got = nil
+    p4.print_batch(ws, { '//depot/small.txt#1', '//depot/big.txt#1' }, {}, function(got) _G.got = got end)]]
+  )
+  wait('_G.got ~= nil')
+  H.eq(child.lua_get([[_G.got['//depot/small.txt#1'] ]]), { 's1' })
+  H.eq(child.lua_get([[_G.got['//depot/big.txt#1'] ]]), vim.NIL)
+  H.eq(
+    child.lua_get([[require('perforated.core.cache').content():get(
+      require('perforated').workspace():server_key() .. '|//depot/big.txt#1')]]),
+    vim.NIL
+  )
+end
+
+T['cut-off answers']['buffers a cut-off fstat did not get to keep their status'] = function()
+  child.cmd('edit ' .. root .. '/b.txt')
+  child.cmd('edit ' .. root .. '/c.txt')
+  local status = ([[require('perforated.buffer').get(vim.fn.bufnr(%q)).status]]):format(
+    root .. '/c.txt'
+  )
+  wait(status .. " == 'opened'")
+  local flag = first_fstat_only()
+  H.write(flag, '')
+  child.lua(
+    [[_G.r = nil
+    require('perforated.buffer').refresh_all(require('perforated').workspace(), function(ok) _G.r = ok end)]]
+  )
+  wait('_G.r ~= nil')
+  H.eq(child.lua_get('_G.r'), false) -- (`:P4 refresh` says it failed)
+  H.eq(child.lua_get(status), 'opened')
+end
+
+T['cut-off answers']['a cut-off fstat after a change drops no opened file it did not get to'] = function()
+  child.lua([[require('perforated.poll').refresh(require('perforated').workspace())]])
+  wait([[(require('perforated').workspace().opened or {})['//depot/c.txt'] ~= nil]])
+  local flag = first_fstat_only()
+  H.write(flag, '')
+  child.lua(
+    ([[_G.recs = nil
+      require('perforated.checkout').changed(require('perforated').workspace(), { files = { %q, %q } })
+      require('perforated.poll').settled(require('perforated').workspace(), function(recs) _G.recs = recs or false end)]]):format(
+      root .. '/b.txt',
+      root .. '/c.txt'
+    )
+  )
+  wait('_G.recs ~= nil')
+  H.eq(child.lua_get([[require('perforated').workspace().opened['//depot/c.txt'] ~= nil]]), true)
+end
+
 return T

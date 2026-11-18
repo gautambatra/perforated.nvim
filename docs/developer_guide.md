@@ -684,7 +684,7 @@ BufReadPost ─▶ gate.on_buf ─▶ activation.attach ─▶ bind(ws, buf)
                                                      ├─ buffer.attach(ws, buf)
                                                      │    └─ queue fstat (30 ms batch window)
                                                      └─ poll.start(ws)
-fstat batch returns ─▶ buffer.apply(buf, rec)
+fstat batch returns ─▶ buffer.apply(buf, rec)   (cut off: unanswered files keep their status)
       status: clean | opened | binary | new | unmanaged
       opened ─▶ load_base: p4 print base revision (cached if immutable)
              ─▶ update: vim.text.diff(base, buffer) → hunks → signs + status
@@ -1020,7 +1020,10 @@ user or `p4` is missing.
 #### `core/activation.lua`
 Turns gate hits into Workspaces (`config_ws`) and binds buffers (`bind`). Handles
 environment-only setups: a single background `p4 info` from the file's directory (state
-`unknown → pending → ready | none`), queuing buffers until it answers. `for_dir(dir)` and
+`unknown → pending → ready | none | retry`), queuing buffers until it answers. One that got no
+answer (`runner.cut`, or a connection failure) is `retry`, not `none`: the queued buffers keep
+waiting and it asks again after `ENV_RETRY_MS` (30 s, doubling up to `ENV_RETRY_MAX_MS`,
+10 min); `resolve` (a command) asks at once. `for_dir(dir)` and
 `resolve(dir, cb)` give the Workspace for a directory (used by commands and quickfix entries).
 
 ### Core
@@ -1153,6 +1156,9 @@ batch had no answer for it. p4 answers `-x - print` in order and skips what it c
 so each header record is matched to the next spec naming it (`#N` by `rev`, `@=N` by
 `change`, else the depot path). A snapshot records the content-cache keys printed for it
 (`cached`, only ones not cached before); `release(snap)` drops them and its content.
+`print_batch` runs with no timeout (its time grows with the files' size), and a cut-off answer
+(`runner.cut`) keeps nothing of the file it stopped inside: the files before it ended where
+the next header began, the last one may be incomplete.
 `pending_changes`, `new_change`, `edit`, `add`, `reconcile_add` and `revert` are forwarders
 to `p4_cmds.lua` (run on request, so loaded with the first one). `snapshot`, `release`,
 `renew` and `print_batch` are forwarders to
@@ -1232,8 +1238,9 @@ cache honest (drops entries of files no longer opened) and pushes fresh records 
 buffers (matched by depot file, or by path for a file that had no record); a buffer whose
 file is no longer opened gets its own fstat. With `opts.files` (and `ws.opened` known) it runs
 one `fstat` of those files instead of `fstat -Ro` of every opened file (`opened_with`): the
-answers are merged into `ws.opened` (a file not opened, or not in the depot, drops out), and
-the named files' buffers take their records from it. An answer older than the one applied
+answers are merged into `ws.opened` (a file not opened, or not in the depot, drops out; one
+a cut-off answer didn't get to stays as it was), and the named files' buffers take their
+records from it. An answer older than the one applied
 (`ws.opened_at`: when that refresh was asked) is dropped: a full refresh that started before
 a change can end after the quick follow-up to it, and must not undo it. It also follows the plugin's own
 changes: one `User PerforatedChanged` listener collects what a burst of events named and
@@ -1446,7 +1453,9 @@ Helpers for comparison sides (`{ spec }`, `{ path }`, `{ empty }`): `lines` (con
 including the "branched from" source), `annotate(ws, spec, opts)` (`annotate -c -i -u -q`: one
 call gives each line's changelist, user and date; with `descriptions = true` it also runs
 `filelog -l -i` for descriptions; results for numbered revisions are cached, 8 entries, with
-in-flight sharing; both calls run with no timeout. It returns `{ cancel }`: a cancelled
+in-flight sharing; both calls run with no timeout. A cut-off annotate is a failure, and one
+whose descriptions couldn't be fetched (`filelog` and the `describe` of the rest failed) is
+shown but not cached. It returns `{ cancel }`: a cancelled
 caller's `cb` is never called, and once every caller sharing the request has cancelled, its
 p4 calls are killed (`on_spawn` controls) and the next ask starts afresh; the annotate view
 cancels on close and on `~` / `<BS>`), and the Swarm URL (`swarm.url` or the `P4.Swarm.URL` server property)
