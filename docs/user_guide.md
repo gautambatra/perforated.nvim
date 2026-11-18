@@ -195,6 +195,10 @@ If p4 doesn't answer a query (an error, or no reply within `runner.timeout`), it
 keeps what it showed before, and the view's first line says `refresh failed:` and why. The
 next refresh that succeeds takes the line away.
 
+The changed markers have no time limit: p4 reads every opened file to answer, which takes a
+while for large files on a slow disk. Until it answers, rows show no marker (unknown, not
+unchanged). If the query fails, the rows stay without markers and `<F5>` asks again.
+
 There's no timer. `<F5>`, or `:P4` again, refreshes every section on demand.
 
 ### Keys and the action menu

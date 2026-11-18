@@ -4652,6 +4652,84 @@ T['client view']['<F5> and events that name nothing re-run every section'] = fun
   H.eq(count_calls(SECTIONS), all)
 end
 
+--- The workspace's cached marker of `rel`: true/false, or nil when none.
+local function cached_marker(rel)
+  return child.lua_get(([[(function() local ws = require('perforated').workspace()
+      local e = (ws.markers or {})[require('perforated.p4').key(ws, %q)]
+      if e then return e.changed end
+    end)()]]):format(root .. '/' .. rel))
+end
+
+--- The identical-files check of `rel` against its base: true = identical.
+local function same_as_base(rel)
+  child.lua(
+    [[local path = ...
+    local p4, ws = require('perforated.p4'), require('perforated').workspace()
+    _G.same = nil
+    for _, r in pairs(ws.opened or {}) do ws.fstat[p4.key(ws, r.clientFile)] = r end
+    local rec = ws.fstat[p4.key(ws, path)]
+    require('perforated.same').check(ws, { { left = { spec = p4.base_spec(rec) }, right = { path = path } } },
+      function(r) _G.same = r[1] end)]],
+    { root .. '/' .. rel }
+  )
+  wait('_G.same ~= nil')
+  return child.lua_get('_G.same')
+end
+
+T['client view']['changed markers: a diff -sa slower than the runner timeout still answers'] = function()
+  wrap_p4([[case "$*" in *"diff -sa"*) sleep 1;; esac]], { timeout = 300 })
+  open_view_cached()
+  H.eq({ marked('a.txt'), marked('b.txt'), marked('c.txt') }, { true, false, false })
+  H.eq(cached_marker('a.txt'), true)
+end
+
+T['client view']['changed markers: a diff -sa that stops without an answer marks nothing'] = function()
+  -- (A crash or a dropped connection: a failure p4 gave no message for.)
+  wrap_p4([[case "$*" in *"diff -sa"*) exit 1;; esac]])
+  open_view_quiet()
+  -- Unknown: no marker, not "unchanged", and nothing remembered.
+  H.eq(child.lua_get(view_expr(root) .. '.data.modified'), false)
+  H.eq({ cached_marker('a.txt'), cached_marker('b.txt') }, { vim.NIL, vim.NIL })
+  -- So the diff asks p4, which says a.txt differs.
+  H.eq(same_as_base('a.txt'), false)
+end
+
+T['client view']['identical-files check: a cut-off diff -sr remembers only the files it names'] = function()
+  open_view_quiet()
+  child.lua([[require('perforated').workspace().markers = {}]])
+  -- One record of the answer (b.txt's), then a failure without a message.
+  wrap_p4(([[case "$*" in *"diff -sr"*) %s "$@" | head -n 1; exit 1;; esac]]):format(P.p4))
+  child.lua(
+    [[local paths = ...
+      local p4, ws = require('perforated.p4'), require('perforated').workspace()
+      local list = {}
+      for _, r in pairs(ws.opened or {}) do ws.fstat[p4.key(ws, r.clientFile)] = r end
+      for _, path in ipairs(paths) do
+        local rec = ws.fstat[p4.key(ws, path)]
+        list[#list + 1] = { left = { spec = p4.base_spec(rec) }, right = { path = path } }
+      end
+      _G.same = nil
+      require('perforated.same').check(ws, list, function(r) _G.same = r end)]],
+    { { root .. '/b.txt', root .. '/c.txt' } }
+  )
+  wait('_G.same ~= nil')
+  -- b.txt is named identical; c.txt (also unchanged) is unknown: not cached as changed.
+  H.eq({ cached_marker('b.txt'), cached_marker('c.txt') }, { false, vim.NIL })
+end
+
+T['client view']['a cut-off background check of the opened files changes nothing'] = function()
+  open_view_quiet()
+  local flag = wrap_p4([[case "$*" in *" opened") [ -e "$FLAG" ] && exit 1;; esac]])
+  H.write(flag, '')
+  track_calls()
+  probe()
+  vim.uv.sleep(300)
+  H.wait_idle(child)
+  -- Its empty answer isn't "every opened file was reverted elsewhere": no refresh follows.
+  H.eq(count_calls({ 'fstat -Ro' }), {})
+  H.eq(has_line('b.txt'), true)
+end
+
 T['change command'] = MiniTest.new_set({
   hooks = {
     pre_case = function()

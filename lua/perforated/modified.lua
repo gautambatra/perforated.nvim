@@ -24,15 +24,20 @@ local ALWAYS = {
 ---@param cb fun(set: table<string, true>?)  nil when the query failed
 function M.query(ws, paths, cb)
   -- Escaped, or p4 reads `icon@2x.png` as a revision and the whole batch fails.
-  local opts = paths and { globals = { '-x', '-' }, stdin = p4.escape_all(paths), priority = 2 }
-    or { priority = 2 }
+  -- No timeout: p4 reads every file it's asked about, so the time grows with their size (a
+  -- large changelist on a slow disk takes longer than any fixed limit).
+  local opts = paths
+      and { globals = { '-x', '-' }, stdin = p4.escape_all(paths), priority = 2, timeout = 0 }
+    or { priority = 2, timeout = 0 }
   if paths and #paths == 0 then
     return vim.schedule(function()
       cb({})
     end)
   end
   ws:run({ 'diff', '-sa' }, opts, function(res)
-    if not res.ok and #res.records == 0 and #res.errors > 0 then
+    -- A cut-off answer lists only some of the changed files: the others are unknown, not
+    -- unchanged.
+    if require('perforated.core.runner').cut(res) or (not res.ok and #res.records == 0) then
       return cb(nil)
     end
     local set = {}

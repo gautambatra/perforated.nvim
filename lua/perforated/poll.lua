@@ -247,8 +247,10 @@ function M.probe(ws)
   -- Compared with the last full refresh; works with nothing opened yet, too.
   if ws.opened then
     ws:run({ 'opened' }, { priority = 3, key = 'probe-opened:' .. ws.key }, function(res)
-      if #res.errors > 0 and #res.records == 0 then
-        return -- ("file(s) not opened" is a warning: an empty client is a valid answer)
+      -- ("file(s) not opened" is a warning: an empty client is a valid answer. A cut-off one
+      -- isn't: the files missing from it may still be opened.)
+      if require('perforated.core.runner').cut(res) or (#res.errors > 0 and #res.records == 0) then
+        return
       end
       local now, before = {}, {}
       for _, r in ipairs(res.records) do

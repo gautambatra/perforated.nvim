@@ -177,7 +177,8 @@ function M.check(ws, list, cb, opts)
         return done()
       end
       table.sort(ask)
-      local run_opts = { globals = { '-x', '-' }, stdin = p4.escape_all(ask) }
+      -- No timeout: p4 reads each file (its time grows with their size).
+      local run_opts = { globals = { '-x', '-' }, stdin = p4.escape_all(ask), timeout = 0 }
       ws:run({ 'diff', '-sr' }, run_opts, function(res)
         local same = {}
         for _, rec in ipairs(res.records) do
@@ -185,13 +186,16 @@ function M.check(ws, list, cb, opts)
             same[p4.key(ws, rec.clientFile)] = true
           end
         end
-        local answered = res.ok or #res.records > 0
+        -- A cut-off answer names only some of the identical files: those it names are
+        -- remembered, the others are unknown (shown as a diff, not remembered as changed).
+        local answered = not require('perforated.core.runner').cut(res)
+          and (res.ok or #res.records > 0)
         for _, path in ipairs(ask) do
           local k = p4.key(ws, path)
           for _, i in ipairs(sr_paths[path]) do
             result[i] = same[k] == true
           end
-          if answered and stats[k] ~= nil then
+          if (answered or same[k]) and stats[k] ~= nil then
             mod.store(ws, recs[path], not same[k], stats[k])
           end
         end
@@ -277,7 +281,10 @@ function M.check(ws, list, cb, opts)
     local specs = vim.tbl_map(function(x)
       return x.spec
     end, sl)
-    ws:run({ 'diff', '-f', '-sl' }, { globals = { '-x', '-' }, stdin = specs }, function(res)
+    -- (No timeout, as for `diff -sr`; a file a cut-off answer doesn't name is compared by
+    -- content.)
+    local run_opts = { globals = { '-x', '-' }, stdin = specs, timeout = 0 }
+    ws:run({ 'diff', '-f', '-sl' }, run_opts, function(res)
       local status = {}
       for _, rec in ipairs(res.records or {}) do
         if rec.clientFile and rec.status then

@@ -1096,7 +1096,10 @@ records only go to `on_record` and `res.records` stays empty (messages are still
 `res.errors` / `res.warnings` / `res.all` work); `res.count` counts data records either way.
 A sync of 100k files uses it: kept, its records peaked at ~80 MB of Lua heap (~33 MB without
 them). Every call is recorded in
-`core/log` (argv, cwd, duration, outcome) and, when debugging, in the debug log.
+`core/log` (argv, cwd, duration, outcome) and, when debugging, in the debug log. `cut(res)`:
+the run stopped before p4 finished its answer (timed out, cancelled, killed by a signal, or
+exited with a failure p4 gave no message for, such as a crash or a dropped connection). The
+runner keeps the records that arrived, so such a result can look like a short answer.
 
 #### `core/parse.lua`
 p4 output parsers. `json_line` decodes one `-Mj` line; `classify` splits records from
@@ -1253,7 +1256,8 @@ test finding).
 
 #### `modified.lua`
 "Changed vs unchanged" for opened files: `query(ws, paths)` runs `p4 diff -sa` (p4 compares
-locally). The marker cache, `ws.markers` (key → `changed`, `stat`, `base`), keeps every
+locally; no timeout, as p4 reads every file). A failed or cut-off answer (`runner.cut`) is
+`nil`, unknown: the view shows no markers and nothing is stored. The marker cache, `ws.markers` (key → `changed`, `stat`, `base`), keeps every
 answer with the file's local stats taken just before p4 compared it (`mtime` in ns and size,
 `stats`) and its base revision (`p4.base_spec`). `markers(ws, recs, opts)` answers from it:
 `valid` keeps the entries whose stats and base still match (an edit anywhere moves the stats,
@@ -1262,7 +1266,8 @@ asks all, `opts.all` (every opened file) drops other entries (`prune`). Its user
 view, the opened-files picker and `:P4 opened` (`lists.opened_items`, started with
 `ws.opened`, then the files its answer adds), the describe view of a pending changelist,
 `:P4 hunks` (prints and diffs only files not known unchanged) and `same.check` (an opened
-file against its base: from the cache, else `diff -sr`, whose answers are stored too).
+file against its base: from the cache, else `diff -sr`, whose answers are stored too; a
+cut-off one stores only the files it names).
 `query_stat` is `query` with the stats taken before it and the time it asked; `remember`
 stores such answers once the records are known. A file without stats from before (not in
 `ws.opened` yet: the first refresh in a fresh Neovim) is stored only when its mtime is
@@ -1417,7 +1422,7 @@ outlives the diff.
 
 #### `same.lua`
 `check(ws, pairs, cb)` answers "identical?" for many pairs, cheaply: depot-vs-depot by digest
-(one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call), any
+(one `fstat -Ol` for all specs), opened-file-vs-its-base by `p4 diff -sr` (one call, no timeout), any
 other revision (a shelf's `@=CL` too) vs a saved workspace file by one `p4 -x - diff -f -sl`
 (`same`/`diff`/`missing` per file, opened or not: p4 checks the local file against the
 revision's digest, so no content comes back; measured, 940 bytes from the server for a 23 MB
@@ -2031,6 +2036,13 @@ must not be shown as an empty result ("nothing to submit", "nothing to show"). P
 on (`res.errors[1]`, which for a refused call is the connection's own message) and warn with
 it: the list builders in `lists.lua` call `cb(items, err)`, and `qf.set{ err = … }` (or a
 producer's `err`) warns and keeps the list on screen.
+
+**Cut off is not short.** A run that timed out or died has `res.errors` empty and may have
+some records (`runner.cut(res)`). What its records name is true; what they leave out is
+unknown, never "not there": not "unchanged" (`modified.query`), not "not opened" (the poll's
+probe), not cached. Check `cut` wherever a missing entry would be read as a negative answer.
+Commands whose time grows with the size of the files p4 reads (`diff -sa`, `-sr`, `-sl`) run
+with no timeout (`timeout = 0`): a fixed limit would cut them off on a slow disk.
 
 **Never widen a path without asking.** A wildcard the user typed is run as given; when the
 plugin would turn a directory into `<dir>/...` it asks first (`widen_dirs` in

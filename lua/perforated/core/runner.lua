@@ -41,6 +41,15 @@ local M = {}
 ---@field cancelled boolean?     stopped by the user (on_spawn's cancel)
 ---@field err string?           why it failed, in one line (a p4 error, "timed out after …", …)
 
+--- Did the run stop before p4 finished its answer? Timed out, cancelled, killed, or exited
+--- with a failure p4 gave no message for (a crash, a dropped connection). Its records may be
+--- only the first part of the answer: what's missing from them is unknown, not absent.
+---@param res perforated.RunResult
+---@return boolean
+function M.cut(res)
+  return res.timed_out == true or res.cancelled == true or (not res.ok and #(res.errors or {}) == 0)
+end
+
 M.TIMEOUT_CODE = 124 -- vim.system's exit code on timeout
 M.KILL_GRACE = 2000 -- ms between SIGTERM (timeout) and SIGKILL
 

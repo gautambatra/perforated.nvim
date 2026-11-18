@@ -127,6 +127,17 @@ T['runner']['timeout kills a hung process'] = function()
   H.expect.no_equality((vim.uv.hrtime() - t0) / 1e6 > 5000, true)
 end
 
+T['runner']['cut: a run stopped before p4 finished, or failing without a message'] = function()
+  local cut = function(spec)
+    run(spec)
+    return child.lua_get([[require('perforated.core.runner').cut(_G.res)]])
+  end
+  H.eq(cut({ args = { 'changes' }, cwd = child.cwd, timeout = 300 }), true) -- timed out
+  H.eq(cut({ args = { 'describe', '1' }, cwd = child.cwd }), true) -- killed by a signal
+  H.eq(cut({ args = { 'fstat', 'a', 'b' }, cwd = child.cwd }), false) -- an answer
+  H.eq(cut({ args = { 'opened' }, cwd = child.cwd }), false) -- p4 said why it failed
+end
+
 T['runner']['untagged returns stdout'] = function()
   local r = run({ args = { 'set', '-q' }, cwd = child.cwd, tagged = false })
   H.eq(r.stdout, 'P4PORT=1666\n')
